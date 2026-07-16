@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
-import { Loader2Icon, PlusIcon, TrendingUpIcon } from "lucide-react"
+import { useNavigate } from "react-router-dom"
+import { Loader2Icon, PlusIcon, RocketIcon, TrendingUpIcon } from "lucide-react"
 import { toast } from "sonner"
 
 import { EmptyState } from "@/components/shared/empty-state"
@@ -10,6 +11,7 @@ import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
 import {
+  convertOpportunity,
   createOpportunity,
   getCrmSummary,
   listClients,
@@ -17,6 +19,8 @@ import {
   updateOpportunity,
 } from "@/lib/api/agency"
 import { ApiError } from "@/lib/api/client"
+import { useAuth } from "@/lib/auth"
+import { canPerform } from "@/lib/rbac"
 import type { AgencyClient, CrmSummary, Opportunity } from "@/types/agency"
 import { cn } from "@/lib/utils"
 
@@ -36,6 +40,9 @@ function money(n: number) {
 }
 
 export function CrmPipelinePage() {
+  const navigate = useNavigate()
+  const { user } = useAuth()
+  const canWriteCrm = canPerform(user?.role, "write_crm")
   const [deals, setDeals] = useState<Opportunity[]>([])
   const [clients, setClients] = useState<AgencyClient[]>([])
   const [summary, setSummary] = useState<CrmSummary | null>(null)
@@ -84,6 +91,7 @@ export function CrmPipelinePage() {
   )
 
   async function moveDeal(deal: Opportunity, next: string) {
+    if (!canWriteCrm) return
     setBusyId(deal.opportunityId)
     try {
       const patch: Partial<Opportunity> = { stage: next }
@@ -99,8 +107,30 @@ export function CrmPipelinePage() {
     }
   }
 
+  async function startDelivery(deal: Opportunity) {
+    if (!canWriteCrm) return
+    setBusyId(deal.opportunityId)
+    try {
+      const res = await convertOpportunity(deal.opportunityId)
+      const projectId = res.data?.project?.projectId
+      toast.success(
+        projectId
+          ? `Delivery started — project ${res.data?.project?.projectName || projectId}`
+          : "Delivery started",
+      )
+      await reload()
+      if (projectId) {
+        navigate(`/projects/${projectId}`)
+      }
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Convert failed")
+    } finally {
+      setBusyId(null)
+    }
+  }
+
   async function handleCreate() {
-    if (!form.name.trim()) return
+    if (!form.name.trim() || !canWriteCrm) return
     try {
       await createOpportunity({
         name: form.name.trim(),
@@ -125,10 +155,12 @@ export function CrmPipelinePage() {
         title="CRM pipeline"
         description="Sales desk — opportunities by stage with weighted pipeline value."
         actions={
-          <Button size="sm" onClick={() => setShowCreate((v) => !v)}>
-            <PlusIcon className="size-3.5" />
-            New deal
-          </Button>
+          canWriteCrm ? (
+            <Button size="sm" onClick={() => setShowCreate((v) => !v)}>
+              <PlusIcon className="size-3.5" />
+              New deal
+            </Button>
+          ) : undefined
         }
       />
 
@@ -257,7 +289,7 @@ export function CrmPipelinePage() {
                           Next: {deal.nextStep}
                         </p>
                       ) : null}
-                      {lane.next ? (
+                      {canWriteCrm && lane.next ? (
                         <Button
                           size="sm"
                           variant="outline"
@@ -271,7 +303,7 @@ export function CrmPipelinePage() {
                           → {lane.next}
                         </Button>
                       ) : null}
-                      {lane.id === "negotiation" ? (
+                      {canWriteCrm && lane.id === "negotiation" ? (
                         <div className="mt-1.5 flex gap-1">
                           <Button
                             size="sm"
@@ -291,6 +323,21 @@ export function CrmPipelinePage() {
                             Lost
                           </Button>
                         </div>
+                      ) : null}
+                      {canWriteCrm && lane.id === "won" ? (
+                        <Button
+                          size="sm"
+                          className="mt-2 h-7 w-full text-xs"
+                          disabled={busyId === deal.opportunityId}
+                          onClick={() => void startDelivery(deal)}
+                        >
+                          {busyId === deal.opportunityId ? (
+                            <Loader2Icon className="size-3 animate-spin" />
+                          ) : (
+                            <RocketIcon className="size-3" />
+                          )}
+                          Start delivery
+                        </Button>
                       ) : null}
                     </article>
                   ))

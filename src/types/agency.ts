@@ -46,6 +46,8 @@ export type Project = {
   recordId?: string
   projectId: string
   projectName: string
+  clientId?: string | null
+  clientName?: string | null
   campaignId?: string | null
   status: string
   startDate?: string | null

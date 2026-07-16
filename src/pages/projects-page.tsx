@@ -1,27 +1,59 @@
-import { useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
+import { useNavigate } from "react-router-dom"
 import {
   ArchiveIcon,
   CheckCircle2Icon,
   FolderKanbanIcon,
   LoaderIcon,
+  PlusIcon,
 } from "lucide-react"
+import { toast } from "sonner"
 
+import { PageHeader } from "@/components/shared/page-header"
+import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
+import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
 import { PortfolioSummaryCard } from "@/components/widgets/portfolio-summary-card"
 import { ProjectsDatatable } from "@/components/widgets/projects-datatable"
 import { StatisticsCard } from "@/components/widgets/statistics-card"
-import { listProjects, normalizeProjects } from "@/lib/api/agency"
+import {
+  createProject,
+  listClients,
+  listProjects,
+  normalizeProjects,
+} from "@/lib/api/agency"
 import { ApiError } from "@/lib/api/client"
-import type { Project } from "@/types/agency"
+import { useAuth } from "@/lib/auth"
+import { canPerform } from "@/lib/rbac"
+import type { AgencyClient, Project } from "@/types/agency"
 
 const ACTIVE_STATUSES = new Set(["InProgress", "Review", "NotStarted"])
 
 export function ProjectsPage() {
+  const navigate = useNavigate()
+  const { user } = useAuth()
+  const canWrite =
+    canPerform(user?.role, "write_crm") || canPerform(user?.role, "write_ops")
+
   const [projects, setProjects] = useState<Project[]>([])
+  const [clients, setClients] = useState<AgencyClient[]>([])
   const [message, setMessage] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [creating, setCreating] = useState(false)
+  const [showCreate, setShowCreate] = useState(false)
+  const [form, setForm] = useState({
+    projectName: "",
+    clientId: "",
+    budget: "",
+  })
+
+  const reload = useCallback(async () => {
+    const response = await listProjects()
+    setProjects(normalizeProjects(response))
+    setMessage(response.message ?? null)
+  }, [])
 
   useEffect(() => {
     let cancelled = false
@@ -29,10 +61,12 @@ export function ProjectsPage() {
       setLoading(true)
       setError(null)
       try {
-        const response = await listProjects()
+        const [, clientsRes] = await Promise.all([
+          reload(),
+          listClients().catch(() => ({ data: [] as AgencyClient[] })),
+        ])
         if (cancelled) return
-        setProjects(normalizeProjects(response))
-        setMessage(response.message ?? null)
+        setClients(clientsRes.data ?? [])
       } catch (err) {
         if (!cancelled) {
           setError(err instanceof ApiError ? err.message : "Failed to load projects")
@@ -45,7 +79,7 @@ export function ProjectsPage() {
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [reload])
 
   const inProgress = projects.filter((p) => p.status === "InProgress").length
   const inReview = projects.filter((p) => p.status === "Review").length
@@ -102,107 +136,156 @@ export function ProjectsPage() {
       })
   }, [projects])
 
+  async function handleCreate() {
+    if (!form.projectName.trim()) return
+    setCreating(true)
+    try {
+      const client = clients.find((c) => c.clientId === form.clientId)
+      const res = await createProject({
+        projectName: form.projectName.trim(),
+        clientId: form.clientId || null,
+        clientName: client?.name || null,
+        budget: form.budget ? Number(form.budget) : 0,
+        status: "NotStarted",
+      })
+      await reload()
+      setForm({ projectName: "", clientId: "", budget: "" })
+      setShowCreate(false)
+      toast.success("Project created")
+      if (res.data?.projectId) navigate(`/projects/${res.data.projectId}`)
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Create failed")
+    } finally {
+      setCreating(false)
+    }
+  }
+
   return (
-    <div className="flex flex-col gap-6">
-      <div className="flex flex-col gap-1">
-        <h1 className="text-2xl font-semibold tracking-tight">Projects</h1>
-        <p className="text-muted-foreground text-sm">
-          Campaign delivery board — weight, budget, and status across the book of work.
-        </p>
-      </div>
+    <div className="flex flex-col gap-5">
+      <PageHeader
+        title="Projects"
+        description="Delivery register — open a row for the full workspace."
+        actions={
+          canWrite ? (
+            <Button size="sm" onClick={() => setShowCreate((v) => !v)}>
+              <PlusIcon className="size-3.5" />
+              New project
+            </Button>
+          ) : undefined
+        }
+      />
 
-      {message ? (
-        <Card className="text-muted-foreground px-4 py-3 text-sm">{message}</Card>
-      ) : null}
       {error ? (
-        <Card className="border-destructive/40 text-destructive px-4 py-3 text-sm">
-          {error}
+        <Card className="border-destructive/40 text-destructive px-4 py-3 text-sm">{error}</Card>
+      ) : null}
+      {message ? (
+        <p className="text-muted-foreground text-xs">{message}</p>
+      ) : null}
+
+      {showCreate ? (
+        <Card className="flex flex-col gap-3 p-4 sm:flex-row sm:flex-wrap sm:items-end">
+          <div className="min-w-[12rem] flex-1">
+            <label className="text-muted-foreground mb-1 block text-xs">Name</label>
+            <Input
+              placeholder="Project name"
+              value={form.projectName}
+              onChange={(e) => setForm((f) => ({ ...f, projectName: e.target.value }))}
+            />
+          </div>
+          <div className="min-w-[10rem]">
+            <label className="text-muted-foreground mb-1 block text-xs">Client</label>
+            <select
+              className="border-input bg-background h-9 w-full rounded-md border px-2 text-sm"
+              value={form.clientId}
+              onChange={(e) => setForm((f) => ({ ...f, clientId: e.target.value }))}
+            >
+              <option value="">Unassigned</option>
+              {clients.map((c) => (
+                <option key={c.clientId} value={c.clientId}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="w-28">
+            <label className="text-muted-foreground mb-1 block text-xs">Budget</label>
+            <Input
+              type="number"
+              placeholder="0"
+              value={form.budget}
+              onChange={(e) => setForm((f) => ({ ...f, budget: e.target.value }))}
+            />
+          </div>
+          <Button size="sm" disabled={creating || !form.projectName.trim()} onClick={handleCreate}>
+            {creating ? <LoaderIcon className="size-3.5 animate-spin" /> : <PlusIcon className="size-3.5" />}
+            Create
+          </Button>
         </Card>
       ) : null}
 
-      <div className="grid grid-cols-2 gap-6 lg:grid-cols-3">
-        <div className="col-span-full grid gap-6 sm:grid-cols-2 xl:grid-cols-4">
-          {loading ? (
-            <>
-              <Skeleton className="h-32" />
-              <Skeleton className="h-32" />
-              <Skeleton className="h-32" />
-              <Skeleton className="h-32" />
-            </>
-          ) : (
-            <>
-              <StatisticsCard
-                icon={<FolderKanbanIcon className="size-4" />}
-                value={String(projects.length)}
-                title="Projects"
-                changePercentage={`${active} active`}
-              />
-              <StatisticsCard
-                icon={<LoaderIcon className="size-4" />}
-                value={String(inProgress)}
-                title="In progress"
-                changePercentage={`${inReview} in review`}
-              />
-              <StatisticsCard
-                icon={<CheckCircle2Icon className="size-4" />}
-                value={String(approved)}
-                title="Approved"
-                changePercentage={
-                  totalBudget > 0 ? `$${Math.round(totalBudget / 1000)}k book` : "no budget"
-                }
-              />
-              <StatisticsCard
-                icon={<ArchiveIcon className="size-4" />}
-                value={String(archived)}
-                title="Archived"
-                changePercentage={`${activeShare}% still active`}
-              />
-            </>
-          )}
+      {loading ? (
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <Skeleton key={i} className="h-28" />
+          ))}
         </div>
-
-        <PortfolioSummaryCard
-          className="col-span-full justify-between gap-5 sm:min-w-0 lg:col-span-1"
-          loading={loading}
-          title="By campaign"
-          headlineValue={
-            totalBudget > 0 ? `$${Math.round(totalBudget / 1000)}k` : String(projects.length)
-          }
-          trend="up"
-          percentage={activeShare}
-          comparisonText="Active share of delivery book"
-          items={campaignLines}
-        />
-
-        <PortfolioSummaryCard
-          className="col-span-full justify-between gap-5 sm:min-w-0 lg:col-span-2"
-          loading={loading}
-          title="Delivery status mix"
-          headlineValue={String(active)}
-          trend={inProgress >= archived ? "up" : "down"}
-          percentage={activeShare}
-          comparisonText="Projects still moving through production"
-          items={statusLines}
-        />
-
-        <Card className="col-span-full w-full py-4">
-          <div className="mb-4 px-4">
-            <h2 className="text-lg font-semibold">Project register</h2>
-            <p className="text-muted-foreground text-sm">
-              `GET /api/v1/agency/projects` · campaign delivery lines
-            </p>
+      ) : (
+        <>
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <StatisticsCard
+              title="Active"
+              value={String(active)}
+              changePercentage={`${activeShare}% of book`}
+              icon={<FolderKanbanIcon className="size-4" />}
+            />
+            <StatisticsCard
+              title="In progress"
+              value={String(inProgress)}
+              changePercentage={`${inReview} in review`}
+              icon={<LoaderIcon className="size-4" />}
+            />
+            <StatisticsCard
+              title="Approved"
+              value={String(approved)}
+              changePercentage="delivery complete"
+              icon={<CheckCircle2Icon className="size-4" />}
+            />
+            <StatisticsCard
+              title="Archived"
+              value={String(archived)}
+              changePercentage={`$${Math.round(totalBudget / 1000)}k total budget`}
+              icon={<ArchiveIcon className="size-4" />}
+            />
           </div>
-          {loading ? (
-            <div className="px-4">
-              <Skeleton className="h-64 w-full" />
+
+          <div className="grid gap-4 lg:grid-cols-3">
+            <div className="lg:col-span-2">
+              <ProjectsDatatable
+                data={projects}
+                onRowClick={(p) => navigate(`/projects/${p.projectId}`)}
+              />
             </div>
-          ) : (
-            <div className="px-4">
-              <ProjectsDatatable data={projects} />
+            <div className="flex flex-col gap-4">
+              <PortfolioSummaryCard
+                title="By campaign"
+                headlineValue={String(campaignLines.length)}
+                trend="up"
+                percentage={activeShare}
+                comparisonText="share of book"
+                items={campaignLines}
+              />
+              <PortfolioSummaryCard
+                title="By status"
+                headlineValue={String(projects.length)}
+                trend="up"
+                percentage={100}
+                comparisonText="all projects"
+                items={statusLines}
+              />
             </div>
-          )}
-        </Card>
-      </div>
+          </div>
+        </>
+      )}
     </div>
   )
 }

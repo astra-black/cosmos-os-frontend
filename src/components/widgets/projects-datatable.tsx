@@ -42,6 +42,11 @@ const columns: ColumnDef<Project>[] = [
     ),
   },
   {
+    accessorKey: "clientName",
+    header: "Client",
+    cell: ({ row }) => row.original.clientName || row.original.clientId || "—",
+  },
+  {
     accessorKey: "campaignId",
     header: "Campaign",
     cell: ({ row }) => row.original.campaignId ?? "—",
@@ -84,7 +89,13 @@ const columns: ColumnDef<Project>[] = [
   },
 ]
 
-export function ProjectsDatatable({ data }: { data: Project[] }) {
+export function ProjectsDatatable({
+  data,
+  onRowClick,
+}: {
+  data: Project[]
+  onRowClick?: (project: Project) => void
+}) {
   const pageSize = 5
   const [pagination, setPagination] = useState<PaginationState>({
     pageIndex: 0,
@@ -127,7 +138,11 @@ export function ProjectsDatatable({ data }: { data: Project[] }) {
           <TableBody>
             {table.getRowModel().rows.length ? (
               table.getRowModel().rows.map((row) => (
-                <TableRow key={row.id}>
+                <TableRow
+                  key={row.id}
+                  className={onRowClick ? "hover:bg-muted/50 cursor-pointer" : undefined}
+                  onClick={() => onRowClick?.(row.original)}
+                >
                   {row.getVisibleCells().map((cell) => (
                     <TableCell key={cell.id}>
                       {flexRender(cell.column.columnDef.cell, cell.getContext())}

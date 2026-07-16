@@ -1,5 +1,14 @@
 import { useEffect, useMemo, useState } from "react"
-import { FileIcon, FilterIcon, FolderOpenIcon, SearchIcon } from "lucide-react"
+import { Link } from "react-router-dom"
+import {
+  CheckSquareIcon,
+  FileIcon,
+  FilterIcon,
+  FolderOpenIcon,
+  Loader2Icon,
+  SearchIcon,
+} from "lucide-react"
+import { toast } from "sonner"
 
 import { CommentsPanel } from "@/components/shared/comments-panel"
 import { Badge } from "@/components/ui/badge"
@@ -7,8 +16,10 @@ import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
-import { listAssets, normalizeAssets } from "@/lib/api/agency"
+import { createApproval, listAssets, normalizeAssets } from "@/lib/api/agency"
 import { ApiError } from "@/lib/api/client"
+import { useAuth } from "@/lib/auth"
+import { canPerform } from "@/lib/rbac"
 import type { Asset } from "@/types/agency"
 import { cn } from "@/lib/utils"
 
@@ -28,6 +39,12 @@ const statusTone: Record<string, string> = {
 }
 
 export function AssetsPage() {
+  const { user } = useAuth()
+  const canRequest =
+    canPerform(user?.role, "write_crm") ||
+    canPerform(user?.role, "write_ops") ||
+    canPerform(user?.role, "decide_approval")
+
   const [assets, setAssets] = useState<Asset[]>([])
   const [message, setMessage] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
@@ -36,6 +53,7 @@ export function AssetsPage() {
   const [statusFilter, setStatusFilter] = useState<string>("all")
   const [projectFilter, setProjectFilter] = useState<string>("all")
   const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [requestBusy, setRequestBusy] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -88,6 +106,35 @@ export function AssetsPage() {
     }
     return [...map.entries()].sort((a, b) => b[1] - a[1])
   }, [filtered])
+
+  const selectedAsset = useMemo(
+    () =>
+      selectedId
+        ? filtered.find((a) => (a.assetId || a.recordId) === selectedId) ?? null
+        : null,
+    [filtered, selectedId],
+  )
+
+  async function requestApproval(asset: Asset) {
+    if (!canRequest || !asset.assetId) return
+    setRequestBusy(true)
+    try {
+      await createApproval({
+        title: `Review: ${asset.assetName}`,
+        entityType: "asset",
+        entityId: asset.assetId,
+        ...(asset.projectId ? { projectId: asset.projectId } : {}),
+        priority: "medium",
+      })
+      toast.success("Approval requested", {
+        description: "Open /approvals to review the queue",
+      })
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Could not request approval")
+    } finally {
+      setRequestBusy(false)
+    }
+  }
 
   return (
     <div className="flex flex-col gap-5">
@@ -246,7 +293,7 @@ export function AssetsPage() {
               !selectedId && "hidden lg:block",
             )}
           >
-            {selectedId ? (
+            {selectedId && selectedAsset ? (
               <div className="flex flex-col gap-3">
                 <Button
                   size="sm"
@@ -256,23 +303,56 @@ export function AssetsPage() {
                 >
                   ← Assets
                 </Button>
-                {(() => {
-                  const asset = filtered.find(
-                    (a) => (a.assetId || a.recordId) === selectedId,
-                  )
-                  return asset ? (
-                    <Card className="space-y-2 p-4 lg:hidden">
-                      <div className="font-medium">{asset.assetName}</div>
-                      <div className="text-muted-foreground font-mono text-xs">
-                        {asset.assetId}
-                      </div>
-                      <div className="text-muted-foreground text-xs">
-                        {asset.projectName || asset.projectId} ·{" "}
-                        {asset.status?.replace("_", " ")}
-                      </div>
-                    </Card>
-                  ) : null
-                })()}
+                <Card className="space-y-3 p-4">
+                  <div>
+                    <div className="font-medium">{selectedAsset.assetName}</div>
+                    <div className="text-muted-foreground font-mono text-xs">
+                      {selectedAsset.assetId}
+                    </div>
+                    <div className="text-muted-foreground mt-1 text-xs">
+                      {selectedAsset.projectId ? (
+                        <Link
+                          to={`/projects/${selectedAsset.projectId}`}
+                          className="text-primary underline-offset-2 hover:underline"
+                        >
+                          {selectedAsset.projectName || selectedAsset.projectId}
+                        </Link>
+                      ) : (
+                        (selectedAsset.projectName || "—")
+                      )}
+                      {selectedAsset.status
+                        ? ` · ${selectedAsset.status.replace("_", " ")}`
+                        : ""}
+                    </div>
+                  </div>
+                  {canRequest ? (
+                    <Button
+                      size="sm"
+                      disabled={requestBusy}
+                      onClick={() => void requestApproval(selectedAsset)}
+                      className="w-full sm:w-auto"
+                    >
+                      {requestBusy ? (
+                        <Loader2Icon className="size-3.5 animate-spin" />
+                      ) : (
+                        <CheckSquareIcon className="size-3.5" />
+                      )}
+                      Request approval
+                    </Button>
+                  ) : null}
+                  {canRequest ? (
+                    <p className="text-muted-foreground text-xs">
+                      Creates a pending review in{" "}
+                      <Link
+                        to="/approvals"
+                        className="text-primary underline-offset-2 hover:underline"
+                      >
+                        /approvals
+                      </Link>
+                      .
+                    </p>
+                  ) : null}
+                </Card>
                 <CommentsPanel
                   entityType="asset"
                   entityId={selectedId}

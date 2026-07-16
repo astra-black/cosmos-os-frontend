@@ -56,6 +56,24 @@ export async function getEvent(eventId: string) {
   return apiRequest<ApiEnvelope<Event>>(`/api/v1/agency/events/${eventId}`)
 }
 
+export async function getProject(projectId: string) {
+  return apiRequest<ApiEnvelope<Project>>(`/api/v1/agency/projects/${projectId}`)
+}
+
+export async function createProject(body: Partial<Project>) {
+  return apiRequest<ApiEnvelope<Project>>(`/api/v1/agency/projects`, {
+    method: "POST",
+    body: JSON.stringify(body),
+  })
+}
+
+export async function updateProject(projectId: string, body: Partial<Project>) {
+  return apiRequest<ApiEnvelope<Project>>(`/api/v1/agency/projects/${projectId}`, {
+    method: "PATCH",
+    body: JSON.stringify(body),
+  })
+}
+
 export async function listProjects() {
   return apiRequest<{
     success?: boolean
@@ -72,6 +90,7 @@ export async function listAssets(params: { projectId?: string; status?: string; 
   if (params.status) query.set("status", params.status)
   if (params.search) query.set("search", params.search)
   const suffix = query.toString() ? `?${query}` : ""
+  // apiKey: true sends x-cosmos-api-key only when VITE_COSMOS_API_KEY is set; JWT still attaches via auth.
   return apiRequest<{
     success?: boolean
     message?: string
@@ -82,12 +101,14 @@ export async function listAssets(params: { projectId?: string; status?: string; 
 }
 
 export async function listPortfolioClients() {
+  // JWT-auth'd; api key header sent only if VITE_COSMOS_API_KEY is present (backend may soft-gate).
   return apiRequest<ApiEnvelope<PortfolioClient[]>>("/api/v1/agency/portfolio", {
     apiKey: true,
   })
 }
 
 export async function getClientPortfolio(clientId: string) {
+  // JWT-auth'd; api key header sent only if VITE_COSMOS_API_KEY is present (backend may soft-gate).
   return apiRequest<ApiEnvelope<ClientPortfolio>>(`/api/v1/agency/portfolio/${clientId}`, {
     apiKey: true,
   })
@@ -290,6 +311,20 @@ export async function listCampaigns() {
   return apiRequest<ApiEnvelope<Campaign[]>>("/api/v1/agency/campaigns")
 }
 
+export async function createCampaign(body: Partial<Campaign>) {
+  return apiRequest<ApiEnvelope<Campaign>>("/api/v1/agency/campaigns", {
+    method: "POST",
+    body: JSON.stringify(body),
+  })
+}
+
+export async function updateCampaign(campaignId: string, body: Partial<Campaign>) {
+  return apiRequest<ApiEnvelope<Campaign>>(`/api/v1/agency/campaigns/${campaignId}`, {
+    method: "PATCH",
+    body: JSON.stringify(body),
+  })
+}
+
 export async function listTasks(params: { status?: string; projectId?: string } = {}) {
   const q = new URLSearchParams()
   if (params.status) q.set("status", params.status)
@@ -339,6 +374,13 @@ export async function listApprovals(params: { status?: string } = {}) {
   if (params.status) q.set("status", params.status)
   const suffix = q.toString() ? `?${q}` : ""
   return apiRequest<ApiEnvelope<Approval[]>>(`/api/v1/agency/approvals${suffix}`)
+}
+
+export async function createApproval(body: Partial<Approval>) {
+  return apiRequest<ApiEnvelope<Approval>>("/api/v1/agency/approvals", {
+    method: "POST",
+    body: JSON.stringify(body),
+  })
 }
 
 export async function decideApproval(
@@ -424,6 +466,20 @@ export async function updateOpportunity(opportunityId: string, body: Partial<Opp
     `/api/v1/agency/crm/opportunities/${opportunityId}`,
     { method: "PATCH", body: JSON.stringify(body) },
   )
+}
+
+/** Convert a won opportunity into a delivery project (+ campaign/tasks). */
+export async function convertOpportunity(opportunityId: string) {
+  return apiRequest<
+    ApiEnvelope<{
+      project?: Project
+      campaign?: Campaign
+      tasks?: Task[]
+      opportunity?: Opportunity
+    }>
+  >(`/api/v1/agency/crm/opportunities/${opportunityId}/convert`, {
+    method: "POST",
+  })
 }
 
 export async function listCrmContacts(params: { clientId?: string; search?: string } = {}) {

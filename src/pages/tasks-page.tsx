@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
+import { Link } from "react-router-dom"
 import {
   ChevronLeftIcon,
   ChevronRightIcon,
@@ -14,11 +15,18 @@ import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
-import { createTask, listTasks, updateTask } from "@/lib/api/agency"
+import {
+  createTask,
+  listProjects,
+  listTasks,
+  listTeamMembers,
+  normalizeProjects,
+  updateTask,
+} from "@/lib/api/agency"
 import { ApiError } from "@/lib/api/client"
 import { useAuth } from "@/lib/auth"
 import { canPerform } from "@/lib/rbac"
-import type { Task } from "@/types/agency"
+import type { Project, Task } from "@/types/agency"
 import { cn } from "@/lib/utils"
 
 const LANES = [
@@ -38,7 +46,7 @@ const priorityTone: Record<string, string> = {
   low: "bg-muted text-muted-foreground",
 }
 
-const ASSIGNEES = [
+const FALLBACK_ASSIGNEES = [
   "Maya Chen",
   "Jordan Blake",
   "Alex Rivera",
@@ -51,6 +59,8 @@ export function TasksPage() {
   const { user } = useAuth()
   const canWrite = canPerform(user?.role, "write_crm") || canPerform(user?.role, "write_ops")
   const [tasks, setTasks] = useState<Task[]>([])
+  const [projects, setProjects] = useState<Project[]>([])
+  const [assignees, setAssignees] = useState<string[]>(FALLBACK_ASSIGNEES)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [busyId, setBusyId] = useState<string | null>(null)
@@ -60,7 +70,7 @@ export function TasksPage() {
     assignee: "Unassigned",
     priority: "medium",
     dueDate: "",
-    projectName: "",
+    projectId: "",
   })
   const [assigneeFilter, setAssigneeFilter] = useState("all")
   const [priorityFilter, setPriorityFilter] = useState("all")
@@ -80,7 +90,21 @@ export function TasksPage() {
     let cancelled = false
     async function load() {
       try {
-        await reload()
+        const [taskRes, projectRes, teamRes] = await Promise.all([
+          listTasks(),
+          listProjects().catch(() => null),
+          listTeamMembers().catch(() => null),
+        ])
+        if (cancelled) return
+        setTasks(taskRes.data ?? [])
+        if (projectRes) setProjects(normalizeProjects(projectRes))
+        const memberNames = (teamRes?.data ?? [])
+          .map((m) => m.name)
+          .filter(Boolean)
+        if (memberNames.length > 0) {
+          const unique = [...new Set([...memberNames, "Unassigned"])]
+          setAssignees(unique)
+        }
       } catch (err) {
         if (!cancelled) setError(err instanceof ApiError ? err.message : "Failed to load tasks")
       } finally {
@@ -91,7 +115,12 @@ export function TasksPage() {
     return () => {
       cancelled = true
     }
-  }, [reload])
+  }, [])
+
+  const assigneeOptions = useMemo(() => {
+    const fromTasks = tasks.map((t) => t.assignee || "Unassigned")
+    return [...new Set([...assignees, ...fromTasks])]
+  }, [assignees, tasks])
 
   const filtered = useMemo(() => {
     return tasks.filter((t) => {
@@ -162,6 +191,7 @@ export function TasksPage() {
 
   async function handleCreate() {
     if (!form.title.trim() || !canWrite) return
+    const selected = projects.find((p) => p.projectId === form.projectId)
     try {
       await createTask({
         title: form.title.trim(),
@@ -169,14 +199,15 @@ export function TasksPage() {
         priority: form.priority,
         assignee: form.assignee,
         dueDate: form.dueDate || null,
-        projectName: form.projectName || null,
+        projectId: selected?.projectId || form.projectId || null,
+        projectName: selected?.projectName || null,
       })
       setForm({
         title: "",
         assignee: "Unassigned",
         priority: "medium",
         dueDate: "",
-        projectName: "",
+        projectId: "",
       })
       setShowAdd(false)
       await reload()
@@ -237,17 +268,24 @@ export function TasksPage() {
             onKeyDown={(e) => e.key === "Enter" && void handleCreate()}
             className="lg:col-span-2"
           />
-          <Input
-            placeholder="Project name"
-            value={form.projectName}
-            onChange={(e) => setForm((f) => ({ ...f, projectName: e.target.value }))}
-          />
+          <select
+            className="border-input bg-background h-8 rounded-lg border px-2 text-sm"
+            value={form.projectId}
+            onChange={(e) => setForm((f) => ({ ...f, projectId: e.target.value }))}
+          >
+            <option value="">Project…</option>
+            {projects.map((p) => (
+              <option key={p.projectId} value={p.projectId}>
+                {p.projectName}
+              </option>
+            ))}
+          </select>
           <select
             className="border-input bg-background h-8 rounded-lg border px-2 text-sm"
             value={form.assignee}
             onChange={(e) => setForm((f) => ({ ...f, assignee: e.target.value }))}
           >
-            {ASSIGNEES.map((a) => (
+            {assigneeOptions.map((a) => (
               <option key={a} value={a}>
                 {a}
               </option>
@@ -288,7 +326,7 @@ export function TasksPage() {
           onChange={(e) => setAssigneeFilter(e.target.value)}
         >
           <option value="all">All assignees</option>
-          {ASSIGNEES.map((a) => (
+          {assigneeOptions.map((a) => (
             <option key={a} value={a}>
               {a}
             </option>
@@ -385,7 +423,17 @@ export function TasksPage() {
                           )}
                         </div>
                         <p className="text-muted-foreground mt-1 truncate text-xs">
-                          {task.projectName || task.projectId || "No project"}
+                          {task.projectId ? (
+                            <Link
+                              to={`/projects/${task.projectId}`}
+                              className="hover:text-primary underline-offset-2 hover:underline"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              {task.projectName || task.projectId}
+                            </Link>
+                          ) : (
+                            task.projectName || "No project"
+                          )}
                         </p>
                         <div className="text-muted-foreground mt-2 flex flex-wrap items-center justify-between gap-1 text-[11px]">
                           {canWrite ? (
@@ -401,7 +449,7 @@ export function TasksPage() {
                                 )
                               }
                             >
-                              {ASSIGNEES.map((a) => (
+                              {assigneeOptions.map((a) => (
                                 <option key={a} value={a}>
                                   {a}
                                 </option>

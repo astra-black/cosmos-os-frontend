@@ -9,6 +9,7 @@ import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Progress } from "@/components/ui/progress"
 import { Skeleton } from "@/components/ui/skeleton"
+import { listProjects, normalizeProjects } from "@/lib/api/agency"
 import {
   createTimeEntry,
   getFinanceSummary,
@@ -19,6 +20,7 @@ import {
 } from "@/lib/api/platform"
 import { ApiError } from "@/lib/api/client"
 import { useAuth } from "@/lib/auth"
+import type { Project } from "@/types/agency"
 
 function money(n: number) {
   if (n >= 1_000_000) return `$${(n / 1_000_000).toFixed(1)}M`
@@ -38,19 +40,30 @@ export function FinancePage() {
   } | null>(null)
   const [budgets, setBudgets] = useState<BudgetRow[]>([])
   const [entries, setEntries] = useState<TimeEntry[]>([])
+  const [projects, setProjects] = useState<Project[]>([])
+  const [projectId, setProjectId] = useState("")
   const [loading, setLoading] = useState(true)
   const [hours, setHours] = useState("1")
   const [note, setNote] = useState("")
 
   async function reload() {
-    const [s, b, t] = await Promise.all([
+    const [s, b, t, p] = await Promise.all([
       getFinanceSummary(),
       listBudgets(),
       listTimeEntries(),
+      listProjects(),
     ])
     setSummary(s.data ?? null)
     setBudgets(b.data ?? [])
     setEntries(t.data ?? [])
+    const nextProjects = normalizeProjects(p)
+    setProjects(nextProjects)
+    setProjectId((current) => {
+      if (current && nextProjects.some((proj) => proj.projectId === current)) {
+        return current
+      }
+      return nextProjects[0]?.projectId ?? ""
+    })
   }
 
   useEffect(() => {
@@ -71,10 +84,15 @@ export function FinancePage() {
   }, [])
 
   async function logTime() {
+    const selected = projects.find((p) => p.projectId === projectId)
+    if (!selected) {
+      toast.error("Select a project first")
+      return
+    }
     try {
       await createTimeEntry({
-        projectId: "PRJ-ASTRA-001",
-        projectName: "Astra Brand Refresh",
+        projectId: selected.projectId,
+        projectName: selected.projectName,
         user: user?.name || "You",
         hours: Number(hours) || 1,
         note,
@@ -136,67 +154,95 @@ export function FinancePage() {
       <div className="grid gap-4 lg:grid-cols-2">
         <Card className="flex flex-col gap-3 p-4">
           <h2 className="font-semibold">Project budgets</h2>
-          {budgets.map((b) => (
-            <div key={b.budgetId} className="space-y-1.5">
-              <div className="flex justify-between text-sm">
-                <span className="font-medium">{b.projectName}</span>
-                <span className="text-muted-foreground tabular-nums">
-                  {money(b.spent)} / {money(b.planned)}
-                </span>
+          {budgets.length === 0 ? (
+            <p className="text-muted-foreground text-sm">No budgets yet.</p>
+          ) : (
+            budgets.map((b) => (
+              <div key={b.budgetId} className="space-y-1.5">
+                <div className="flex justify-between text-sm">
+                  <span className="font-medium">{b.projectName}</span>
+                  <span className="text-muted-foreground tabular-nums">
+                    {money(b.spent)} / {money(b.planned)}
+                  </span>
+                </div>
+                <Progress value={Math.min(b.utilization, 100)} />
+                <div className="text-muted-foreground flex justify-between text-[11px]">
+                  <span>{b.utilization}% used</span>
+                  <span className={b.remaining < 0 ? "text-destructive" : ""}>
+                    {money(b.remaining)} left
+                  </span>
+                </div>
               </div>
-              <Progress value={Math.min(b.utilization, 100)} />
-              <div className="text-muted-foreground flex justify-between text-[11px]">
-                <span>{b.utilization}% used</span>
-                <span className={b.remaining < 0 ? "text-destructive" : ""}>
-                  {money(b.remaining)} left
-                </span>
-              </div>
-            </div>
-          ))}
+            ))
+          )}
         </Card>
 
         <Card className="flex flex-col gap-3 p-4">
           <h2 className="font-semibold">Log time</h2>
-          <div className="flex flex-wrap gap-2">
-            <Input
-              type="number"
-              step="0.5"
-              className="w-24"
-              value={hours}
-              onChange={(e) => setHours(e.target.value)}
-            />
-            <Input
-              className="min-w-[12rem] flex-1"
-              placeholder="What did you work on?"
-              value={note}
-              onChange={(e) => setNote(e.target.value)}
-            />
-            <Button size="sm" onClick={logTime}>
-              <PlusIcon className="size-3.5" />
-              Log
-            </Button>
-          </div>
-          <div className="max-h-64 space-y-2 overflow-y-auto">
-            {entries.map((e) => (
-              <div
-                key={e.entryId}
-                className="bg-muted/40 flex flex-wrap items-center justify-between gap-2 rounded-lg px-3 py-2 text-sm"
+          {projects.length === 0 ? (
+            <p className="text-muted-foreground text-sm">
+              No projects available. Create a project before logging time.
+            </p>
+          ) : (
+            <div className="flex flex-wrap gap-2">
+              <select
+                className="border-input bg-background h-8 min-w-[10rem] flex-1 rounded-lg border px-2 text-sm"
+                value={projectId}
+                onChange={(e) => setProjectId(e.target.value)}
               >
-                <div>
-                  <div className="font-medium">{e.projectName}</div>
-                  <div className="text-muted-foreground text-xs">
-                    {e.user} · {e.date}
-                    {e.note ? ` · ${e.note}` : ""}
+                <option value="" disabled>
+                  Project…
+                </option>
+                {projects.map((p) => (
+                  <option key={p.projectId} value={p.projectId}>
+                    {p.projectName}
+                  </option>
+                ))}
+              </select>
+              <Input
+                type="number"
+                step="0.5"
+                className="w-24"
+                value={hours}
+                onChange={(e) => setHours(e.target.value)}
+              />
+              <Input
+                className="min-w-[12rem] flex-1"
+                placeholder="What did you work on?"
+                value={note}
+                onChange={(e) => setNote(e.target.value)}
+              />
+              <Button size="sm" onClick={() => void logTime()} disabled={!projectId}>
+                <PlusIcon className="size-3.5" />
+                Log
+              </Button>
+            </div>
+          )}
+          <div className="max-h-64 space-y-2 overflow-y-auto">
+            {entries.length === 0 ? (
+              <p className="text-muted-foreground text-sm">No time entries yet.</p>
+            ) : (
+              entries.map((e) => (
+                <div
+                  key={e.entryId}
+                  className="bg-muted/40 flex flex-wrap items-center justify-between gap-2 rounded-lg px-3 py-2 text-sm"
+                >
+                  <div>
+                    <div className="font-medium">{e.projectName}</div>
+                    <div className="text-muted-foreground text-xs">
+                      {e.user} · {e.date}
+                      {e.note ? ` · ${e.note}` : ""}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="tabular-nums font-semibold">{e.hours}h</span>
+                    <Badge variant={e.billable ? "default" : "secondary"}>
+                      {e.billable ? "Billable" : "Internal"}
+                    </Badge>
                   </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  <span className="tabular-nums font-semibold">{e.hours}h</span>
-                  <Badge variant={e.billable ? "default" : "secondary"}>
-                    {e.billable ? "Billable" : "Internal"}
-                  </Badge>
-                </div>
-              </div>
-            ))}
+              ))
+            )}
           </div>
         </Card>
       </div>

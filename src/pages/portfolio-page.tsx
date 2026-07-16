@@ -8,6 +8,7 @@ import {
   WalletIcon,
 } from "lucide-react"
 
+import { EmptyState } from "@/components/shared/empty-state"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
@@ -63,6 +64,7 @@ export function PortfolioPage() {
       } catch (err) {
         if (!cancelled) {
           setError(err instanceof ApiError ? err.message : "Failed to load clients")
+          setClients([])
         }
       } finally {
         if (!cancelled) setLoadingList(false)
@@ -98,8 +100,10 @@ export function PortfolioPage() {
     }
   }, [clientId])
 
-  const spent = portfolio?.summary.spentBudget ?? 0
-  const planned = portfolio?.summary.totalBudget ?? 0
+  const summary = portfolio?.summary
+  const spent = summary?.spentBudget ?? 0
+  const planned = summary?.totalBudget ?? 0
+  const healthScore = summary?.healthScore ?? 0
   const util = planned > 0 ? Math.round((spent / planned) * 100) : 0
 
   const projectStatuses = useMemo(() => {
@@ -115,6 +119,10 @@ export function PortfolioPage() {
   }, [portfolio, statusFilter])
 
   const bookValue = clients.reduce((s, c) => s + (c.projectsCount ?? 0), 0)
+  const atRiskBook = useMemo(
+    () => clients.filter((c) => c.health === "watch" || c.health === "risk"),
+    [clients],
+  )
 
   return (
     <div className="flex flex-col gap-5">
@@ -167,12 +175,43 @@ export function PortfolioPage() {
       </div>
 
       {message ? <p className="text-muted-foreground text-xs">{message}</p> : null}
-      {error ? (
-        <Card className="border-destructive/40 text-destructive px-4 py-3 text-sm">
-          {error}
-          <span className="text-muted-foreground mt-1 block text-xs">
-            Portfolio needs JWT + VITE_COSMOS_API_KEY matching COSMOS_API_KEYS.
-          </span>
+
+      {atRiskBook.length > 0 ? (
+        <Card className="border-destructive/25 bg-destructive/[0.03] flex flex-col gap-2 p-4">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h2 className="text-sm font-semibold">
+              Needs attention{" "}
+              <span className="text-muted-foreground font-normal">
+                ({atRiskBook.length})
+              </span>
+            </h2>
+            <Button size="sm" variant="ghost" className="h-7 text-xs" render={<Link to="/" />}>
+              Agency home
+            </Button>
+          </div>
+          <p className="text-muted-foreground text-xs">
+            Accounts on watch or risk — select one below, or open Agency home for overdue work and
+            stuck approvals.
+          </p>
+          <ul className="flex flex-wrap gap-2">
+            {atRiskBook.map((c) => (
+              <li key={c.clientId}>
+                <button
+                  type="button"
+                  onClick={() => setClientId(c.clientId)}
+                  className={cn(
+                    "hover:bg-muted/60 inline-flex items-center gap-2 rounded-lg border bg-card px-3 py-1.5 text-sm transition-colors",
+                    clientId === c.clientId && "border-primary bg-primary/5",
+                  )}
+                >
+                  <span className="font-medium">{c.name}</span>
+                  <Badge variant="secondary" className="capitalize">
+                    {c.health}
+                  </Badge>
+                </button>
+              </li>
+            ))}
+          </ul>
         </Card>
       ) : null}
 
@@ -191,38 +230,79 @@ export function PortfolioPage() {
               <Skeleton className="h-20 rounded-xl" />
               <Skeleton className="h-20 rounded-xl" />
             </div>
+          ) : clients.length === 0 ? (
+            <EmptyState
+              icon={<Building2Icon className="size-8 opacity-40" />}
+              title={error ? "Couldn't load portfolio" : "No portfolio accounts"}
+              description={
+                error
+                  ? `${error}. Sign in with JWT; if the backend still requires it, set VITE_COSMOS_API_KEY to match COSMOS_API_KEYS.`
+                  : "Portfolio clients will appear here once the agency book of work is wired."
+              }
+              className="py-10"
+            />
           ) : (
             <div className="flex flex-row gap-2 overflow-x-auto pb-1 lg:flex-col lg:overflow-visible">
               {clients.map((client) => (
-                <button
+                <div
                   key={client.clientId}
-                  type="button"
-                  onClick={() => setClientId(client.clientId)}
                   className={cn(
-                    "hover:bg-muted/60 bg-card min-w-[14rem] rounded-xl border p-3 text-left transition-colors lg:min-w-0",
+                    "bg-card min-w-[14rem] rounded-xl border transition-colors lg:min-w-0",
                     clientId === client.clientId && "border-primary bg-primary/5",
                   )}
                 >
-                  <div className="flex items-center gap-2">
-                    <Building2Icon className="text-primary size-4 shrink-0" />
-                    <span className="truncate font-medium">{client.name}</span>
+                  <button
+                    type="button"
+                    onClick={() => setClientId(client.clientId)}
+                    className="hover:bg-muted/60 w-full rounded-t-xl p-3 text-left transition-colors"
+                  >
+                    <div className="flex items-center gap-2">
+                      <Building2Icon className="text-primary size-4 shrink-0" />
+                      <span className="truncate font-medium">{client.name}</span>
+                    </div>
+                    <div className="text-muted-foreground mt-1 flex justify-between text-xs">
+                      <span>{client.industry}</span>
+                      <span className="capitalize">{client.health}</span>
+                    </div>
+                    <div className="text-muted-foreground mt-1 text-[11px]">
+                      {client.projectsCount ?? 0} projects · {client.assetsCount ?? 0} assets
+                    </div>
+                  </button>
+                  <div className="border-t px-3 py-2">
+                    <Link
+                      to={`/clients/${client.clientId}`}
+                      className="text-primary text-xs font-medium underline-offset-2 hover:underline"
+                    >
+                      Open in CRM
+                    </Link>
                   </div>
-                  <div className="text-muted-foreground mt-1 flex justify-between text-xs">
-                    <span>{client.industry}</span>
-                    <span className="capitalize">{client.health}</span>
-                  </div>
-                  <div className="text-muted-foreground mt-1 text-[11px]">
-                    {client.projectsCount ?? 0} projects · {client.assetsCount ?? 0} assets
-                  </div>
-                </button>
+                </div>
               ))}
             </div>
           )}
         </aside>
 
         <div className={cn("min-w-0 flex-1", !clientId && "hidden lg:block")}>
-          {loadingDetail || !portfolio ? (
+          {loadingDetail ? (
             <Skeleton className="h-80 w-full rounded-xl" />
+          ) : !clientId ? (
+            <EmptyState
+              icon={<BriefcaseIcon className="size-8 opacity-40" />}
+              title="Select an account"
+              description="Choose a client from the list to view their book of work."
+              className="py-16"
+            />
+          ) : !portfolio ? (
+            <EmptyState
+              icon={<BriefcaseIcon className="size-8 opacity-40" />}
+              title={error ? "Couldn't load this portfolio" : "No portfolio data"}
+              description={
+                error
+                  ? `${error}. Try another account, or check JWT / API key access for portfolio routes.`
+                  : "This account has no composed portfolio summary yet."
+              }
+              className="py-16"
+            />
           ) : (
             <div className="flex flex-col gap-4">
               <Button
@@ -237,7 +317,14 @@ export function PortfolioPage() {
               <Card className="p-4 sm:p-5">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <h2 className="text-lg font-semibold">{portfolio.clientName}</h2>
+                    <h2 className="text-lg font-semibold">
+                      <Link
+                        to={`/clients/${portfolio.clientId}`}
+                        className="hover:text-primary transition-colors"
+                      >
+                        {portfolio.clientName}
+                      </Link>
+                    </h2>
                     <p className="text-muted-foreground font-mono text-xs">
                       {portfolio.clientId}
                       {portfolio.industry ? ` · ${portfolio.industry}` : ""}
@@ -254,10 +341,12 @@ export function PortfolioPage() {
                         {portfolio.health}
                       </Badge>
                     ) : null}
-                    <Badge className={cn("gap-1", healthTone(portfolio.summary.healthScore))}>
-                      <HeartPulseIcon className="size-3" />
-                      Health {portfolio.summary.healthScore}
-                    </Badge>
+                    {summary?.healthScore != null ? (
+                      <Badge className={cn("gap-1", healthTone(healthScore))}>
+                        <HeartPulseIcon className="size-3" />
+                        Health {healthScore}
+                      </Badge>
+                    ) : null}
                   </div>
                 </div>
 
@@ -267,51 +356,58 @@ export function PortfolioPage() {
                   </p>
                 ) : null}
 
+                {/* Composed summary fields from portfolio API */}
                 <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-3">
                   <div className="bg-muted/40 rounded-lg p-3">
                     <div className="text-muted-foreground text-xs">Active</div>
                     <div className="text-xl font-semibold tabular-nums">
-                      {portfolio.summary.activeProjects}
+                      {summary?.activeProjects ?? "—"}
                     </div>
                   </div>
                   <div className="bg-muted/40 rounded-lg p-3">
                     <div className="text-muted-foreground text-xs">Projects</div>
                     <div className="text-xl font-semibold tabular-nums">
-                      {portfolio.summary.totalProjects}
+                      {summary?.totalProjects ?? "—"}
                     </div>
                   </div>
                   <div className="bg-muted/40 rounded-lg p-3">
                     <div className="text-muted-foreground text-xs">Budget</div>
                     <div className="text-xl font-semibold tabular-nums">
-                      {money(portfolio.summary.totalBudget)}
+                      {money(summary?.totalBudget)}
                     </div>
                   </div>
                   <div className="bg-muted/40 rounded-lg p-3">
                     <div className="text-muted-foreground text-xs">Assets</div>
                     <div className="text-xl font-semibold tabular-nums">
-                      {portfolio.summary.assetsDelivered}
+                      {summary?.assetsDelivered ?? "—"}
                     </div>
                   </div>
                 </div>
 
-                <div className="mt-4 space-y-2">
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="text-muted-foreground inline-flex items-center gap-1">
-                      <WalletIcon className="size-3.5" />
-                      Spend vs plan
-                    </span>
-                    <span className="tabular-nums font-medium">
-                      {money(spent)} / {money(planned)} · {util}%
-                    </span>
+                {(summary?.spentBudget != null || summary?.totalBudget != null) && (
+                  <div className="mt-4 space-y-2">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-muted-foreground inline-flex items-center gap-1">
+                        <WalletIcon className="size-3.5" />
+                        Spend vs plan
+                      </span>
+                      <span className="tabular-nums font-medium">
+                        {money(spent)} / {money(planned)} · {util}%
+                      </span>
+                    </div>
+                    <Progress
+                      value={Math.min(100, util)}
+                      className={cn("h-2", util >= 85 && "*:bg-destructive")}
+                    />
                   </div>
-                  <Progress
-                    value={Math.min(100, util)}
-                    className={cn("h-2", util >= 85 && "*:bg-destructive")}
-                  />
-                </div>
+                )}
 
                 <div className="mt-4 flex flex-wrap gap-1.5">
-                  <Button size="sm" variant="outline" render={<Link to="/clients" />}>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    render={<Link to={`/clients/${portfolio.clientId}`} />}
+                  >
                     Open in CRM
                   </Button>
                   <Button size="sm" variant="outline" render={<Link to="/projects" />}>
@@ -354,9 +450,11 @@ export function PortfolioPage() {
 
                 <div className="flex flex-col gap-2">
                   {projects.length === 0 ? (
-                    <Card className="text-muted-foreground p-8 text-center text-sm">
-                      No projects in this filter.
-                    </Card>
+                    <EmptyState
+                      title="No projects in this filter"
+                      description="Adjust status filters or pick another account."
+                      className="py-10"
+                    />
                   ) : (
                     projects.map((project) => {
                       const pSpent = project.spent ?? 0
@@ -364,9 +462,10 @@ export function PortfolioPage() {
                       const pUtil =
                         pBudget > 0 ? Math.min(100, Math.round((pSpent / pBudget) * 100)) : 0
                       return (
-                        <div
+                        <Link
                           key={project.projectId}
-                          className="bg-card flex flex-col gap-2 rounded-xl border px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
+                          to={`/projects/${project.projectId}`}
+                          className="bg-card hover:bg-muted/40 flex flex-col gap-2 rounded-xl border px-4 py-3 transition-colors sm:flex-row sm:items-center sm:justify-between"
                         >
                           <div className="min-w-0">
                             <div className="font-medium">{project.projectName}</div>
@@ -399,7 +498,7 @@ export function PortfolioPage() {
                               {project.status}
                             </Badge>
                           </div>
-                        </div>
+                        </Link>
                       )
                     })
                   )}

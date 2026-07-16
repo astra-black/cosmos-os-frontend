@@ -25,6 +25,7 @@ import { MonitoringPage } from "@/pages/monitoring-page"
 import { PortalHomePage } from "@/pages/portal-home-page"
 import { PortalLoginPage } from "@/pages/portal-login-page"
 import { PortfolioPage } from "@/pages/portfolio-page"
+import { ProjectDetailPage } from "@/pages/project-detail-page"
 import { ProjectsPage } from "@/pages/projects-page"
 import { SettingsPage } from "@/pages/settings-page"
 import { TasksPage } from "@/pages/tasks-page"
@@ -59,6 +60,8 @@ export default function App() {
           <Route path="contacts" element={<CrmContactsPage />} />
           <Route path="campaigns" element={<CampaignsPage />} />
           <Route path="projects" element={<ProjectsPage />} />
+          <Route path="projects/:projectId" element={<ProjectDetailPage />} />
+          <Route path="clients/:clientId" element={<ClientsPage />} />
           <Route path="tasks" element={<TasksPage />} />
           <Route path="assets" element={<AssetsPage />} />
           <Route path="approvals" element={<ApprovalsPage />} />

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
+import { Link } from "react-router-dom"
 import { CheckIcon, Loader2Icon, MessageSquareWarningIcon, XIcon } from "lucide-react"
 import { toast } from "sonner"
 
@@ -151,6 +152,28 @@ export function ApprovalsPage() {
                         {approval.dueDate
                           ? ` · due ${new Date(approval.dueDate).toLocaleDateString()}`
                           : ""}
+                        {approval.projectId ? (
+                          <>
+                            {" · "}
+                            <Link
+                              to={`/projects/${approval.projectId}`}
+                              className="text-primary underline-offset-2 hover:underline"
+                            >
+                              {approval.projectId}
+                            </Link>
+                          </>
+                        ) : null}
+                        {approval.clientId ? (
+                          <>
+                            {" · "}
+                            <Link
+                              to={`/clients/${approval.clientId}`}
+                              className="text-primary underline-offset-2 hover:underline"
+                            >
+                              {approval.clientId}
+                            </Link>
+                          </>
+                        ) : null}
                       </p>
                       {approval.notes ? (
                         <p className="text-muted-foreground mt-2 text-sm">{approval.notes}</p>

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
+import { useNavigate, useParams } from "react-router-dom"
 import {
   Building2Icon,
   MailIcon,
@@ -47,10 +48,12 @@ function money(n?: number) {
 }
 
 export function ClientsPage() {
+  const { clientId: routeClientId } = useParams()
+  const navigate = useNavigate()
   const { user } = useAuth()
   const canWriteCrm = canPerform(user?.role, "write_crm")
   const [clients, setClients] = useState<AgencyClient[]>([])
-  const [selectedId, setSelectedId] = useState("")
+  const [selectedId, setSelectedId] = useState(routeClientId || "")
   const [stageFilter, setStageFilter] = useState("all")
   const [search, setSearch] = useState("")
   const [tab, setTab] = useState<Tab>("overview")
@@ -63,6 +66,18 @@ export function ClientsPage() {
   const [creating, setCreating] = useState(false)
   const [newName, setNewName] = useState("")
   const [note, setNote] = useState("")
+
+  const selectClient = useCallback(
+    (id: string, replace = false) => {
+      setSelectedId(id)
+      if (id) {
+        navigate(`/clients/${id}`, { replace })
+      } else {
+        navigate("/clients", { replace })
+      }
+    },
+    [navigate],
+  )
 
   const reloadClients = useCallback(async () => {
     const res = await listClients()
@@ -87,8 +102,14 @@ export function ClientsPage() {
   }, [reloadClients])
 
   useEffect(() => {
-    if (!selectedId && clients[0]) setSelectedId(clients[0].clientId)
-  }, [clients, selectedId])
+    if (routeClientId) {
+      setSelectedId(routeClientId)
+      return
+    }
+    if (!selectedId && clients[0]) {
+      selectClient(clients[0].clientId, true)
+    }
+  }, [clients, routeClientId, selectedId, selectClient])
 
   useEffect(() => {
     if (!selectedId) return
@@ -143,7 +164,7 @@ export function ClientsPage() {
     try {
       const res = await createClient({ name: newName.trim(), stage: "prospect" })
       await reloadClients()
-      if (res.data?.clientId) setSelectedId(res.data.clientId)
+      if (res.data?.clientId) selectClient(res.data.clientId)
       setNewName("")
       toast.success("Account created")
     } catch (err) {
@@ -263,7 +284,7 @@ export function ClientsPage() {
                   key={client.clientId}
                   type="button"
                   onClick={() => {
-                    setSelectedId(client.clientId)
+                    selectClient(client.clientId)
                     setTab("overview")
                   }}
                   className={cn(
@@ -301,7 +322,7 @@ export function ClientsPage() {
                   size="sm"
                   variant="ghost"
                   className="w-fit lg:hidden"
-                  onClick={() => setSelectedId("")}
+                  onClick={() => selectClient("")}
                 >
                   ← Accounts
                 </Button>
