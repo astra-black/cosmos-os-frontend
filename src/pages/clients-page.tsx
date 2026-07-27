@@ -31,6 +31,7 @@ import { ApiError } from "@/lib/api/client"
 import { useAuth } from "@/lib/auth"
 import { canPerform } from "@/lib/rbac"
 import type {
+  AgencyClient,
   CrmActivity,
   CrmContact,
   Opportunity,
