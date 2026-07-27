@@ -96,6 +96,8 @@ export function AppShell({ incidentCount }: { incidentCount?: number }) {
                     </BreadcrumbItem>
                   </BreadcrumbList>
                 </Breadcrumb>
+                {/* Compact title on small screens (breadcrumb is hidden) */}
+                <h1 className="truncate text-sm font-medium sm:hidden">{pageTitle}</h1>
               </div>
               <div className="flex items-center gap-1">
                 <GlobalSearch />

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react"
+import { useMemo, useState } from "react"
 import { PlusIcon, StarIcon, TruckIcon } from "lucide-react"
 import { toast } from "sonner"
 
@@ -9,7 +9,8 @@ import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
-import { createVendor, listVendors, updateVendor } from "@/lib/api/agency"
+import { useVendors } from "@/hooks/use-agency-data"
+import { createVendor, updateVendor } from "@/lib/api/agency"
 import { ApiError } from "@/lib/api/client"
 import { useAuth } from "@/lib/auth"
 import { canPerform } from "@/lib/rbac"
@@ -29,12 +30,16 @@ const CATEGORIES = [
 export function VendorsPage() {
   const { user } = useAuth()
   const canWrite = canPerform(user?.role, "write_crm")
-  const [vendors, setVendors] = useState<Vendor[]>([])
+  const {
+    data: vendors,
+    setData: setVendors,
+    loading,
+    error,
+    reload,
+  } = useVendors()
   const [category, setCategory] = useState("all")
   const [statusFilter, setStatusFilter] = useState("all")
   const [search, setSearch] = useState("")
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
   const [busyId, setBusyId] = useState<string | null>(null)
   const [showAdd, setShowAdd] = useState(false)
   const [form, setForm] = useState({
@@ -44,28 +49,6 @@ export function VendorsPage() {
     email: "",
     rateCard: "",
   })
-
-  async function reload() {
-    const res = await listVendors()
-    setVendors(res.data ?? [])
-  }
-
-  useEffect(() => {
-    let cancelled = false
-    async function load() {
-      try {
-        await reload()
-      } catch (err) {
-        if (!cancelled) setError(err instanceof ApiError ? err.message : "Failed to load vendors")
-      } finally {
-        if (!cancelled) setLoading(false)
-      }
-    }
-    void load()
-    return () => {
-      cancelled = true
-    }
-  }, [])
 
   const categories = useMemo(() => {
     return [...new Set([...CATEGORIES, ...vendors.map((v) => v.category)])]

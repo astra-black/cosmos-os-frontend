@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { Link } from "react-router-dom"
 import {
   CheckSquareIcon,
@@ -7,6 +7,7 @@ import {
   FolderOpenIcon,
   Loader2Icon,
   SearchIcon,
+  UploadIcon,
 } from "lucide-react"
 import { toast } from "sonner"
 
@@ -16,12 +17,20 @@ import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
-import { createApproval, listAssets, normalizeAssets } from "@/lib/api/agency"
+import { useAssets, useProjects } from "@/hooks/use-agency-data"
+import { createApproval, uploadAsset } from "@/lib/api/agency"
 import { ApiError } from "@/lib/api/client"
 import { useAuth } from "@/lib/auth"
 import { canPerform } from "@/lib/rbac"
 import type { Asset } from "@/types/agency"
 import { cn } from "@/lib/utils"
+
+function fileHref(url?: string | null) {
+  if (!url) return null
+  if (url.startsWith("http")) return url
+  const base = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.replace(/\/$/, "") ?? ""
+  return `${base}${url.startsWith("/") ? url : `/${url}`}`
+}
 
 function formatBytes(n?: number) {
   if (n == null || n <= 0) return "—"
@@ -45,37 +54,48 @@ export function AssetsPage() {
     canPerform(user?.role, "write_ops") ||
     canPerform(user?.role, "decide_approval")
 
-  const [assets, setAssets] = useState<Asset[]>([])
-  const [message, setMessage] = useState<string | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const { data: assets, loading, error, reload: reloadAssets } = useAssets()
+  const { data: projectsList } = useProjects()
   const [search, setSearch] = useState("")
   const [statusFilter, setStatusFilter] = useState<string>("all")
   const [projectFilter, setProjectFilter] = useState<string>("all")
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [requestBusy, setRequestBusy] = useState(false)
+  const [uploadBusy, setUploadBusy] = useState(false)
+  const [uploadProjectId, setUploadProjectId] = useState("")
+  const fileRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
-    let cancelled = false
-    async function load() {
-      try {
-        const response = await listAssets()
-        if (cancelled) return
-        setAssets(normalizeAssets(response))
-        setMessage(response.message ?? null)
-      } catch (err) {
-        if (!cancelled) {
-          setError(err instanceof ApiError ? err.message : "Failed to load assets")
-        }
-      } finally {
-        if (!cancelled) setLoading(false)
+    if (!uploadProjectId && projectsList[0]?.projectId) {
+      setUploadProjectId(projectsList[0].projectId)
+    }
+  }, [projectsList, uploadProjectId])
+
+  async function onUploadFile(file: File) {
+    if (!canRequest) return
+    setUploadBusy(true)
+    try {
+      const form = new FormData()
+      form.append("file", file)
+      form.append("assetName", file.name)
+      if (uploadProjectId) {
+        form.append("projectId", uploadProjectId)
+        const p = projectsList.find((x) => x.projectId === uploadProjectId)
+        if (p) form.append("projectName", p.projectName)
       }
+      const res = await uploadAsset(form)
+      await reloadAssets()
+      if (res.data?.assetId) setSelectedId(res.data.assetId)
+      toast.success("File uploaded", {
+        description: res.data?.fileUrl || file.name,
+      })
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Upload failed")
+    } finally {
+      setUploadBusy(false)
+      if (fileRef.current) fileRef.current.value = ""
     }
-    void load()
-    return () => {
-      cancelled = true
-    }
-  }, [])
+  }
 
   const projects = useMemo(() => {
     const map = new Map<string, string>()
@@ -145,11 +165,51 @@ export function AssetsPage() {
         </p>
       </div>
 
-      {message ? (
-        <p className="text-muted-foreground text-xs">{message}</p>
-      ) : null}
       {error ? (
         <Card className="border-destructive/40 text-destructive px-4 py-3 text-sm">{error}</Card>
+      ) : null}
+
+      {/* Upload strip */}
+      {canRequest ? (
+        <Card className="flex flex-col gap-3 p-3 sm:flex-row sm:items-center">
+          <input
+            ref={fileRef}
+            type="file"
+            className="hidden"
+            onChange={(e) => {
+              const f = e.target.files?.[0]
+              if (f) void onUploadFile(f)
+            }}
+          />
+          <select
+            value={uploadProjectId}
+            onChange={(e) => setUploadProjectId(e.target.value)}
+            className="border-input bg-background h-9 w-full rounded-lg border px-2 text-sm sm:max-w-[14rem]"
+          >
+            <option value="">No project</option>
+            {projectsList.map((p) => (
+              <option key={p.projectId} value={p.projectId}>
+                {p.projectName}
+              </option>
+            ))}
+          </select>
+          <Button
+            size="sm"
+            disabled={uploadBusy}
+            onClick={() => fileRef.current?.click()}
+            className="w-full sm:w-auto"
+          >
+            {uploadBusy ? (
+              <Loader2Icon className="size-3.5 animate-spin" />
+            ) : (
+              <UploadIcon className="size-3.5" />
+            )}
+            Upload file
+          </Button>
+          <p className="text-muted-foreground text-xs sm:ml-auto">
+            Max 25MB · stored on API server (/uploads)
+          </p>
+        </Card>
       ) : null}
 
       {/* Toolbar */}
@@ -325,6 +385,16 @@ export function AssetsPage() {
                         : ""}
                     </div>
                   </div>
+                  {selectedAsset.fileUrl ? (
+                    <a
+                      href={fileHref(selectedAsset.fileUrl) || "#"}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-primary text-sm underline-offset-2 hover:underline"
+                    >
+                      Open file ({selectedAsset.originalFileName || selectedAsset.fileType})
+                    </a>
+                  ) : null}
                   {canRequest ? (
                     <Button
                       size="sm"

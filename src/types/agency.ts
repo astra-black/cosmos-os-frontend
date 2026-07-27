@@ -71,6 +71,9 @@ export type Asset = {
   version?: string
   status?: string
   tags?: string[]
+  /** Public path or URL for downloaded file (local uploads: /uploads/...) */
+  fileUrl?: string | null
+  originalFileName?: string | null
   createdAt?: string
   updatedAt?: string
 }

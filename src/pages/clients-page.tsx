@@ -18,10 +18,10 @@ import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
+import { useClients } from "@/hooks/use-agency-data"
 import {
   createClient,
   createCrmActivity,
-  listClients,
   listCrmActivities,
   listCrmContacts,
   listOpportunities,
@@ -31,7 +31,6 @@ import { ApiError } from "@/lib/api/client"
 import { useAuth } from "@/lib/auth"
 import { canPerform } from "@/lib/rbac"
 import type {
-  AgencyClient,
   CrmActivity,
   CrmContact,
   Opportunity,
@@ -52,7 +51,12 @@ export function ClientsPage() {
   const navigate = useNavigate()
   const { user } = useAuth()
   const canWriteCrm = canPerform(user?.role, "write_crm")
-  const [clients, setClients] = useState<AgencyClient[]>([])
+  const {
+    data: clients,
+    loading,
+    error,
+    reload: reloadClients,
+  } = useClients()
   const [selectedId, setSelectedId] = useState(routeClientId || "")
   const [stageFilter, setStageFilter] = useState("all")
   const [search, setSearch] = useState("")
@@ -60,9 +64,7 @@ export function ClientsPage() {
   const [contacts, setContacts] = useState<CrmContact[]>([])
   const [deals, setDeals] = useState<Opportunity[]>([])
   const [activities, setActivities] = useState<CrmActivity[]>([])
-  const [loading, setLoading] = useState(true)
   const [detailLoading, setDetailLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
   const [creating, setCreating] = useState(false)
   const [newName, setNewName] = useState("")
   const [note, setNote] = useState("")
@@ -78,28 +80,6 @@ export function ClientsPage() {
     },
     [navigate],
   )
-
-  const reloadClients = useCallback(async () => {
-    const res = await listClients()
-    setClients(res.data ?? [])
-  }, [])
-
-  useEffect(() => {
-    let cancelled = false
-    async function load() {
-      try {
-        await reloadClients()
-      } catch (err) {
-        if (!cancelled) setError(err instanceof ApiError ? err.message : "Failed to load clients")
-      } finally {
-        if (!cancelled) setLoading(false)
-      }
-    }
-    void load()
-    return () => {
-      cancelled = true
-    }
-  }, [reloadClients])
 
   useEffect(() => {
     if (routeClientId) {

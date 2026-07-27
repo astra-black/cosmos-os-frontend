@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useMemo, useState } from "react"
 import { Link } from "react-router-dom"
 import { LoaderIcon, MegaphoneIcon, PlusIcon } from "lucide-react"
 import { toast } from "sonner"
@@ -11,49 +11,21 @@ import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Progress } from "@/components/ui/progress"
 import { Skeleton } from "@/components/ui/skeleton"
-import { createCampaign, listCampaigns, listClients } from "@/lib/api/agency"
+import { useCampaigns, useClients } from "@/hooks/use-agency-data"
+import { createCampaign } from "@/lib/api/agency"
 import { ApiError } from "@/lib/api/client"
 import { useAuth } from "@/lib/auth"
 import { canPerform } from "@/lib/rbac"
-import type { AgencyClient, Campaign } from "@/types/agency"
 
 export function CampaignsPage() {
   const { user } = useAuth()
   const canWrite = canPerform(user?.role, "write_crm")
-  const [campaigns, setCampaigns] = useState<Campaign[]>([])
-  const [clients, setClients] = useState<AgencyClient[]>([])
+  const { data: campaigns, loading, error, reload } = useCampaigns()
+  const { data: clients } = useClients()
   const [statusFilter, setStatusFilter] = useState("all")
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
   const [showCreate, setShowCreate] = useState(false)
   const [creating, setCreating] = useState(false)
   const [form, setForm] = useState({ name: "", clientId: "", budget: "" })
-
-  const reload = useCallback(async () => {
-    const res = await listCampaigns()
-    setCampaigns(res.data ?? [])
-  }, [])
-
-  useEffect(() => {
-    let cancelled = false
-    async function load() {
-      try {
-        const [, clientsRes] = await Promise.all([
-          reload(),
-          listClients().catch(() => ({ data: [] as AgencyClient[] })),
-        ])
-        if (!cancelled) setClients(clientsRes.data ?? [])
-      } catch (err) {
-        if (!cancelled) setError(err instanceof ApiError ? err.message : "Failed to load campaigns")
-      } finally {
-        if (!cancelled) setLoading(false)
-      }
-    }
-    void load()
-    return () => {
-      cancelled = true
-    }
-  }, [reload])
 
   const filtered = useMemo(() => {
     if (statusFilter === "all") return campaigns

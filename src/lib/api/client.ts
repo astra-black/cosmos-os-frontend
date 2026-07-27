@@ -59,7 +59,9 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
   const { auth = true, apiKey = false, headers, ...rest } = options
   const requestHeaders = new Headers(headers)
 
-  if (!requestHeaders.has("Content-Type") && rest.body) {
+  // FormData must set its own multipart boundary — do not force JSON
+  const isFormData = typeof FormData !== "undefined" && rest.body instanceof FormData
+  if (!requestHeaders.has("Content-Type") && rest.body && !isFormData) {
     requestHeaders.set("Content-Type", "application/json")
   }
 

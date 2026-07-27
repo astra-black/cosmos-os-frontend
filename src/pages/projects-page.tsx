@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useMemo, useState } from "react"
 import { useNavigate } from "react-router-dom"
 import {
   ArchiveIcon,
@@ -17,16 +17,12 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { PortfolioSummaryCard } from "@/components/widgets/portfolio-summary-card"
 import { ProjectsDatatable } from "@/components/widgets/projects-datatable"
 import { StatisticsCard } from "@/components/widgets/statistics-card"
-import {
-  createProject,
-  listClients,
-  listProjects,
-  normalizeProjects,
-} from "@/lib/api/agency"
+import { useClients, useProjects } from "@/hooks/use-agency-data"
+import { createProject } from "@/lib/api/agency"
 import { ApiError } from "@/lib/api/client"
 import { useAuth } from "@/lib/auth"
 import { canPerform } from "@/lib/rbac"
-import type { AgencyClient, Project } from "@/types/agency"
+import type { Project } from "@/types/agency"
 
 const ACTIVE_STATUSES = new Set(["InProgress", "Review", "NotStarted"])
 
@@ -36,11 +32,13 @@ export function ProjectsPage() {
   const canWrite =
     canPerform(user?.role, "write_crm") || canPerform(user?.role, "write_ops")
 
-  const [projects, setProjects] = useState<Project[]>([])
-  const [clients, setClients] = useState<AgencyClient[]>([])
-  const [message, setMessage] = useState<string | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const {
+    data: projects,
+    loading,
+    error,
+    reload,
+  } = useProjects()
+  const { data: clients } = useClients()
   const [creating, setCreating] = useState(false)
   const [showCreate, setShowCreate] = useState(false)
   const [form, setForm] = useState({
@@ -48,38 +46,6 @@ export function ProjectsPage() {
     clientId: "",
     budget: "",
   })
-
-  const reload = useCallback(async () => {
-    const response = await listProjects()
-    setProjects(normalizeProjects(response))
-    setMessage(response.message ?? null)
-  }, [])
-
-  useEffect(() => {
-    let cancelled = false
-    async function load() {
-      setLoading(true)
-      setError(null)
-      try {
-        const [, clientsRes] = await Promise.all([
-          reload(),
-          listClients().catch(() => ({ data: [] as AgencyClient[] })),
-        ])
-        if (cancelled) return
-        setClients(clientsRes.data ?? [])
-      } catch (err) {
-        if (!cancelled) {
-          setError(err instanceof ApiError ? err.message : "Failed to load projects")
-        }
-      } finally {
-        if (!cancelled) setLoading(false)
-      }
-    }
-    void load()
-    return () => {
-      cancelled = true
-    }
-  }, [reload])
 
   const inProgress = projects.filter((p) => p.status === "InProgress").length
   const inReview = projects.filter((p) => p.status === "Review").length
@@ -177,9 +143,6 @@ export function ProjectsPage() {
 
       {error ? (
         <Card className="border-destructive/40 text-destructive px-4 py-3 text-sm">{error}</Card>
-      ) : null}
-      {message ? (
-        <p className="text-muted-foreground text-xs">{message}</p>
       ) : null}
 
       {showCreate ? (

@@ -100,6 +100,28 @@ export async function listAssets(params: { projectId?: string; status?: string; 
   }>(`/api/v1/agency/assets${suffix}`, { apiKey: true })
 }
 
+/** Create asset metadata only (no file binary). */
+export async function createAsset(body: Partial<Asset> & { name?: string }) {
+  return apiRequest<{ success?: boolean; data?: Asset }>("/api/v1/agency/assets", {
+    method: "POST",
+    body: JSON.stringify(body),
+    apiKey: true,
+  })
+}
+
+/**
+ * Multipart file upload. Pass FormData with field "file" plus optional
+ * assetName, projectId, projectName, version, status, tags.
+ * Content-Type is left unset so the browser sets the multipart boundary.
+ */
+export async function uploadAsset(form: FormData) {
+  return apiRequest<{ success?: boolean; data?: Asset }>("/api/v1/agency/assets/upload", {
+    method: "POST",
+    body: form,
+    apiKey: true,
+  })
+}
+
 export async function listPortfolioClients() {
   // JWT-auth'd; api key header sent only if VITE_COSMOS_API_KEY is present (backend may soft-gate).
   return apiRequest<ApiEnvelope<PortfolioClient[]>>("/api/v1/agency/portfolio", {

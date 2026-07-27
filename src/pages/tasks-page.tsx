@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { Link } from "react-router-dom"
 import {
   ChevronLeftIcon,
@@ -15,18 +15,12 @@ import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
-import {
-  createTask,
-  listProjects,
-  listTasks,
-  listTeamMembers,
-  normalizeProjects,
-  updateTask,
-} from "@/lib/api/agency"
+import { useProjects, useTasks, useTeamMembers } from "@/hooks/use-agency-data"
+import { createTask, updateTask } from "@/lib/api/agency"
 import { ApiError } from "@/lib/api/client"
 import { useAuth } from "@/lib/auth"
 import { canPerform } from "@/lib/rbac"
-import type { Project, Task } from "@/types/agency"
+import type { Task } from "@/types/agency"
 import { cn } from "@/lib/utils"
 
 const LANES = [
@@ -58,11 +52,15 @@ const FALLBACK_ASSIGNEES = [
 export function TasksPage() {
   const { user } = useAuth()
   const canWrite = canPerform(user?.role, "write_crm") || canPerform(user?.role, "write_ops")
-  const [tasks, setTasks] = useState<Task[]>([])
-  const [projects, setProjects] = useState<Project[]>([])
-  const [assignees, setAssignees] = useState<string[]>(FALLBACK_ASSIGNEES)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const {
+    data: tasks,
+    setData: setTasks,
+    loading,
+    error,
+    reload,
+  } = useTasks()
+  const { data: projects } = useProjects()
+  const { data: teamMembers } = useTeamMembers()
   const [busyId, setBusyId] = useState<string | null>(null)
   const [showAdd, setShowAdd] = useState(false)
   const [form, setForm] = useState({
@@ -75,47 +73,24 @@ export function TasksPage() {
   const [assigneeFilter, setAssigneeFilter] = useState("all")
   const [priorityFilter, setPriorityFilter] = useState("all")
 
-  const reload = useCallback(async () => {
-    const res = await listTasks()
-    setTasks(res.data ?? [])
-  }, [])
-
   function patchLocal(updated: Task) {
     setTasks((prev) =>
       prev.map((t) => (t.taskId === updated.taskId ? { ...t, ...updated } : t)),
     )
   }
 
+  const assignees = useMemo(() => {
+    const memberNames = teamMembers.map((m) => m.name).filter(Boolean)
+    if (memberNames.length === 0) return FALLBACK_ASSIGNEES
+    return [...new Set([...memberNames, "Unassigned"])]
+  }, [teamMembers])
+
+  // Prefer first project when form is empty after projects load
   useEffect(() => {
-    let cancelled = false
-    async function load() {
-      try {
-        const [taskRes, projectRes, teamRes] = await Promise.all([
-          listTasks(),
-          listProjects().catch(() => null),
-          listTeamMembers().catch(() => null),
-        ])
-        if (cancelled) return
-        setTasks(taskRes.data ?? [])
-        if (projectRes) setProjects(normalizeProjects(projectRes))
-        const memberNames = (teamRes?.data ?? [])
-          .map((m) => m.name)
-          .filter(Boolean)
-        if (memberNames.length > 0) {
-          const unique = [...new Set([...memberNames, "Unassigned"])]
-          setAssignees(unique)
-        }
-      } catch (err) {
-        if (!cancelled) setError(err instanceof ApiError ? err.message : "Failed to load tasks")
-      } finally {
-        if (!cancelled) setLoading(false)
-      }
+    if (!form.projectId && projects[0]?.projectId) {
+      setForm((f) => ({ ...f, projectId: projects[0].projectId }))
     }
-    void load()
-    return () => {
-      cancelled = true
-    }
-  }, [])
+  }, [projects, form.projectId])
 
   const assigneeOptions = useMemo(() => {
     const fromTasks = tasks.map((t) => t.assignee || "Unassigned")
