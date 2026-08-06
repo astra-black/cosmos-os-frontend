@@ -4,11 +4,13 @@ import {
   CircleDotIcon,
   ClockIcon,
   ForwardIcon,
+  ListIcon,
   Loader2Icon,
   MapPinIcon,
   PlayIcon,
   RadioIcon,
   RotateCcwIcon,
+  SlidersHorizontalIcon,
   SkipForwardIcon,
   SquareCheckIcon,
 } from "lucide-react"
@@ -82,6 +84,7 @@ export function CueRunSheet({
   onAdvance?: () => void
 }) {
   const [filter, setFilter] = useState<Filter>("all")
+  const [viewMode, setViewMode] = useState<"list" | "timeline">("list")
 
   // If the active filter becomes empty after a status change (e.g. reset while on Live),
   // fall back to Full run so the cue doesn't look "stuck" on a stale filter.
@@ -136,6 +139,44 @@ export function CueRunSheet({
   ]
 
   const anyBusy = Boolean(busyCueId) || advancing
+
+  // Multi-track grouping and layout calculations
+  const tracks = useMemo(() => {
+    const depts = new Set<string>()
+    visible.forEach((c) => {
+      depts.add(c.departmentName || "General")
+    })
+    return Array.from(depts).sort()
+  }, [visible])
+
+  const timeRange = useMemo(() => {
+    if (sorted.length === 0) {
+      return { min: Date.now(), max: Date.now() + 3600000, total: 3600000 }
+    }
+    const times = sorted.map((c) => new Date(c.scheduledTime || Date.now()).getTime())
+    const min = Math.min(...times)
+    const endTimes = sorted.map((c) => {
+      const start = new Date(c.scheduledTime || Date.now()).getTime()
+      const durationMs = (c.duration || 10) * 60000
+      return start + durationMs
+    })
+    const max = Math.max(...endTimes)
+    return {
+      min,
+      max,
+      total: Math.max(max - min, 60000),
+    }
+  }, [sorted])
+
+  const ticks = useMemo(() => {
+    const list: number[] = []
+    const step = 15 * 60000 // 15-minute interval ticks
+    const start = Math.floor(timeRange.min / step) * step
+    for (let t = start; t <= timeRange.max; t += step) {
+      list.push(t)
+    }
+    return list
+  }, [timeRange])
 
   return (
     <div className={cn("flex flex-col gap-4", className)}>
@@ -264,182 +305,415 @@ export function CueRunSheet({
         </div>
       </div>
 
-      <div className="flex flex-wrap gap-1.5">
-        {filters.map((f) => (
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-wrap gap-1.5">
+          {filters.map((f) => (
+            <Button
+              key={f.id}
+              size="sm"
+              variant={filter === f.id ? "default" : "outline"}
+              onClick={() => setFilter(f.id)}
+              className="rounded-full"
+            >
+              {f.label}
+              <span className={cn("ml-1 tabular-nums opacity-70", filter === f.id && "opacity-90")}>
+                {f.count}
+              </span>
+            </Button>
+          ))}
+        </div>
+
+        <div className="flex items-center gap-1 bg-muted p-0.5 rounded-lg border text-xs">
           <Button
-            key={f.id}
             size="sm"
-            variant={filter === f.id ? "default" : "outline"}
-            onClick={() => setFilter(f.id)}
-            className="rounded-full"
+            variant={viewMode === "list" ? "secondary" : "ghost"}
+            onClick={() => setViewMode("list")}
+            className="h-7 px-2.5 rounded-md text-xs"
           >
-            {f.label}
-            <span className={cn("ml-1 tabular-nums opacity-70", filter === f.id && "opacity-90")}>
-              {f.count}
-            </span>
+            <ListIcon className="size-3.5 mr-1" />
+            List
           </Button>
-        ))}
+          <Button
+            size="sm"
+            variant={viewMode === "timeline" ? "secondary" : "ghost"}
+            onClick={() => setViewMode("timeline")}
+            className="h-7 px-2.5 rounded-md text-xs"
+          >
+            <SlidersHorizontalIcon className="size-3.5 mr-1" />
+            Timeline
+          </Button>
+        </div>
       </div>
 
-      {visible.length === 0 ? (
-        <div className="text-muted-foreground border-border rounded-xl border border-dashed py-16 text-center text-sm">
-          No cues in this view.
-        </div>
-      ) : (
-        <ol className="relative flex flex-col">
-          {visible.map((cue, index) => {
-            const meta = statusMeta(cue.status)
-            const Icon = meta.icon
-            const isLive = cue.status === "in_progress"
-            const isLast = index === visible.length - 1
-            const busy = busyCueId === cue.cueId
+      {viewMode === "list" ? (
+        visible.length === 0 ? (
+          <div className="text-muted-foreground border-border rounded-xl border border-dashed py-16 text-center text-sm">
+            No cues in this view.
+          </div>
+        ) : (
+          <ol className="relative flex flex-col">
+            {visible.map((cue, index) => {
+              const meta = statusMeta(cue.status)
+              const Icon = meta.icon
+              const isLive = cue.status === "in_progress"
+              const isLast = index === visible.length - 1
+              const busy = busyCueId === cue.cueId
 
-            return (
-              <li key={cue.cueId || cue.id} className="relative flex gap-4 pb-0">
-                <div className="w-14 shrink-0 pt-4 text-right sm:w-16">
-                  <div
-                    className={cn(
-                      "text-sm font-semibold tabular-nums",
-                      isLive && "text-primary",
-                    )}
-                  >
-                    {formatTime(cue.scheduledTime)}
-                  </div>
-                  {cue.duration != null ? (
-                    <div className="text-muted-foreground text-[11px] tabular-nums">
-                      {cue.duration}m
+              return (
+                <li key={cue.cueId || cue.id} className="relative flex gap-4 pb-0">
+                  <div className="w-14 shrink-0 pt-4 text-right sm:w-16">
+                    <div
+                      className={cn(
+                        "text-sm font-semibold tabular-nums",
+                        isLive && "text-primary",
+                      )}
+                    >
+                      {formatTime(cue.scheduledTime)}
                     </div>
-                  ) : null}
-                </div>
+                    {cue.duration != null ? (
+                      <div className="text-muted-foreground text-[11px] tabular-nums">
+                        {cue.duration}m
+                      </div>
+                    ) : null}
+                  </div>
 
-                <div className="relative flex w-6 shrink-0 flex-col items-center">
+                  <div className="relative flex w-6 shrink-0 flex-col items-center">
+                    <div
+                      className={cn(
+                        "z-10 mt-4 flex size-6 items-center justify-center rounded-full border-2 border-background",
+                        meta.rail,
+                        isLive && "ring-primary/30 size-7 ring-4",
+                      )}
+                    >
+                      <Icon className="size-3 text-white dark:text-black" />
+                    </div>
+                    {!isLast ? (
+                      <div className="bg-border absolute top-10 bottom-0 w-px grow" />
+                    ) : null}
+                  </div>
+
                   <div
                     className={cn(
-                      "z-10 mt-4 flex size-6 items-center justify-center rounded-full border-2 border-background",
-                      meta.rail,
-                      isLive && "ring-primary/30 size-7 ring-4",
+                      "mb-3 min-w-0 flex-1 rounded-xl border p-3 sm:p-4",
+                      isLive && "border-primary/40 bg-primary/5 shadow-sm",
+                      (cue.status === "completed" || cue.status === "skipped") && "opacity-70",
                     )}
                   >
-                    <Icon className="size-3 text-white dark:text-black" />
-                  </div>
-                  {!isLast ? (
-                    <div className="bg-border absolute top-10 bottom-0 w-px grow" />
-                  ) : null}
-                </div>
-
-                <div
-                  className={cn(
-                    "mb-3 min-w-0 flex-1 rounded-xl border p-3 sm:p-4",
-                    isLive && "border-primary/40 bg-primary/5 shadow-sm",
-                    (cue.status === "completed" || cue.status === "skipped") && "opacity-70",
-                  )}
-                >
-                  <div className="flex flex-wrap items-start justify-between gap-2">
-                    <div className="min-w-0">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="text-muted-foreground font-mono text-xs">
-                          {cue.cueId}
-                        </span>
-                        <Badge className={cn("h-5 capitalize", meta.chip)}>{meta.label}</Badge>
-                        {cue.priority && cue.priority !== "medium" ? (
-                          <Badge variant="outline" className="h-5 capitalize">
-                            {cue.priority}
-                          </Badge>
+                    <div className="flex flex-wrap items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="text-muted-foreground font-mono text-xs">
+                            {cue.cueId}
+                          </span>
+                          <Badge className={cn("h-5 capitalize", meta.chip)}>{meta.label}</Badge>
+                          {cue.priority && cue.priority !== "medium" ? (
+                            <Badge variant="outline" className="h-5 capitalize">
+                              {cue.priority}
+                            </Badge>
+                          ) : null}
+                        </div>
+                        <h3 className="mt-1 text-base font-semibold leading-snug">
+                          {cue.name || cue.title}
+                        </h3>
+                        {cue.description ? (
+                          <p className="text-muted-foreground mt-1 text-sm">{cue.description}</p>
                         ) : null}
                       </div>
-                      <h3 className="mt-1 text-base font-semibold leading-snug">
-                        {cue.name || cue.title}
-                      </h3>
-                      {cue.description ? (
-                        <p className="text-muted-foreground mt-1 text-sm">{cue.description}</p>
+                      {canWrite ? (
+                        <div className="flex shrink-0 flex-wrap justify-end gap-1.5">
+                          {cue.status === "pending" && onStart ? (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              disabled={anyBusy}
+                              onClick={() => onStart(cue)}
+                            >
+                              {busy ? (
+                                <Loader2Icon className="size-3.5 animate-spin" />
+                              ) : (
+                                <PlayIcon className="size-3.5" />
+                              )}
+                              Start
+                            </Button>
+                          ) : null}
+                          {cue.status === "in_progress" && onComplete ? (
+                            <Button
+                              size="sm"
+                              disabled={anyBusy}
+                              onClick={() => onComplete(cue)}
+                            >
+                              {busy ? (
+                                <Loader2Icon className="size-3.5 animate-spin" />
+                              ) : (
+                                <SquareCheckIcon className="size-3.5" />
+                              )}
+                              Complete
+                            </Button>
+                          ) : null}
+                          {(cue.status === "pending" || cue.status === "in_progress") &&
+                          onSkip ? (
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              disabled={anyBusy}
+                              onClick={() => onSkip(cue)}
+                            >
+                              <SkipForwardIcon className="size-3.5" />
+                              Skip
+                            </Button>
+                          ) : null}
+                          {(cue.status === "completed" ||
+                            cue.status === "skipped" ||
+                            cue.status === "in_progress") &&
+                          onReset ? (
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              disabled={anyBusy}
+                              onClick={() => onReset(cue)}
+                              title="Reset to pending"
+                            >
+                              <RotateCcwIcon className="size-3.5" />
+                              Reset
+                            </Button>
+                          ) : null}
+                        </div>
                       ) : null}
                     </div>
-                    {canWrite ? (
-                      <div className="flex shrink-0 flex-wrap justify-end gap-1.5">
-                        {cue.status === "pending" && onStart ? (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            disabled={anyBusy}
-                            onClick={() => onStart(cue)}
-                          >
-                            {busy ? (
-                              <Loader2Icon className="size-3.5 animate-spin" />
-                            ) : (
-                              <PlayIcon className="size-3.5" />
-                            )}
-                            Start
-                          </Button>
-                        ) : null}
-                        {cue.status === "in_progress" && onComplete ? (
-                          <Button
-                            size="sm"
-                            disabled={anyBusy}
-                            onClick={() => onComplete(cue)}
-                          >
-                            {busy ? (
-                              <Loader2Icon className="size-3.5 animate-spin" />
-                            ) : (
-                              <SquareCheckIcon className="size-3.5" />
-                            )}
-                            Complete
-                          </Button>
-                        ) : null}
-                        {(cue.status === "pending" || cue.status === "in_progress") &&
-                        onSkip ? (
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            disabled={anyBusy}
-                            onClick={() => onSkip(cue)}
-                          >
-                            <SkipForwardIcon className="size-3.5" />
-                            Skip
-                          </Button>
-                        ) : null}
-                        {(cue.status === "completed" ||
-                          cue.status === "skipped" ||
-                          cue.status === "in_progress") &&
-                        onReset ? (
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            disabled={anyBusy}
-                            onClick={() => onReset(cue)}
-                            title="Reset to pending"
-                          >
-                            <RotateCcwIcon className="size-3.5" />
-                            Reset
-                          </Button>
-                        ) : null}
-                      </div>
-                    ) : null}
+                    <div className="text-muted-foreground mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs">
+                      {cue.departmentName ? (
+                        <span className="inline-flex items-center gap-1">
+                          <CircleDotIcon className="size-3" />
+                          {cue.departmentName}
+                        </span>
+                      ) : null}
+                      {cue.location ? (
+                        <span className="inline-flex items-center gap-1">
+                          <MapPinIcon className="size-3" />
+                          {cue.location}
+                        </span>
+                      ) : null}
+                      {cue.actualStartTime ? (
+                        <span>
+                          Started {formatTime(cue.actualStartTime)}
+                          {cue.actualEndTime ? ` → ${formatTime(cue.actualEndTime)}` : ""}
+                        </span>
+                      ) : null}
+                    </div>
                   </div>
-                  <div className="text-muted-foreground mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs">
-                    {cue.departmentName ? (
-                      <span className="inline-flex items-center gap-1">
-                        <CircleDotIcon className="size-3" />
-                        {cue.departmentName}
-                      </span>
-                    ) : null}
-                    {cue.location ? (
-                      <span className="inline-flex items-center gap-1">
-                        <MapPinIcon className="size-3" />
-                        {cue.location}
-                      </span>
-                    ) : null}
-                    {cue.actualStartTime ? (
-                      <span>
-                        Started {formatTime(cue.actualStartTime)}
-                        {cue.actualEndTime ? ` → ${formatTime(cue.actualEndTime)}` : ""}
-                      </span>
-                    ) : null}
-                  </div>
+                </li>
+              )
+            })}
+          </ol>
+        )
+      ) : (
+        /* Horizontal Multi-track Timeline View */
+        <div className="bg-card rounded-xl border overflow-hidden flex flex-col">
+          {/* Timeline Scrollable Area */}
+          <div className="overflow-x-auto">
+            <div className="min-w-[1000px] relative flex flex-col select-none">
+              
+              {/* Time Ruler (Header Row) */}
+              <div className="flex border-b border-border bg-muted/40 h-10 items-center">
+                <div className="w-36 shrink-0 border-r border-border px-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  Tracks
                 </div>
-              </li>
-            )
-          })}
-        </ol>
+                <div className="relative flex-1 h-full">
+                  {ticks.map((tickTime) => {
+                    const leftPercent = ((tickTime - timeRange.min) / timeRange.total) * 100
+                    if (leftPercent < 0 || leftPercent > 100) return null
+                    return (
+                      <div
+                        key={tickTime}
+                        className="absolute top-0 bottom-0 flex flex-col justify-between pt-1 pb-1.5"
+                        style={{ left: `${leftPercent}%` }}
+                      >
+                        <span className="text-[10px] font-mono font-medium -translate-x-1/2 text-muted-foreground leading-none">
+                          {new Date(tickTime).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                        </span>
+                        <div className="w-px h-1.5 bg-muted-foreground/30 -translate-x-1/2" />
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+
+              {/* Grid vertical lines overlay */}
+              <div className="absolute top-10 bottom-0 left-36 right-0 pointer-events-none z-0">
+                {ticks.map((tickTime) => {
+                  const leftPercent = ((tickTime - timeRange.min) / timeRange.total) * 100
+                  if (leftPercent <= 0 || leftPercent >= 100) return null
+                  return (
+                    <div
+                      key={`grid-${tickTime}`}
+                      className="absolute top-0 bottom-0 w-px border-r border-dashed border-muted/10"
+                      style={{ left: `${leftPercent}%` }}
+                    />
+                  )
+                })}
+              </div>
+
+              {/* Track rows */}
+              {tracks.length === 0 ? (
+                <div className="py-16 text-center text-sm text-muted-foreground">
+                  No cues in this view.
+                </div>
+              ) : (
+                tracks.map((trackName) => {
+                  const trackCues = visible.filter((c) => (c.departmentName || "General") === trackName)
+                  return (
+                    <div key={trackName} className="flex border-b border-border last:border-0 min-h-[96px] items-stretch">
+                      {/* Track Sidebar Label */}
+                      <div className="w-36 shrink-0 border-r border-border bg-muted/10 p-3 flex flex-col justify-center">
+                        <span className="text-xs font-semibold text-foreground truncate">{trackName}</span>
+                        <span className="text-[10px] text-muted-foreground font-medium mt-0.5">
+                          {trackCues.length} {trackCues.length === 1 ? "cue" : "cues"}
+                        </span>
+                      </div>
+
+                      {/* Track Horizontal Grid Area */}
+                      <div className="relative flex-1 bg-muted/5 py-3 min-h-[96px] z-10">
+                        {trackCues.map((cue) => {
+                          const meta = statusMeta(cue.status)
+                          const Icon = meta.icon
+                          const isLive = cue.status === "in_progress"
+                          const isNext = nextCue && cue.cueId === nextCue.cueId
+                          const isFuturePending = cue.status === "pending" && (!nextCue || cue.cueId !== nextCue.cueId)
+                          const busy = busyCueId === cue.cueId
+                          
+                          // Time position math
+                          const cueStart = new Date(cue.scheduledTime || timeRange.min).getTime()
+                          const cueDurMs = (cue.duration || 10) * 60000
+                          
+                          const leftPercent = ((cueStart - timeRange.min) / timeRange.total) * 100
+                          const widthPercent = (cueDurMs / timeRange.total) * 100
+                          
+                          return (
+                            <div
+                              key={cue.cueId || cue.id}
+                              className={cn(
+                                "absolute top-3 bottom-3 rounded-lg border px-3 py-2 flex flex-col justify-between transition-all group overflow-hidden select-none hover:shadow-md",
+                                isLive ? "border-red-500/40 bg-gradient-to-t from-red-500/10 via-red-500/[0.02] to-card ring-1 ring-red-500/20 shadow-sm" : 
+                                isNext ? "border-emerald-500/40 bg-gradient-to-t from-emerald-500/10 via-emerald-500/[0.02] to-card" : 
+                                isFuturePending ? "border-purple-500/40 bg-gradient-to-t from-purple-500/10 via-purple-500/[0.02] to-card" : 
+                                (cue.status === "completed" || cue.status === "skipped") ? "border-border/60 bg-muted/20 opacity-70" :
+                                "border-border bg-card hover:border-muted-foreground/30"
+                              )}
+                              style={{
+                                left: `${Math.max(0, Math.min(leftPercent, 98))}%`,
+                                width: `${Math.max(5, Math.min(widthPercent, 100))}%`,
+                                minWidth: "140px"
+                              }}
+                            >
+                              {/* Cue Header (Name & Status icon) */}
+                              <div className="flex items-start justify-between gap-1.5">
+                                <div className="min-w-0">
+                                  <div className="flex items-center gap-1">
+                                    <span className="text-[9px] font-mono text-muted-foreground">
+                                      {cue.cueId}
+                                    </span>
+                                    {isLive && (
+                                      <span className="relative flex h-1.5 w-1.5">
+                                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-500 opacity-75"></span>
+                                        <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-red-500"></span>
+                                      </span>
+                                    )}
+                                  </div>
+                                  <h4 className={cn("text-xs font-semibold leading-tight mt-0.5 truncate", isLive && "text-red-500")}>
+                                    {cue.name || cue.title}
+                                  </h4>
+                                </div>
+                                <div className={cn("flex size-5 items-center justify-center rounded-full shrink-0", 
+                                  isLive ? "bg-red-500" : isNext ? "bg-emerald-500" : isFuturePending ? "bg-purple-500" : meta.rail
+                                )}>
+                                  <Icon className="size-2.5 text-white dark:text-black" />
+                                </div>
+                              </div>
+
+                              {/* Timing & Location info */}
+                              <div className="text-[10px] text-muted-foreground font-mono leading-none flex items-center justify-between gap-1.5 mt-1.5">
+                                <span>{formatTime(cue.scheduledTime)} ({cue.duration || 10}m)</span>
+                                {cue.location && <span className="truncate text-right">{cue.location}</span>}
+                              </div>
+
+                              {/* Bottom light accent */}
+                              {isLive && <div className="absolute bottom-0 inset-x-0 h-[2px] bg-gradient-to-r from-red-500 via-red-400/50 to-transparent" />}
+                              {isNext && <div className="absolute bottom-0 inset-x-0 h-[2px] bg-gradient-to-r from-emerald-500 via-emerald-400/50 to-transparent" />}
+                              {isFuturePending && <div className="absolute bottom-0 inset-x-0 h-[2px] bg-gradient-to-r from-purple-500 via-purple-400/50 to-transparent" />}
+
+                              {/* Actions on hover/select */}
+                              {canWrite && (
+                                <div className="absolute inset-x-0 bottom-0 bg-background/95 border-t py-1 px-2 flex justify-end gap-1 translate-y-full group-hover:translate-y-0 transition-transform">
+                                  {cue.status === "pending" && onStart && (
+                                    <Button
+                                      size="icon"
+                                      variant="outline"
+                                      className="size-6 rounded-md"
+                                      disabled={anyBusy}
+                                      onClick={(e) => { e.stopPropagation(); onStart(cue); }}
+                                      title="Start"
+                                    >
+                                      {busy ? (
+                                        <Loader2Icon className="size-3 animate-spin" />
+                                      ) : (
+                                        <PlayIcon className="size-3 text-primary" />
+                                      )}
+                                    </Button>
+                                  )}
+                                  {cue.status === "in_progress" && onComplete && (
+                                    <Button
+                                      size="icon"
+                                      className="size-6 rounded-md bg-chart-2 hover:bg-chart-2/90 text-white"
+                                      disabled={anyBusy}
+                                      onClick={(e) => { e.stopPropagation(); onComplete(cue); }}
+                                      title="Complete"
+                                    >
+                                      {busy ? (
+                                        <Loader2Icon className="size-3 animate-spin" />
+                                      ) : (
+                                        <CheckIcon className="size-3" />
+                                      )}
+                                    </Button>
+                                  )}
+                                  {(cue.status === "pending" || cue.status === "in_progress") && onSkip && (
+                                    <Button
+                                      size="icon"
+                                      variant="ghost"
+                                      className="size-6 rounded-md hover:bg-muted"
+                                      disabled={anyBusy}
+                                      onClick={(e) => { e.stopPropagation(); onSkip(cue); }}
+                                      title="Skip"
+                                    >
+                                      <SkipForwardIcon className="size-3" />
+                                    </Button>
+                                  )}
+                                  {(cue.status === "completed" || cue.status === "skipped" || cue.status === "in_progress") && onReset && (
+                                    <Button
+                                      size="icon"
+                                      variant="ghost"
+                                      className="size-6 rounded-md hover:bg-muted"
+                                      disabled={anyBusy}
+                                      onClick={(e) => { e.stopPropagation(); onReset(cue); }}
+                                      title="Reset"
+                                    >
+                                      <RotateCcwIcon className="size-3" />
+                                    </Button>
+                                  )}
+                                </div>
+                              )}
+
+                            </div>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  )
+                })
+              )}
+
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )

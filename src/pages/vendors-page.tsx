@@ -1,5 +1,17 @@
 import { useMemo, useState } from "react"
-import { PlusIcon, StarIcon, TruckIcon } from "lucide-react"
+import {
+  FileTextIcon,
+  FilmIcon,
+  HammerIcon,
+  MailIcon,
+  PaletteIcon,
+  PlusIcon,
+  SparklesIcon,
+  StarIcon,
+  TruckIcon,
+  UserIcon,
+  Volume2Icon,
+} from "lucide-react"
 import { toast } from "sonner"
 
 import { EmptyState } from "@/components/shared/empty-state"
@@ -16,6 +28,40 @@ import { useAuth } from "@/lib/auth"
 import { canPerform } from "@/lib/rbac"
 import type { Vendor } from "@/types/agency"
 import { cn } from "@/lib/utils"
+
+function getCategoryIcon(category: string) {
+  switch (category?.toLowerCase()) {
+    case "staging":
+      return HammerIcon
+    case "av":
+      return Volume2Icon
+    case "post":
+      return FilmIcon
+    case "guest_experience":
+      return SparklesIcon
+    case "design":
+      return PaletteIcon
+    default:
+      return TruckIcon
+  }
+}
+
+function getCategoryBgImage(category: string) {
+  switch (category?.toLowerCase()) {
+    case "staging":
+      return "https://images.unsplash.com/photo-1516450360452-9312f5e86fc7?auto=format&fit=crop&w=400&q=50"
+    case "av":
+      return "https://images.unsplash.com/photo-1598488035139-bdbb2231ce04?auto=format&fit=crop&w=400&q=50"
+    case "post":
+      return "https://images.unsplash.com/photo-1485846234645-a62644f84728?auto=format&fit=crop&w=400&q=50"
+    case "guest_experience":
+      return "https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&w=400&q=50"
+    case "design":
+      return "https://images.unsplash.com/photo-1550684848-fac1c5b4e853?auto=format&fit=crop&w=400&q=50"
+    default:
+      return "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=400&q=50"
+  }
+}
 
 const STATUSES = ["preferred", "active", "trial", "inactive"] as const
 const CATEGORIES = [
@@ -248,148 +294,197 @@ export function VendorsPage() {
         <EmptyState icon={<TruckIcon className="size-8 opacity-40" />} title="No vendors" />
       ) : (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {filtered.map((vendor) => (
-            <Card key={vendor.vendorId} className="flex flex-col gap-3 p-4">
-              <div className="flex items-start justify-between gap-2">
-                <div className="min-w-0">
-                  <h2 className="font-semibold leading-snug">{vendor.name}</h2>
-                  <p className="text-muted-foreground text-xs capitalize">
-                    {vendor.category.replace("_", " ")}
-                  </p>
-                </div>
-                {canWrite ? (
-                  <select
-                    className={cn(
-                      "h-7 shrink-0 rounded-full border px-2 text-[11px] font-medium capitalize outline-none",
-                      vendor.status === "preferred" && "border-primary bg-primary/10 text-primary",
-                    )}
-                    value={vendor.status}
-                    disabled={busyId === vendor.vendorId}
-                    onChange={(e) =>
-                      void patchVendor(
-                        vendor,
-                        { status: e.target.value },
-                        `${vendor.name} → ${e.target.value}`,
-                      )
-                    }
-                  >
-                    {STATUSES.map((s) => (
-                      <option key={s} value={s}>
-                        {s}
-                      </option>
-                    ))}
-                  </select>
-                ) : (
-                  <Badge
-                    className={cn(
-                      "capitalize",
-                      vendor.status === "preferred" && "bg-primary/10 text-primary",
-                    )}
-                  >
-                    {vendor.status}
-                  </Badge>
-                )}
-              </div>
+          {filtered.map((vendor) => {
+            const CategoryIcon = getCategoryIcon(vendor.category)
+            return (
+              <Card
+                key={vendor.vendorId}
+                className="relative overflow-hidden pl-5 hover:-translate-y-1 hover:shadow-lg hover:shadow-primary/5 transition-all duration-300 bg-card border border-border rounded-xl p-5 flex flex-col justify-between min-h-[220px]"
+              >
+                {/* Status indicator strip on the left edge */}
+                <div className={cn(
+                  "absolute left-0 top-0 bottom-0 w-[4px]",
+                  vendor.status === "preferred" && "bg-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.4)]",
+                  vendor.status === "active" && "bg-primary",
+                  vendor.status === "trial" && "bg-cyan-500",
+                  vendor.status === "inactive" && "bg-muted-foreground/30"
+                )} />
 
-              <div className="flex items-center gap-2">
-                <div className="text-muted-foreground flex items-center gap-1 text-sm">
-                  <StarIcon className="size-3.5 fill-current opacity-70" />
-                  <span className="tabular-nums font-medium text-foreground">
-                    {vendor.rating?.toFixed(1) ?? "—"}
-                  </span>
+                {/* Background Category Watermark */}
+                <CategoryIcon className="absolute -bottom-8 -right-8 size-32 opacity-[0.02] text-foreground pointer-events-none select-none" />
+
+                {/* Top Section: Header */}
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <h2 className="font-bold text-sm tracking-tight text-foreground truncate">{vendor.name}</h2>
+                    <p className="text-muted-foreground text-[10px] font-mono uppercase tracking-wider mt-1">
+                      {vendor.category.replace("_", " ")}
+                    </p>
+                  </div>
+                  {canWrite ? (
+                    <select
+                      className={cn(
+                        "h-6 shrink-0 rounded-full border px-2 text-[10px] font-mono font-medium capitalize outline-none bg-background cursor-pointer",
+                        vendor.status === "preferred" && "border-amber-500/40 bg-amber-500/10 text-amber-500",
+                        vendor.status === "active" && "border-primary/40 bg-primary/10 text-primary",
+                        vendor.status === "trial" && "border-cyan-500/40 bg-cyan-500/10 text-cyan-500",
+                      )}
+                      value={vendor.status}
+                      disabled={busyId === vendor.vendorId}
+                      onChange={(e) =>
+                        void patchVendor(
+                          vendor,
+                          { status: e.target.value },
+                          `${vendor.name} → ${e.target.value}`,
+                        )
+                      }
+                    >
+                      {STATUSES.map((s) => (
+                        <option key={s} value={s}>
+                          {s}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <Badge
+                      className={cn(
+                        "capitalize text-[9px] font-mono py-0 h-4.5 px-2",
+                        vendor.status === "preferred" ? "bg-amber-500/10 text-amber-500 border-amber-500/30" :
+                        vendor.status === "active" ? "bg-primary/10 text-primary border-primary/30" :
+                        "bg-muted text-muted-foreground border-transparent",
+                      )}
+                      variant="outline"
+                    >
+                      {vendor.status}
+                    </Badge>
+                  )}
                 </div>
-                {canWrite ? (
-                  <div className="flex gap-0.5">
-                    {[1, 2, 3, 4, 5].map((n) => (
-                      <button
-                        key={n}
-                        type="button"
-                        className={cn(
-                          "text-muted-foreground hover:text-foreground p-0.5",
-                          (vendor.rating ?? 0) >= n && "text-foreground",
-                        )}
-                        disabled={busyId === vendor.vendorId}
-                        onClick={() =>
-                          void patchVendor(vendor, { rating: n }, `Rated ${n}/5`)
-                        }
-                        aria-label={`Rate ${n}`}
-                      >
-                        <StarIcon
+
+                {/* Rating Bar */}
+                <div className="flex items-center gap-2 mt-2">
+                  <div className="flex items-center gap-1 text-[11px] bg-muted/50 w-fit px-2 py-0.5 rounded border border-border/40 font-mono">
+                    <StarIcon className={cn("size-3 fill-amber-500 text-amber-500", !vendor.rating && "fill-none text-muted-foreground/40")} />
+                    <span className="font-bold text-foreground">
+                      {vendor.rating?.toFixed(1) ?? "0.0"}
+                    </span>
+                  </div>
+                  {canWrite ? (
+                    <div className="flex gap-0.5">
+                      {[1, 2, 3, 4, 5].map((n) => (
+                        <button
+                          key={n}
+                          type="button"
                           className={cn(
-                            "size-3.5",
-                            (vendor.rating ?? 0) >= n && "fill-current",
+                            "text-muted-foreground/40 hover:text-amber-500 p-0.5 transition-colors",
+                            (vendor.rating ?? 0) >= n && "text-amber-500",
                           )}
-                        />
-                      </button>
+                          disabled={busyId === vendor.vendorId}
+                          onClick={() =>
+                            void patchVendor(vendor, { rating: n }, `Rated ${n}/5`)
+                          }
+                          aria-label={`Rate ${n}`}
+                        >
+                          <StarIcon
+                            className={cn(
+                              "size-3",
+                              (vendor.rating ?? 0) >= n && "fill-current",
+                            )}
+                          />
+                        </button>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+
+                {/* Divider Line */}
+                <div className="w-full h-px border-t border-dashed border-border/80 my-3" />
+
+                {/* Contact Info Details */}
+                <div className="flex flex-col gap-1 text-[11px] text-muted-foreground min-w-0">
+                  {vendor.contact && (
+                    <div className="inline-flex items-center gap-1.5 truncate">
+                      <UserIcon className="size-3 shrink-0 text-muted-foreground/60" />
+                      {vendor.contact}
+                    </div>
+                  )}
+                  {vendor.email && (
+                    <a
+                      className="inline-flex items-center gap-1.5 truncate text-primary hover:underline font-mono"
+                      href={`mailto:${vendor.email}`}
+                    >
+                      <MailIcon className="size-3 shrink-0 text-muted-foreground/60" />
+                      {vendor.email}
+                    </a>
+                  )}
+                  {vendor.rateCard && (
+                    <div className="inline-flex items-center gap-1.5 bg-muted/40 w-fit px-2 py-0.5 rounded border border-border/40 font-mono mt-1">
+                      <FileTextIcon className="size-3 text-muted-foreground/60 shrink-0" />
+                      {vendor.rateCard}
+                    </div>
+                  )}
+                </div>
+
+                {/* Skills tags */}
+                {vendor.skills?.length ? (
+                  <div className="flex flex-wrap gap-1 mt-3">
+                    {vendor.skills.map((s) => (
+                      <Badge key={s} variant="outline" className="h-4.5 text-[9px] font-normal font-mono py-0 px-1.5">
+                        {s}
+                      </Badge>
                     ))}
                   </div>
                 ) : null}
-              </div>
 
-              <div className="text-muted-foreground text-xs leading-relaxed">
-                <div>{vendor.contact}</div>
-                {vendor.email ? (
-                  <a className="text-primary hover:underline" href={`mailto:${vendor.email}`}>
-                    {vendor.email}
-                  </a>
+                {/* Regions */}
+                {vendor.regions?.length ? (
+                  <div className="text-muted-foreground text-[10px] font-mono mt-2 uppercase tracking-wide">
+                    {vendor.regions.join(" · ")}
+                  </div>
                 ) : null}
-                <div className="mt-1">{vendor.rateCard}</div>
-              </div>
 
-              {vendor.skills?.length ? (
-                <div className="flex flex-wrap gap-1">
-                  {vendor.skills.map((s) => (
-                    <Badge key={s} variant="outline" className="h-5 font-normal">
-                      {s}
-                    </Badge>
-                  ))}
-                </div>
-              ) : null}
-
-              <div className="text-muted-foreground text-[11px]">
-                {vendor.regions?.join(" · ")}
-              </div>
-
-              {canWrite ? (
-                <div className="mt-auto flex flex-wrap gap-1.5">
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="flex-1"
-                    disabled={busyId === vendor.vendorId}
-                    onClick={() =>
-                      void patchVendor(
-                        vendor,
-                        {
-                          status:
-                            vendor.status === "preferred" ? "active" : "preferred",
-                        },
-                        vendor.status === "preferred"
-                          ? "Removed preferred"
-                          : "Marked preferred",
-                      )
-                    }
-                  >
-                    {vendor.status === "preferred" ? "Unprefer" : "Prefer"}
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    disabled={busyId === vendor.vendorId}
-                    onClick={() =>
-                      void patchVendor(
-                        vendor,
-                        { status: "inactive" },
-                        `${vendor.name} inactive`,
-                      )
-                    }
-                  >
-                    Deactivate
-                  </Button>
-                </div>
-              ) : null}
-            </Card>
-          ))}
+                {/* Actions at bottom */}
+                {canWrite && (
+                  <div className="mt-4 pt-3 border-t border-border/40 flex flex-wrap gap-1.5">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="flex-1 text-[11px] h-7"
+                      disabled={busyId === vendor.vendorId}
+                      onClick={() =>
+                        void patchVendor(
+                          vendor,
+                          {
+                            status:
+                              vendor.status === "preferred" ? "active" : "preferred",
+                          },
+                          vendor.status === "preferred"
+                            ? "Removed preferred"
+                            : "Marked preferred",
+                        )
+                      }
+                    >
+                      {vendor.status === "preferred" ? "Unprefer" : "Prefer"}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="flex-1 text-[11px] h-7"
+                      disabled={busyId === vendor.vendorId}
+                      onClick={() =>
+                        void patchVendor(
+                          vendor,
+                          { status: "inactive" },
+                          `${vendor.name} inactive`,
+                        )
+                      }
+                    >
+                      Deactivate
+                    </Button>
+                  </div>
+                )}
+              </Card>
+            )
+          })}
         </div>
       )}
     </div>

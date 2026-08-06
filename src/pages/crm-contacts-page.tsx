@@ -4,7 +4,7 @@ import { toast } from "sonner"
 
 import { EmptyState } from "@/components/shared/empty-state"
 import { PageHeader } from "@/components/shared/page-header"
-import { Avatar, AvatarFallback } from "@/components/ui/avatar"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
@@ -13,6 +13,19 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { createCrmContact, listClients, listCrmContacts } from "@/lib/api/agency"
 import { ApiError } from "@/lib/api/client"
 import type { AgencyClient, CrmContact } from "@/types/agency"
+
+const SAMPLE_AVATARS = [
+  "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=120&h=120&q=80",
+  "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=120&h=120&q=80",
+  "https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=120&h=120&q=80",
+  "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=120&h=120&q=80",
+  "https://images.unsplash.com/photo-1438761681033-6461ffad8d80?auto=format&fit=crop&w=120&h=120&q=80",
+  "https://images.unsplash.com/photo-1522075469751-3a6694fb2f61?auto=format&fit=crop&w=120&h=120&q=80",
+  "https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=120&h=120&q=80",
+  "https://images.unsplash.com/photo-1552058544-f2b08422138a?auto=format&fit=crop&w=120&h=120&q=80",
+  "https://images.unsplash.com/photo-1580489944761-15a19d654956?auto=format&fit=crop&w=120&h=120&q=80",
+  "https://images.unsplash.com/photo-1607746882042-944635dfe10e?auto=format&fit=crop&w=120&h=120&q=80",
+]
 
 export function CrmContactsPage() {
   const [contacts, setContacts] = useState<CrmContact[]>([])
@@ -173,7 +186,7 @@ export function CrmContactsPage() {
           description="Add people to link deals and account activity."
         />
       ) : (
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {filtered.map((contact) => {
             const initials = contact.name
               .split(/\s+/)
@@ -181,44 +194,112 @@ export function CrmContactsPage() {
               .join("")
               .slice(0, 2)
               .toUpperCase()
+            const avatarIndex = Math.abs(
+              contact.name.split("").reduce((acc, char) => acc + char.charCodeAt(0), 0)
+            ) % SAMPLE_AVATARS.length
+            const avatarUrl = SAMPLE_AVATARS[avatarIndex]
             return (
-              <Card key={contact.contactId} className="flex flex-col gap-3 p-4">
-                <div className="flex items-start gap-3">
-                  <Avatar>
-                    <AvatarFallback>{initials}</AvatarFallback>
-                  </Avatar>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="font-medium">{contact.name}</span>
-                      {contact.isPrimary ? (
-                        <Badge className="h-5">Primary</Badge>
-                      ) : null}
+              <Card
+                key={contact.contactId}
+                className="relative overflow-hidden hover:-translate-y-1 hover:shadow-lg hover:shadow-primary/5 transition-all duration-300 bg-card border border-border rounded-xl p-5 flex flex-col justify-between min-h-[176px]"
+              >
+                {/* Background Watermark */}
+                <UserRoundIcon className="absolute -bottom-8 -right-8 size-36 opacity-[0.02] text-foreground pointer-events-none select-none" />
+
+                {/* Top Section: Profile Header */}
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-start gap-3">
+                    <Avatar className="size-11 border border-border shadow-sm">
+                      <AvatarImage src={avatarUrl} alt={contact.name} />
+                      <AvatarFallback className="bg-muted text-xs font-semibold leading-none">{initials}</AvatarFallback>
+                    </Avatar>
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <span className="font-semibold text-sm tracking-tight text-foreground">{contact.name}</span>
+                        {contact.isPrimary && (
+                          <Badge variant="default" className="h-4.5 text-[9px] px-1.5 uppercase font-bold tracking-wider">
+                            Primary
+                          </Badge>
+                        )}
+                      </div>
+                      <div className="text-muted-foreground text-[11px] font-mono leading-none mt-1">
+                        {contact.title || "Consultant"}
+                      </div>
                     </div>
-                    <div className="text-muted-foreground text-xs">{contact.title || "—"}</div>
-                    <div className="text-muted-foreground mt-0.5 text-xs">
-                      {contact.clientName || "No account"}
+                  </div>
+
+                  {/* Smartcard Chip Accent */}
+                  <div className="opacity-40 shrink-0 select-none">
+                    <svg className="size-6 text-muted-foreground" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                      <rect x="3" y="3" width="18" height="18" rx="3" />
+                      <path d="M9 3v18M15 3v18M3 9h18M3 15h18" />
+                      <rect x="7" y="7" width="10" height="10" rx="1.5" fill="currentColor" className="text-muted/10" />
+                    </svg>
+                  </div>
+                </div>
+
+                {/* Card Divider Line */}
+                <div className="w-full h-px border-t border-dashed border-border/80 my-4" />
+
+                {/* Bottom Section: Details & Metadata */}
+                <div className="flex flex-col gap-3">
+                  <div className="flex flex-col gap-1 text-[11px] text-muted-foreground">
+                    {contact.clientName && (
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/80 flex items-center gap-1.5 mb-1">
+                        <svg className="size-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <rect x="4" y="2" width="16" height="20" rx="2" ry="2" />
+                          <line x1="9" y1="22" x2="9" y2="16" />
+                          <line x1="15" y1="22" x2="15" y2="16" />
+                          <line x1="9" y1="16" x2="15" y2="16" />
+                          <path d="M8 6h2M8 10h2M14 6h2M14 10h2" />
+                        </svg>
+                        {contact.clientName}
+                      </span>
+                    )}
+
+                    {contact.email && (
+                      <a
+                        href={`mailto:${contact.email}`}
+                        className="inline-flex items-center gap-1.5 truncate hover:text-foreground transition-colors font-mono"
+                      >
+                        <MailIcon className="size-3 shrink-0 text-muted-foreground/60" />
+                        {contact.email}
+                      </a>
+                    )}
+                    {contact.phone && (
+                      <a
+                        href={`tel:${contact.phone}`}
+                        className="inline-flex items-center gap-1.5 hover:text-foreground transition-colors font-mono"
+                      >
+                        <PhoneIcon className="size-3 shrink-0 text-muted-foreground/60" />
+                        {contact.phone}
+                      </a>
+                    )}
+                  </div>
+
+                  {/* Metadata Row: Role Badge & Barcode */}
+                  <div className="flex items-center justify-between gap-3 mt-1">
+                    {contact.role ? (
+                      <Badge variant="outline" className="text-[9px] font-mono capitalize tracking-wide h-5 py-0">
+                        {contact.role.replace("_", " ")}
+                      </Badge>
+                    ) : (
+                      <div />
+                    )}
+
+                    {/* Barcode Accent */}
+                    <div className="flex items-center gap-[1px] opacity-15 shrink-0 select-none h-4.5">
+                      <div className="w-[1px] h-full bg-foreground" />
+                      <div className="w-[2px] h-full bg-foreground" />
+                      <div className="w-[1px] h-full bg-foreground" />
+                      <div className="w-[3px] h-full bg-foreground" />
+                      <div className="w-[1px] h-full bg-foreground" />
+                      <div className="w-[2px] h-full bg-foreground" />
+                      <div className="w-[1px] h-full bg-foreground" />
                     </div>
                   </div>
                 </div>
-                <div className="text-muted-foreground flex flex-col gap-1 text-xs">
-                  {contact.email ? (
-                    <span className="inline-flex items-center gap-1.5 truncate">
-                      <MailIcon className="size-3 shrink-0" />
-                      {contact.email}
-                    </span>
-                  ) : null}
-                  {contact.phone ? (
-                    <span className="inline-flex items-center gap-1.5">
-                      <PhoneIcon className="size-3 shrink-0" />
-                      {contact.phone}
-                    </span>
-                  ) : null}
-                </div>
-                {contact.role ? (
-                  <Badge variant="outline" className="w-fit capitalize">
-                    {contact.role.replace("_", " ")}
-                  </Badge>
-                ) : null}
+
               </Card>
             )
           })}
