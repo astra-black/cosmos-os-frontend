@@ -9,6 +9,8 @@ import {
 import { toast } from "sonner"
 
 import { PageHeader } from "@/components/shared/page-header"
+import { ConfirmationDialog } from "@/components/shared/confirmation-dialog"
+import { withMutationFeedback } from "@/components/shared/mutation-feedback"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -17,9 +19,13 @@ import { EventOpsMetricsCard } from "@/components/widgets/event-ops-metrics-card
 import { EventsDatatable } from "@/components/widgets/events-datatable"
 import { PortfolioSummaryCard } from "@/components/widgets/portfolio-summary-card"
 import { StatisticsCard } from "@/components/widgets/statistics-card"
-import { createEvent, listEvents } from "@/lib/api/agency"
+import { createEvent, deleteEvent, listEvents, updateEvent } from "@/lib/api/agency"
 import { ApiError } from "@/lib/api/client"
+import { useAuth } from "@/lib/auth"
+import { canPerform } from "@/lib/rbac"
 import type { Event } from "@/types/agency"
+
+const EVENT_TYPES = ["festival", "concert", "conference", "corporate", "tour", "private", "Product"] as const
 
 const STATUS_COLORS: Record<string, string> = {
   draft: "var(--chart-3)",
@@ -31,15 +37,25 @@ const STATUS_COLORS: Record<string, string> = {
 }
 
 export function EventsPage() {
+  const { user } = useAuth()
+  const canWrite = canPerform(user?.role, "write_ops")
   const [events, setEvents] = useState<Event[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [showCreate, setShowCreate] = useState(false)
   const [creating, setCreating] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [pendingEventId, setPendingEventId] = useState<string | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<Event | null>(null)
   const [form, setForm] = useState({
     name: "",
     type: "corporate",
     location: "",
+    venue: "",
+    description: "",
+    organizerId: "",
+    expectedAttendees: "",
+    budget: "",
     startDate: "",
     endDate: "",
   })
@@ -71,22 +87,42 @@ export function EventsPage() {
   }, [])
 
   async function handleCreate() {
-    if (!form.name.trim()) return
+    if (!canWrite) return
+    if (!form.name.trim() || !form.type || !form.location.trim() || !form.startDate || !form.endDate) {
+      toast.error("Name, type, location, start date, and end date are required")
+      return
+    }
+    const startDate = new Date(form.startDate)
+    const endDate = new Date(form.endDate)
+    const expectedAttendees = form.expectedAttendees ? Number(form.expectedAttendees) : undefined
+    const budget = form.budget ? Number(form.budget) : undefined
+    if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime()) || startDate > endDate) {
+      toast.error("Start date must be before or equal to end date")
+      return
+    }
+    if (
+      (expectedAttendees !== undefined && (!Number.isInteger(expectedAttendees) || expectedAttendees <= 0)) ||
+      (budget !== undefined && (!Number.isFinite(budget) || budget <= 0))
+    ) {
+      toast.error("Attendees must be a positive whole number and budget must be positive")
+      return
+    }
     setCreating(true)
     try {
       await createEvent({
         name: form.name.trim(),
         type: form.type,
-        location: form.location || "TBD",
+        location: form.location.trim(),
+        venue: form.venue.trim() || undefined,
+        description: form.description.trim() || undefined,
+        organizerId: form.organizerId.trim() || undefined,
+        expectedAttendees,
+        budget,
         status: "draft",
-        startDate: form.startDate
-          ? new Date(form.startDate).toISOString()
-          : new Date().toISOString(),
-        endDate: form.endDate
-          ? new Date(form.endDate).toISOString()
-          : new Date().toISOString(),
+        startDate: startDate.toISOString(),
+        endDate: endDate.toISOString(),
       })
-      setForm({ name: "", type: "corporate", location: "", startDate: "", endDate: "" })
+      setForm({ name: "", type: "corporate", location: "", venue: "", description: "", organizerId: "", expectedAttendees: "", budget: "", startDate: "", endDate: "" })
       setShowCreate(false)
       await reload()
       toast.success("Event created")
@@ -94,6 +130,43 @@ export function EventsPage() {
       toast.error(err instanceof ApiError ? err.message : "Create failed")
     } finally {
       setCreating(false)
+    }
+  }
+
+  async function handleEdit(event: Event) {
+    if (!canWrite) return
+    const name = window.prompt("Event name", event.name)
+    if (name == null || !name.trim() || name.trim() === event.name) return
+    setSaving(true)
+    setPendingEventId(event.eventId)
+    try {
+      await withMutationFeedback(
+        updateEvent(event.eventId, { name: name.trim() }),
+        { loading: "Updating event...", success: "Event updated", error: (err) => err instanceof ApiError ? err.message : "Update failed" },
+      )
+      await reload()
+    } catch {
+    } finally {
+      setSaving(false)
+      setPendingEventId(null)
+    }
+  }
+
+  async function handleDelete(event: Event) {
+    if (!canWrite) return
+    setSaving(true)
+    setPendingEventId(event.eventId)
+    try {
+      await withMutationFeedback(
+        deleteEvent(event.eventId),
+        { loading: "Archiving event...", success: "Event archived", error: (err) => err instanceof ApiError ? err.message : "Archive failed" },
+      )
+      await reload()
+    } catch {
+    } finally {
+      setSaving(false)
+      setPendingEventId(null)
+      setDeleteTarget(null)
     }
   }
 
@@ -143,10 +216,10 @@ export function EventsPage() {
         title="Events"
         description="Agency calendar and show pipeline — open a row for cues, crew, and incidents."
         actions={
-          <Button size="sm" onClick={() => setShowCreate((v) => !v)}>
+          canWrite ? <Button size="sm" onClick={() => setShowCreate((v) => !v)}>
             <PlusIcon className="size-3.5" />
             New event
-          </Button>
+          </Button> : undefined
         }
       />
 
@@ -157,16 +230,25 @@ export function EventsPage() {
             value={form.name}
             onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
           />
-          <Input
-            placeholder="Type (conference, product…)"
+          <select
+            className="border-input bg-background h-9 w-full rounded-md border px-2 text-sm"
             value={form.type}
             onChange={(e) => setForm((f) => ({ ...f, type: e.target.value }))}
-          />
+          >
+            {EVENT_TYPES.map((type) => (
+              <option key={type} value={type}>{type}</option>
+            ))}
+          </select>
           <Input
             placeholder="Location"
             value={form.location}
             onChange={(e) => setForm((f) => ({ ...f, location: e.target.value }))}
           />
+          <Input placeholder="Venue" value={form.venue} onChange={(e) => setForm((f) => ({ ...f, venue: e.target.value }))} />
+          <Input placeholder="Organizer ID" value={form.organizerId} onChange={(e) => setForm((f) => ({ ...f, organizerId: e.target.value }))} />
+          <Input type="number" min="1" step="1" placeholder="Expected attendees" value={form.expectedAttendees} onChange={(e) => setForm((f) => ({ ...f, expectedAttendees: e.target.value }))} />
+          <Input type="number" min="0.01" step="0.01" placeholder="Budget" value={form.budget} onChange={(e) => setForm((f) => ({ ...f, budget: e.target.value }))} />
+          <textarea className="border-input bg-background min-h-9 rounded-md border px-3 py-2 text-sm" placeholder="Description" value={form.description} onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))} />
           <Input
             type="datetime-local"
             value={form.startDate}
@@ -178,7 +260,7 @@ export function EventsPage() {
             onChange={(e) => setForm((f) => ({ ...f, endDate: e.target.value }))}
           />
           <div className="flex gap-2">
-            <Button disabled={creating || !form.name.trim()} onClick={handleCreate}>
+            <Button disabled={creating || !form.name.trim() || !form.location.trim() || !form.startDate || !form.endDate} onClick={handleCreate}>
               Create
             </Button>
             <Button variant="outline" onClick={() => setShowCreate(false)}>
@@ -276,11 +358,21 @@ export function EventsPage() {
             </div>
           ) : (
             <div className="px-4">
-              <EventsDatatable data={events} />
+               <EventsDatatable data={events} canWrite={canWrite && !saving} onEdit={handleEdit} onDelete={(event) => setDeleteTarget(event)} />
             </div>
           )}
         </Card>
       </div>
+      <ConfirmationDialog
+        open={Boolean(deleteTarget)}
+        onOpenChange={(open) => { if (!open && !pendingEventId) setDeleteTarget(null) }}
+        title="Archive event?"
+        description={deleteTarget ? `This will archive “${deleteTarget.name}”.` : undefined}
+        confirmLabel="Archive"
+        destructive
+        pending={Boolean(pendingEventId)}
+        onConfirm={() => deleteTarget ? handleDelete(deleteTarget) : undefined}
+      />
     </div>
   )
 }

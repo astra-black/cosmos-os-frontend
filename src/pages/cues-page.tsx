@@ -4,6 +4,8 @@ import { toast } from "sonner"
 
 import { CueRunSheet } from "@/components/ops/cue-run-sheet"
 import { EventScopeBar } from "@/components/ops/event-scope-bar"
+import { ConfirmationDialog } from "@/components/shared/confirmation-dialog"
+import { withMutationFeedback } from "@/components/shared/mutation-feedback"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -13,10 +15,12 @@ import {
   advanceCues,
   completeCue,
   createCue,
+  deleteCue,
   listCues,
   resetCue,
   skipCue,
   startCue,
+  updateCue,
 } from "@/lib/api/agency"
 import { ApiError } from "@/lib/api/client"
 import { useAuth } from "@/lib/auth"
@@ -37,6 +41,8 @@ export function CuesPage() {
   const [newName, setNewName] = useState("")
   const [newDuration, setNewDuration] = useState("10")
   const [newLocation, setNewLocation] = useState("")
+  const [pendingCueId, setPendingCueId] = useState<string | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<Cue | null>(null)
 
   const reload = useCallback(async () => {
     if (!eventId) return
@@ -135,7 +141,7 @@ export function CuesPage() {
       // Optimistically drop out of Live filter immediately
       patchCueLocal({
         ...cue,
-        ...(res.data ?? {}),
+        ...res.data,
         status: "pending",
         actualStartTime: undefined,
         actualEndTime: undefined,
@@ -204,6 +210,34 @@ export function CuesPage() {
     } finally {
       setAdding(false)
     }
+  }
+
+  async function handleEdit(cue: Cue) {
+    if (!eventId || !canWrite) return
+    const name = window.prompt("Cue name", cue.name || cue.title || "")
+    if (name == null || !name.trim() || name.trim() === (cue.name || cue.title)) return
+    setPendingCueId(cue.cueId)
+    try {
+      await withMutationFeedback(updateCue(eventId, cue.cueId, { name: name.trim() }), {
+        loading: "Updating cue...", success: "Cue updated",
+        error: (err) => err instanceof ApiError ? err.message : "Could not update cue",
+      })
+      await reload()
+    } catch (err) { toast.error(err instanceof ApiError ? err.message : "Could not update cue")
+    } finally { setPendingCueId(null) }
+  }
+
+  async function handleDelete(cue: Cue) {
+    if (!eventId || !canWrite) return
+    setPendingCueId(cue.cueId)
+    try {
+      await withMutationFeedback(deleteCue(eventId, cue.cueId), {
+        loading: "Deleting cue...", success: "Cue deleted",
+        error: (err) => err instanceof ApiError ? err.message : "Could not delete cue",
+      })
+      await reload()
+    } catch (err) { toast.error(err instanceof ApiError ? err.message : "Could not delete cue")
+    } finally { setPendingCueId(null); setDeleteTarget(null) }
   }
 
   return (
@@ -290,9 +324,21 @@ export function CuesPage() {
           onComplete={handleComplete}
           onSkip={handleSkip}
           onReset={handleReset}
-          onAdvance={handleAdvance}
-        />
+           onAdvance={handleAdvance}
+            onEdit={pendingCueId ? undefined : handleEdit}
+            onDelete={pendingCueId ? undefined : (cue) => setDeleteTarget(cue)}
+         />
       )}
+      <ConfirmationDialog
+        open={Boolean(deleteTarget)}
+        onOpenChange={(open) => { if (!open && !pendingCueId) setDeleteTarget(null) }}
+        title="Delete cue?"
+        description={deleteTarget ? `This will permanently delete “${deleteTarget.name || deleteTarget.title || deleteTarget.cueId}”.` : undefined}
+        confirmLabel="Delete"
+        destructive
+        pending={Boolean(pendingCueId)}
+        onConfirm={() => deleteTarget ? handleDelete(deleteTarget) : undefined}
+      />
     </div>
   )
 }

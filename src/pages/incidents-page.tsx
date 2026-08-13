@@ -4,6 +4,8 @@ import { toast } from "sonner"
 
 import { EventScopeBar } from "@/components/ops/event-scope-bar"
 import { IncidentTriage } from "@/components/ops/incident-triage"
+import { ConfirmationDialog } from "@/components/shared/confirmation-dialog"
+import { withMutationFeedback } from "@/components/shared/mutation-feedback"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -15,6 +17,8 @@ import {
   listIncidents,
   reopenIncident,
   resolveIncident,
+  updateIncident,
+  deleteIncident,
 } from "@/lib/api/agency"
 import { ApiError } from "@/lib/api/client"
 import { useAuth } from "@/lib/auth"
@@ -34,6 +38,8 @@ export function IncidentsPage() {
   const [title, setTitle] = useState("")
   const [severity, setSeverity] = useState("warning")
   const [location, setLocation] = useState("")
+  const [pendingMutationId, setPendingMutationId] = useState<string | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<Incident | null>(null)
 
   const reload = useCallback(async () => {
     if (!eventId) return
@@ -168,6 +174,34 @@ export function IncidentsPage() {
     }
   }
 
+  async function handleEdit(incident: Incident) {
+    if (!canWrite) return
+    const nextTitle = window.prompt("Incident title", incident.title || "")
+    if (nextTitle == null || !nextTitle.trim() || nextTitle.trim() === incident.title) return
+    setPendingMutationId(incident.incidentId)
+    try {
+      await withMutationFeedback(updateIncident(incident.incidentId, { title: nextTitle.trim() }), {
+        loading: "Updating incident...", success: "Incident updated",
+        error: (err) => err instanceof ApiError ? err.message : "Could not update incident",
+      })
+      await reload()
+    } catch (err) { toast.error(err instanceof ApiError ? err.message : "Could not update incident")
+    } finally { setPendingMutationId(null) }
+  }
+
+  async function handleDelete(incident: Incident) {
+    if (!canWrite) return
+    setPendingMutationId(incident.incidentId)
+    try {
+      await withMutationFeedback(deleteIncident(incident.incidentId), {
+        loading: "Deleting incident...", success: "Incident deleted",
+        error: (err) => err instanceof ApiError ? err.message : "Could not delete incident",
+      })
+      await reload()
+    } catch (err) { toast.error(err instanceof ApiError ? err.message : "Could not delete incident")
+    } finally { setPendingMutationId(null); setDeleteTarget(null) }
+  }
+
   return (
     <div className="flex flex-col gap-5">
       <EventScopeBar
@@ -258,8 +292,20 @@ export function IncidentsPage() {
           onResolve={handleResolve}
           onEscalate={handleEscalate}
           onReopen={handleReopen}
+          onEdit={pendingMutationId ? undefined : handleEdit}
+          onDelete={pendingMutationId ? undefined : (incident) => setDeleteTarget(incident)}
         />
       )}
+      <ConfirmationDialog
+        open={Boolean(deleteTarget)}
+        onOpenChange={(open) => { if (!open && !pendingMutationId) setDeleteTarget(null) }}
+        title="Delete incident?"
+        description={deleteTarget ? `This will permanently delete “${deleteTarget.title || deleteTarget.incidentId}”.` : undefined}
+        confirmLabel="Delete"
+        destructive
+        pending={Boolean(pendingMutationId)}
+        onConfirm={() => deleteTarget ? handleDelete(deleteTarget) : undefined}
+      />
     </div>
   )
 }

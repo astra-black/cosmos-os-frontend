@@ -21,7 +21,7 @@ import {
 } from "@/components/ui/table"
 import { usePagination } from "@/hooks/use-pagination"
 import type { Event } from "@/types/agency"
-import { ChevronLeftIcon, ChevronRightIcon } from "lucide-react"
+import { ChevronLeftIcon, ChevronRightIcon, PencilIcon, Trash2Icon } from "lucide-react"
 
 const columns: ColumnDef<Event>[] = [
   {
@@ -75,7 +75,12 @@ const columns: ColumnDef<Event>[] = [
   },
 ]
 
-export function EventsDatatable({ data }: { data: Event[] }) {
+export function EventsDatatable({ data, canWrite, onEdit, onDelete }: {
+  data: Event[]
+  canWrite?: boolean
+  onEdit?: (event: Event) => void
+  onDelete?: (event: Event) => void
+}) {
   const pageSize = 5
   const [pagination, setPagination] = useState<PaginationState>({
     pageIndex: 0,
@@ -112,6 +117,7 @@ export function EventsDatatable({ data }: { data: Event[] }) {
                       : flexRender(header.column.columnDef.header, header.getContext())}
                   </TableHead>
                 ))}
+                {canWrite ? <TableHead>Actions</TableHead> : null}
               </TableRow>
             ))}
           </TableHeader>
@@ -124,11 +130,23 @@ export function EventsDatatable({ data }: { data: Event[] }) {
                       {flexRender(cell.column.columnDef.cell, cell.getContext())}
                     </TableCell>
                   ))}
+                  {canWrite ? (
+                    <TableCell className="w-24">
+                      <div className="flex gap-1">
+                        <Button size="icon" variant="ghost" title="Edit event" aria-label={`Edit ${row.original.name}`} onClick={() => onEdit?.(row.original)}>
+                          <PencilIcon className="size-3.5" />
+                        </Button>
+                        <Button size="icon" variant="ghost" title="Archive event" aria-label={`Archive ${row.original.name}`} onClick={() => onDelete?.(row.original)}>
+                          <Trash2Icon className="size-3.5 text-destructive" />
+                        </Button>
+                      </div>
+                    </TableCell>
+                  ) : null}
                 </TableRow>
               ))
             ) : (
               <TableRow>
-                <TableCell colSpan={columns.length} className="h-24 text-center">
+                <TableCell colSpan={columns.length + (canWrite ? 1 : 0)} className="h-24 text-center">
                   No events found. Create one via the middleware API or check Airtable sync.
                 </TableCell>
               </TableRow>

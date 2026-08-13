@@ -13,6 +13,8 @@ import {
   SlidersHorizontalIcon,
   SkipForwardIcon,
   SquareCheckIcon,
+  PencilIcon,
+  Trash2Icon,
 } from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
@@ -71,6 +73,8 @@ export function CueRunSheet({
   onSkip,
   onReset,
   onAdvance,
+  onEdit,
+  onDelete,
 }: {
   cues: Cue[]
   className?: string
@@ -82,6 +86,8 @@ export function CueRunSheet({
   onSkip?: (cue: Cue) => void
   onReset?: (cue: Cue) => void
   onAdvance?: () => void
+  onEdit?: (cue: Cue) => void
+  onDelete?: (cue: Cue) => void
 }) {
   const [filter, setFilter] = useState<Filter>("all")
   const [viewMode, setViewMode] = useState<"list" | "timeline">("list")
@@ -477,6 +483,8 @@ export function CueRunSheet({
                               Reset
                             </Button>
                           ) : null}
+                          {onEdit ? <Button size="sm" variant="ghost" disabled={anyBusy} onClick={() => onEdit(cue)}><PencilIcon className="size-3.5" /> Edit</Button> : null}
+                          {onDelete ? <Button size="sm" variant="ghost" disabled={anyBusy} onClick={() => onDelete(cue)}><Trash2Icon className="size-3.5 text-destructive" /> Delete</Button> : null}
                         </div>
                       ) : null}
                     </div>
@@ -687,7 +695,7 @@ export function CueRunSheet({
                                       <SkipForwardIcon className="size-3" />
                                     </Button>
                                   )}
-                                  {(cue.status === "completed" || cue.status === "skipped" || cue.status === "in_progress") && onReset && (
+                                   {(cue.status === "completed" || cue.status === "skipped" || cue.status === "in_progress") && onReset && (
                                     <Button
                                       size="icon"
                                       variant="ghost"
@@ -699,6 +707,8 @@ export function CueRunSheet({
                                       <RotateCcwIcon className="size-3" />
                                     </Button>
                                   )}
+                                  {onEdit && <Button size="icon" variant="ghost" className="size-6 rounded-md" disabled={anyBusy} onClick={(e) => { e.stopPropagation(); onEdit(cue) }} title="Edit"><PencilIcon className="size-3" /></Button>}
+                                  {onDelete && <Button size="icon" variant="ghost" className="size-6 rounded-md" disabled={anyBusy} onClick={(e) => { e.stopPropagation(); onDelete(cue) }} title="Delete"><Trash2Icon className="size-3 text-destructive" /></Button>}
                                 </div>
                               )}
 

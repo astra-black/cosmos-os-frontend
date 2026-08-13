@@ -12,7 +12,17 @@ const PORTAL_KEY = "cosmos.portalUser"
 export function getPortalUser() {
   try {
     const raw = localStorage.getItem(PORTAL_KEY)
-    return raw ? JSON.parse(raw) : null
+    const user = raw ? JSON.parse(raw) : null
+    if (
+      !user ||
+      user.role !== "client" ||
+      typeof user.clientId !== "string" ||
+      typeof user.name !== "string"
+    ) {
+      clearPortalUser()
+      return null
+    }
+    return user
   } catch {
     return null
   }

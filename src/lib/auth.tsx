@@ -22,6 +22,7 @@ type AuthContextValue = {
   isAuthenticated: boolean
   login: (email: string, password: string) => Promise<void>
   logout: () => void
+  updateUser: (updates: Partial<AuthUser>) => void
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null)
@@ -50,14 +51,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setToken(null)
   }, [])
 
+  const updateUser = useCallback((updates: Partial<AuthUser>) => {
+    setUser((current) => {
+      if (!current) return current
+      const next = { ...current, ...updates }
+      localStorage.setItem("cosmos.user", JSON.stringify(next))
+      return next
+    })
+  }, [])
+
   const value = useMemo(
     () => ({
       user,
       isAuthenticated: Boolean(token),
       login,
       logout,
+      updateUser,
     }),
-    [user, token, login, logout],
+    [user, token, login, logout, updateUser],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

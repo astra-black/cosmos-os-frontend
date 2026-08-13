@@ -11,6 +11,7 @@ import {
   TruckIcon,
   UserIcon,
   Volume2Icon,
+  Trash2Icon,
 } from "lucide-react"
 import { toast } from "sonner"
 
@@ -22,7 +23,7 @@ import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useVendors } from "@/hooks/use-agency-data"
-import { createVendor, updateVendor } from "@/lib/api/agency"
+import { createVendor, deleteVendor, updateVendor } from "@/lib/api/agency"
 import { ApiError } from "@/lib/api/client"
 import { useAuth } from "@/lib/auth"
 import { canPerform } from "@/lib/rbac"
@@ -43,23 +44,6 @@ function getCategoryIcon(category: string) {
       return PaletteIcon
     default:
       return TruckIcon
-  }
-}
-
-function getCategoryBgImage(category: string) {
-  switch (category?.toLowerCase()) {
-    case "staging":
-      return "https://images.unsplash.com/photo-1516450360452-9312f5e86fc7?auto=format&fit=crop&w=400&q=50"
-    case "av":
-      return "https://images.unsplash.com/photo-1598488035139-bdbb2231ce04?auto=format&fit=crop&w=400&q=50"
-    case "post":
-      return "https://images.unsplash.com/photo-1485846234645-a62644f84728?auto=format&fit=crop&w=400&q=50"
-    case "guest_experience":
-      return "https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&w=400&q=50"
-    case "design":
-      return "https://images.unsplash.com/photo-1550684848-fac1c5b4e853?auto=format&fit=crop&w=400&q=50"
-    default:
-      return "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=400&q=50"
   }
 }
 
@@ -87,6 +71,7 @@ export function VendorsPage() {
   const [statusFilter, setStatusFilter] = useState("all")
   const [search, setSearch] = useState("")
   const [busyId, setBusyId] = useState<string | null>(null)
+  const [deletingId, setDeletingId] = useState<string | null>(null)
   const [showAdd, setShowAdd] = useState(false)
   const [form, setForm] = useState({
     name: "",
@@ -156,6 +141,20 @@ export function VendorsPage() {
       toast.success("Vendor added")
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : "Create failed")
+    }
+  }
+
+  async function handleDelete(vendor: Vendor) {
+    if (!canWrite || !window.confirm(`Delete vendor "${vendor.name}"? This cannot be undone.`)) return
+    setDeletingId(vendor.vendorId)
+    try {
+      await deleteVendor(vendor.vendorId)
+      await reload()
+      toast.success("Vendor deleted")
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Delete failed")
+    } finally {
+      setDeletingId(null)
     }
   }
 
@@ -238,7 +237,12 @@ export function VendorsPage() {
       ) : null}
 
       {error ? (
-        <Card className="border-destructive/40 text-destructive px-4 py-3 text-sm">{error}</Card>
+        <Card className="border-destructive/40 px-4 py-3 text-sm">
+          <div className="flex items-center justify-between gap-3">
+            <span className="text-destructive">{error}</span>
+            <Button size="sm" variant="outline" onClick={() => void reload()}>Retry</Button>
+          </div>
+        </Card>
       ) : null}
 
       <div className="flex flex-col gap-2">
@@ -314,13 +318,14 @@ export function VendorsPage() {
                 <CategoryIcon className="absolute -bottom-8 -right-8 size-32 opacity-[0.02] text-foreground pointer-events-none select-none" />
 
                 {/* Top Section: Header */}
-                <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <h2 className="font-bold text-sm tracking-tight text-foreground truncate">{vendor.name}</h2>
                     <p className="text-muted-foreground text-[10px] font-mono uppercase tracking-wider mt-1">
                       {vendor.category.replace("_", " ")}
                     </p>
                   </div>
+                  <div className="flex items-center gap-1">
                   {canWrite ? (
                     <select
                       className={cn(
@@ -358,6 +363,8 @@ export function VendorsPage() {
                       {vendor.status}
                     </Badge>
                   )}
+                  {canWrite ? <Button size="icon" variant="ghost" className="size-7 text-destructive" disabled={deletingId === vendor.vendorId} onClick={() => void handleDelete(vendor)} aria-label={`Delete ${vendor.name}`}><Trash2Icon className="size-3.5" /></Button> : null}
+                  </div>
                 </div>
 
                 {/* Rating Bar */}

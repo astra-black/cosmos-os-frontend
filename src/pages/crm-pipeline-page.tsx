@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { useNavigate } from "react-router-dom"
-import { Loader2Icon, PlusIcon, RocketIcon, TrendingUpIcon } from "lucide-react"
+import { Loader2Icon, PlusIcon, RocketIcon, Trash2Icon, TrendingUpIcon } from "lucide-react"
 import { toast } from "sonner"
 
 import { EmptyState } from "@/components/shared/empty-state"
@@ -17,6 +17,7 @@ import {
   listClients,
   listOpportunities,
   updateOpportunity,
+  deleteOpportunity,
 } from "@/lib/api/agency"
 import { ApiError } from "@/lib/api/client"
 import { useAuth } from "@/lib/auth"
@@ -49,10 +50,12 @@ export function CrmPipelinePage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [busyId, setBusyId] = useState<string | null>(null)
+  const [deletingId, setDeletingId] = useState<string | null>(null)
   const [showCreate, setShowCreate] = useState(false)
   const [form, setForm] = useState({ name: "", clientId: "", value: "" })
 
   const reload = useCallback(async () => {
+    setError(null)
     const [oppRes, sumRes, clientRes] = await Promise.all([
       listOpportunities(),
       getCrmSummary(),
@@ -129,6 +132,20 @@ export function CrmPipelinePage() {
     }
   }
 
+  async function handleDelete(deal: Opportunity) {
+    if (!canWriteCrm || !window.confirm(`Delete opportunity "${deal.name}"? This cannot be undone.`)) return
+    setDeletingId(deal.opportunityId)
+    try {
+      await deleteOpportunity(deal.opportunityId)
+      await reload()
+      toast.success("Opportunity deleted")
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Delete failed")
+    } finally {
+      setDeletingId(null)
+    }
+  }
+
   async function handleCreate() {
     if (!form.name.trim() || !canWriteCrm) return
     try {
@@ -165,7 +182,12 @@ export function CrmPipelinePage() {
       />
 
       {error ? (
-        <Card className="border-destructive/40 text-destructive px-4 py-3 text-sm">{error}</Card>
+        <Card className="border-destructive/40 px-4 py-3 text-sm">
+          <div className="flex items-center justify-between gap-3">
+            <span className="text-destructive">{error}</span>
+            <Button size="sm" variant="outline" onClick={() => void reload().catch(() => undefined)}>Retry</Button>
+          </div>
+        </Card>
       ) : null}
 
       {/* Pipeline KPIs — compact strip, not dashboard clone */}
@@ -268,7 +290,10 @@ export function CrmPipelinePage() {
                       key={deal.opportunityId}
                       className="bg-card rounded-lg border p-3 shadow-xs"
                     >
-                      <div className="text-sm font-medium leading-snug">{deal.name}</div>
+                       <div className="flex items-start justify-between gap-1">
+                         <div className="text-sm font-medium leading-snug">{deal.name}</div>
+                         {canWriteCrm ? <Button size="icon" variant="ghost" className="size-6 shrink-0 text-destructive" disabled={deletingId === deal.opportunityId} onClick={() => void handleDelete(deal)} aria-label={`Delete ${deal.name}`}><Trash2Icon className="size-3" /></Button> : null}
+                       </div>
                       <div className="text-muted-foreground mt-1 truncate text-xs">
                         {deal.clientName || "—"}
                       </div>

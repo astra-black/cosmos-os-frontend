@@ -41,6 +41,8 @@ export function IncidentTriage({
   onResolve,
   onEscalate,
   onReopen,
+  onEdit,
+  onDelete,
 }: {
   incidents: Incident[]
   className?: string
@@ -49,6 +51,8 @@ export function IncidentTriage({
   onResolve?: (incident: Incident, resolution: string) => void
   onEscalate?: (incident: Incident) => void
   onReopen?: (incident: Incident) => void
+  onEdit?: (incident: Incident) => void
+  onDelete?: (incident: Incident) => void
 }) {
   const [severity, setSeverity] = useState<SeverityFilter>("all")
   const [status, setStatus] = useState<StatusFilter>("active")
@@ -251,8 +255,10 @@ export function IncidentTriage({
                         </span>
                       ) : null}
                     </div>
-                    {canWrite && !isResolved ? (
+                    {canWrite ? (
                       <div className="mt-3 flex flex-wrap gap-2">
+                        {onEdit ? <Button size="sm" variant="ghost" onClick={() => onEdit(incident)}>Edit</Button> : null}
+                        {onDelete ? <Button size="sm" variant="ghost" onClick={() => onDelete(incident)}>Delete</Button> : null}
                         {onResolve ? (
                           <Button
                             size="sm"

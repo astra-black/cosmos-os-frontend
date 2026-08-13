@@ -6,6 +6,7 @@ import { canAccessRoute } from "@/lib/rbac"
 import { ActivityPage } from "@/pages/activity-page"
 import { AiAssistPage } from "@/pages/ai-assist-page"
 import { AnalyticsPage } from "@/pages/analytics-page"
+import { MonitoringPage } from "@/pages/monitoring-page"
 import { ApprovalsPage } from "@/pages/approvals-page"
 import { AssetsPage } from "@/pages/assets-page"
 import { BillingPage } from "@/pages/billing-page"
@@ -21,7 +22,7 @@ import { EventsPage } from "@/pages/events-page"
 import { FinancePage } from "@/pages/finance-page"
 import { IncidentsPage } from "@/pages/incidents-page"
 import { LoginPage } from "@/pages/login-page"
-import { MonitoringPage } from "@/pages/monitoring-page"
+import { MilestonesPage } from "@/pages/milestones-page"
 import { PortalHomePage } from "@/pages/portal-home-page"
 import { PortalLoginPage } from "@/pages/portal-login-page"
 import { PortfolioPage } from "@/pages/portfolio-page"
@@ -31,13 +32,26 @@ import { SettingsPage } from "@/pages/settings-page"
 import { TasksPage } from "@/pages/tasks-page"
 import { TeamsPage } from "@/pages/teams-page"
 import { VendorsPage } from "@/pages/vendors-page"
+import { getPortalUser } from "@/pages/portal-login-page"
+
+function AccessDenied() {
+  return (
+    <div className="flex min-h-dvh items-center justify-center px-4">
+      <p className="text-muted-foreground text-sm">You do not have access to this workspace.</p>
+    </div>
+  )
+}
+
+function PortalRoute() {
+  return getPortalUser() ? <PortalHomePage /> : <Navigate to="/portal/login" replace />
+}
 
 function ProtectedRoute() {
   const { isAuthenticated, user } = useAuth()
   const location = useLocation()
   if (!isAuthenticated) return <Navigate to="/login" replace />
   if (!canAccessRoute(user?.role, location.pathname)) {
-    return <Navigate to="/" replace />
+    return user?.role === "client" ? <Navigate to="/portal/login" replace /> : <AccessDenied />
   }
   return <Outlet />
 }
@@ -47,7 +61,7 @@ export default function App() {
     <Routes>
       <Route path="/login" element={<LoginPage />} />
       <Route path="/portal/login" element={<PortalLoginPage />} />
-      <Route path="/portal" element={<PortalHomePage />} />
+      <Route path="/portal" element={<PortalRoute />} />
 
       <Route element={<ProtectedRoute />}>
         <Route element={<AppShell />}>
@@ -63,6 +77,7 @@ export default function App() {
           <Route path="projects/:projectId" element={<ProjectDetailPage />} />
           <Route path="clients/:clientId" element={<ClientsPage />} />
           <Route path="tasks" element={<TasksPage />} />
+          <Route path="milestones" element={<MilestonesPage />} />
           <Route path="assets" element={<AssetsPage />} />
           <Route path="approvals" element={<ApprovalsPage />} />
           <Route path="vendors" element={<VendorsPage />} />
@@ -73,9 +88,9 @@ export default function App() {
           <Route path="cues" element={<CuesPage />} />
           <Route path="crew" element={<CrewPage />} />
           <Route path="incidents" element={<IncidentsPage />} />
-          <Route path="analytics" element={<AnalyticsPage />} />
           <Route path="teams" element={<TeamsPage />} />
           <Route path="monitoring" element={<MonitoringPage />} />
+          <Route path="analytics" element={<AnalyticsPage />} />
           <Route path="settings" element={<SettingsPage />} />
         </Route>
       </Route>

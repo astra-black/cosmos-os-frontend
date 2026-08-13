@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
-import { MailIcon, PhoneIcon, PlusIcon, UserRoundIcon } from "lucide-react"
+import { MailIcon, PencilIcon, PhoneIcon, PlusIcon, Trash2Icon, UserRoundIcon } from "lucide-react"
 import { toast } from "sonner"
 
 import { EmptyState } from "@/components/shared/empty-state"
+import { ConfirmationDialog } from "@/components/shared/confirmation-dialog"
 import { PageHeader } from "@/components/shared/page-header"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
@@ -10,8 +11,10 @@ import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
-import { createCrmContact, listClients, listCrmContacts } from "@/lib/api/agency"
+import { createCrmContact, deleteCrmContact, listClients, listCrmContacts, updateCrmContact } from "@/lib/api/agency"
 import { ApiError } from "@/lib/api/client"
+import { useAuth } from "@/lib/auth"
+import { canPerform } from "@/lib/rbac"
 import type { AgencyClient, CrmContact } from "@/types/agency"
 
 const SAMPLE_AVATARS = [
@@ -28,6 +31,8 @@ const SAMPLE_AVATARS = [
 ]
 
 export function CrmContactsPage() {
+  const { user } = useAuth()
+  const canWrite = canPerform(user?.role, "write_crm")
   const [contacts, setContacts] = useState<CrmContact[]>([])
   const [clients, setClients] = useState<AgencyClient[]>([])
   const [search, setSearch] = useState("")
@@ -36,8 +41,13 @@ export function CrmContactsPage() {
   const [error, setError] = useState<string | null>(null)
   const [showCreate, setShowCreate] = useState(false)
   const [form, setForm] = useState({ name: "", email: "", clientId: "", title: "" })
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [editForm, setEditForm] = useState({ name: "", email: "", title: "" })
+  const [pendingId, setPendingId] = useState<string | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<CrmContact | null>(null)
 
   const reload = useCallback(async () => {
+    setError(null)
     const [cRes, clRes] = await Promise.all([listCrmContacts(), listClients()])
     setContacts(cRes.data ?? [])
     setClients(clRes.data ?? [])
@@ -77,7 +87,7 @@ export function CrmContactsPage() {
   }, [contacts, clientFilter, search])
 
   async function handleCreate() {
-    if (!form.name.trim()) return
+    if (!form.name.trim() || !canWrite) return
     try {
       await createCrmContact({
         name: form.name.trim(),
@@ -95,21 +105,70 @@ export function CrmContactsPage() {
     }
   }
 
+  async function handleDelete(contact: CrmContact) {
+    if (!canWrite) return
+    setPendingId(`delete:${contact.contactId}`)
+    try {
+      await deleteCrmContact(contact.contactId)
+      await reload()
+      toast.success("Contact deleted")
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Delete failed")
+    } finally {
+      setPendingId(null)
+      setDeleteTarget(null)
+    }
+  }
+
+  function startEdit(contact: CrmContact) {
+    setEditingId(contact.contactId)
+    setEditForm({ name: contact.name, email: contact.email ?? "", title: contact.title ?? "" })
+  }
+
+  async function saveEdit() {
+    if (!editingId || !canWrite) return
+    if (!editForm.name.trim()) {
+      toast.error("Contact name is required")
+      return
+    }
+    if (editForm.email.trim() && !/^\S+@\S+\.\S+$/.test(editForm.email.trim())) {
+      toast.error("Enter a valid email address")
+      return
+    }
+    const contactId = editingId
+    setPendingId(`edit:${contactId}`)
+    try {
+      await updateCrmContact(contactId, { name: editForm.name.trim(), email: editForm.email.trim(), title: editForm.title.trim() })
+      setEditingId(null)
+      await reload()
+      toast.success("Contact updated")
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Update failed")
+    } finally {
+      setPendingId(null)
+    }
+  }
+
   return (
     <div className="flex flex-col gap-5">
       <PageHeader
         title="Contacts"
         description="People at client accounts — decision makers and day-to-day."
         actions={
-          <Button size="sm" onClick={() => setShowCreate((v) => !v)}>
+          canWrite ? <Button size="sm" onClick={() => setShowCreate((v) => !v)}>
             <PlusIcon className="size-3.5" />
             Add contact
-          </Button>
+          </Button> : undefined
         }
       />
 
       {error ? (
-        <Card className="border-destructive/40 text-destructive px-4 py-3 text-sm">{error}</Card>
+        <Card className="border-destructive/40 px-4 py-3 text-sm">
+          <div className="flex items-center justify-between gap-3">
+            <span className="text-destructive">{error}</span>
+            <Button size="sm" variant="outline" onClick={() => void reload().catch(() => undefined)}>Retry</Button>
+          </div>
+        </Card>
       ) : null}
 
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
@@ -207,7 +266,7 @@ export function CrmContactsPage() {
                 <UserRoundIcon className="absolute -bottom-8 -right-8 size-36 opacity-[0.02] text-foreground pointer-events-none select-none" />
 
                 {/* Top Section: Profile Header */}
-                <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-start justify-between gap-3">
                   <div className="flex items-start gap-3">
                     <Avatar className="size-11 border border-border shadow-sm">
                       <AvatarImage src={avatarUrl} alt={contact.name} />
@@ -228,6 +287,10 @@ export function CrmContactsPage() {
                     </div>
                   </div>
 
+                  {canWrite ? <div className="flex gap-1">
+                    <Button size="icon" variant="ghost" className="size-7" disabled={Boolean(pendingId)} onClick={() => startEdit(contact)} aria-label={`Edit ${contact.name}`}><PencilIcon className="size-3.5" /></Button>
+                    <Button size="icon" variant="ghost" className="size-7 text-destructive" disabled={Boolean(pendingId)} onClick={() => setDeleteTarget(contact)} aria-label={`Delete ${contact.name}`}><Trash2Icon className="size-3.5" /></Button>
+                  </div> : null}
                   {/* Smartcard Chip Accent */}
                   <div className="opacity-40 shrink-0 select-none">
                     <svg className="size-6 text-muted-foreground" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
@@ -237,6 +300,15 @@ export function CrmContactsPage() {
                     </svg>
                   </div>
                 </div>
+
+                {editingId === contact.contactId ? (
+                  <div className="mt-3 grid gap-2">
+                    <Input value={editForm.name} onChange={(e) => setEditForm((f) => ({ ...f, name: e.target.value }))} placeholder="Name" />
+                    <Input value={editForm.title} onChange={(e) => setEditForm((f) => ({ ...f, title: e.target.value }))} placeholder="Title" />
+                    <Input value={editForm.email} onChange={(e) => setEditForm((f) => ({ ...f, email: e.target.value }))} placeholder="Email" type="email" />
+                    <div className="flex gap-2"><Button size="sm" onClick={() => void saveEdit()} disabled={pendingId === `edit:${contact.contactId}` || !editForm.name.trim()}>Save</Button><Button size="sm" variant="outline" onClick={() => setEditingId(null)} disabled={Boolean(pendingId)}>Cancel</Button></div>
+                  </div>
+                ) : null}
 
                 {/* Card Divider Line */}
                 <div className="w-full h-px border-t border-dashed border-border/80 my-4" />
@@ -305,6 +377,16 @@ export function CrmContactsPage() {
           })}
         </div>
       )}
+      <ConfirmationDialog
+        open={Boolean(deleteTarget)}
+        onOpenChange={(open) => { if (!open && !pendingId) setDeleteTarget(null) }}
+        title={`Delete ${deleteTarget?.name ?? "contact"}?`}
+        description="This action cannot be undone."
+        confirmLabel="Delete"
+        destructive
+        pending={deleteTarget ? pendingId === `delete:${deleteTarget.contactId}` : false}
+        onConfirm={() => deleteTarget ? handleDelete(deleteTarget) : undefined}
+      />
     </div>
   )
 }

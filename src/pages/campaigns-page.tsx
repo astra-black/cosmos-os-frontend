@@ -1,9 +1,10 @@
 import { useMemo, useState } from "react"
 import { Link } from "react-router-dom"
-import { LoaderIcon, MegaphoneIcon, PlusIcon } from "lucide-react"
+import { LoaderIcon, MegaphoneIcon, PencilIcon, PlusIcon, Trash2Icon } from "lucide-react"
 import { toast } from "sonner"
 
 import { EmptyState } from "@/components/shared/empty-state"
+import { ConfirmationDialog } from "@/components/shared/confirmation-dialog"
 import { PageHeader } from "@/components/shared/page-header"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -12,10 +13,24 @@ import { Input } from "@/components/ui/input"
 import { Progress } from "@/components/ui/progress"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useCampaigns, useClients } from "@/hooks/use-agency-data"
-import { createCampaign } from "@/lib/api/agency"
+import { createCampaign, deleteCampaign, updateCampaign } from "@/lib/api/agency"
 import { ApiError } from "@/lib/api/client"
 import { useAuth } from "@/lib/auth"
 import { canPerform } from "@/lib/rbac"
+import type { Campaign, CampaignStatus } from "@/types/agency"
+
+const CAMPAIGN_STATUSES: CampaignStatus[] = ["planning", "active", "completed", "on_hold"]
+type CampaignForm = { name: string; clientId: string; status: CampaignStatus; startDate: string; endDate: string; objective: string; owner: string; budget: string }
+const emptyForm = (): CampaignForm => ({ name: "", clientId: "", status: "planning", startDate: "", endDate: "", objective: "", owner: "", budget: "" })
+function validateCampaignForm(values: CampaignForm) {
+  if (!values.name.trim()) return "Name is required"
+  if (values.startDate && Number.isNaN(new Date(`${values.startDate}T00:00:00`).getTime())) return "Start date is invalid"
+  if (values.endDate && Number.isNaN(new Date(`${values.endDate}T00:00:00`).getTime())) return "End date is invalid"
+  if (values.startDate && values.endDate && values.startDate > values.endDate) return "Start date must be before or equal to end date"
+  const budget = values.budget ? Number(values.budget) : 0
+  if (!Number.isFinite(budget) || budget < 0) return "Budget must be a non-negative number"
+  return null
+}
 
 export function CampaignsPage() {
   const { user } = useAuth()
@@ -25,7 +40,12 @@ export function CampaignsPage() {
   const [statusFilter, setStatusFilter] = useState("all")
   const [showCreate, setShowCreate] = useState(false)
   const [creating, setCreating] = useState(false)
-  const [form, setForm] = useState({ name: "", clientId: "", budget: "" })
+  const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [savingId, setSavingId] = useState<string | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null)
+  const [editForm, setEditForm] = useState<CampaignForm>(emptyForm)
+  const [form, setForm] = useState<CampaignForm>(emptyForm)
 
   const filtered = useMemo(() => {
     if (statusFilter === "all") return campaigns
@@ -35,7 +55,9 @@ export function CampaignsPage() {
   const totalBudget = filtered.reduce((s, c) => s + (c.budget ?? 0), 0)
 
   async function handleCreate() {
-    if (!form.name.trim()) return
+    if (!canWrite) return
+    const validationError = validateCampaignForm(form)
+    if (validationError) { toast.error(validationError); return }
     setCreating(true)
     try {
       const client = clients.find((c) => c.clientId === form.clientId)
@@ -44,16 +66,60 @@ export function CampaignsPage() {
         clientId: form.clientId || undefined,
         clientName: client?.name,
         budget: form.budget ? Number(form.budget) : 0,
-        status: "planning",
+        status: form.status,
+        startDate: form.startDate || null,
+        endDate: form.endDate || null,
+        objective: form.objective.trim(),
+        owner: form.owner.trim(),
       })
       await reload()
-      setForm({ name: "", clientId: "", budget: "" })
+      setForm(emptyForm())
       setShowCreate(false)
       toast.success("Campaign created")
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : "Create failed")
     } finally {
       setCreating(false)
+    }
+  }
+
+  function startEdit(campaign: Campaign) {
+    setEditingId(campaign.campaignId)
+    setEditForm({ name: campaign.name, clientId: campaign.clientId || "", status: campaign.status, startDate: campaign.startDate?.slice(0, 10) || "", endDate: campaign.endDate?.slice(0, 10) || "", objective: campaign.objective || "", owner: campaign.owner || "", budget: campaign.budget == null ? "" : String(campaign.budget) })
+  }
+
+  async function handleEdit() {
+    if (!editingId || !canWrite) return
+    const validationError = validateCampaignForm(editForm)
+    if (validationError) { toast.error(validationError); return }
+    const budget = editForm.budget ? Number(editForm.budget) : 0
+    setSavingId(editingId)
+    try {
+      const client = clients.find((c) => c.clientId === editForm.clientId)
+      await updateCampaign(editingId, { name: editForm.name.trim(), clientId: editForm.clientId || null, clientName: client?.name, budget, status: editForm.status, startDate: editForm.startDate || null, endDate: editForm.endDate || null, objective: editForm.objective.trim(), owner: editForm.owner.trim() })
+      await reload()
+      setEditingId(null)
+      toast.success("Campaign updated")
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Update failed")
+    } finally {
+      setSavingId(null)
+    }
+  }
+
+  async function handleDelete() {
+    if (!deleteTarget || !canWrite) return
+    const campaignId = deleteTarget.id
+    setDeletingId(campaignId)
+    try {
+      await deleteCampaign(campaignId)
+      await reload()
+      setDeleteTarget(null)
+      toast.success("Campaign deleted")
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Delete failed")
+    } finally {
+      setDeletingId(null)
     }
   }
 
@@ -73,12 +139,17 @@ export function CampaignsPage() {
       />
 
       {error ? (
-        <Card className="border-destructive/40 text-destructive px-4 py-3 text-sm">{error}</Card>
+        <Card className="border-destructive/40 px-4 py-3 text-sm">
+          <div className="flex items-center justify-between gap-3">
+            <span className="text-destructive">{error}</span>
+            <Button size="sm" variant="outline" onClick={() => void reload()}>Retry</Button>
+          </div>
+        </Card>
       ) : null}
 
       {showCreate ? (
-        <Card className="flex flex-col gap-3 p-4 sm:flex-row sm:flex-wrap sm:items-end">
-          <div className="min-w-[12rem] flex-1">
+        <Card className="grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="sm:col-span-2">
             <label className="text-muted-foreground mb-1 block text-xs">Name</label>
             <Input
               placeholder="Campaign name"
@@ -86,7 +157,7 @@ export function CampaignsPage() {
               onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
             />
           </div>
-          <div className="min-w-[10rem]">
+          <div>
             <label className="text-muted-foreground mb-1 block text-xs">Client</label>
             <select
               className="border-input bg-background h-9 w-full rounded-md border px-2 text-sm"
@@ -101,7 +172,7 @@ export function CampaignsPage() {
               ))}
             </select>
           </div>
-          <div className="w-28">
+          <div>
             <label className="text-muted-foreground mb-1 block text-xs">Budget</label>
             <Input
               type="number"
@@ -110,6 +181,11 @@ export function CampaignsPage() {
               onChange={(e) => setForm((f) => ({ ...f, budget: e.target.value }))}
             />
           </div>
+          <div><label className="text-muted-foreground mb-1 block text-xs">Status</label><select className="border-input bg-background h-9 w-full rounded-md border px-2 text-sm" value={form.status} onChange={(e) => setForm((f) => ({ ...f, status: e.target.value as CampaignStatus }))}>{CAMPAIGN_STATUSES.map((status) => <option key={status} value={status}>{status}</option>)}</select></div>
+          <div><label className="text-muted-foreground mb-1 block text-xs">StartDate</label><Input type="date" value={form.startDate} onChange={(e) => setForm((f) => ({ ...f, startDate: e.target.value }))} /></div>
+          <div><label className="text-muted-foreground mb-1 block text-xs">EndDate</label><Input type="date" value={form.endDate} onChange={(e) => setForm((f) => ({ ...f, endDate: e.target.value }))} /></div>
+          <div><label className="text-muted-foreground mb-1 block text-xs">Owner</label><Input value={form.owner} onChange={(e) => setForm((f) => ({ ...f, owner: e.target.value }))} /></div>
+          <div className="sm:col-span-2"><label className="text-muted-foreground mb-1 block text-xs">Objective</label><Input value={form.objective} onChange={(e) => setForm((f) => ({ ...f, objective: e.target.value }))} /></div>
           <Button size="sm" disabled={creating || !form.name.trim()} onClick={handleCreate}>
             {creating ? <LoaderIcon className="size-3.5 animate-spin" /> : <PlusIcon className="size-3.5" />}
             Create
@@ -129,7 +205,7 @@ export function CampaignsPage() {
           </span>
         </span>
         <div className="ml-auto flex flex-wrap gap-1">
-          {["all", "active", "planning", "completed"].map((s) => (
+           {["all", ...CAMPAIGN_STATUSES].map((s) => (
             <Button
               key={s}
               size="sm"
@@ -182,8 +258,12 @@ export function CampaignsPage() {
                       )}
                     </p>
                   </div>
-                  <Badge className="capitalize shrink-0">{campaign.status}</Badge>
+                  <div className="flex items-center gap-2">
+                    <Badge className="capitalize shrink-0">{campaign.status}</Badge>
+                     {canWrite ? <><Button size="icon" variant="ghost" className="size-7" disabled={Boolean(savingId) || Boolean(deletingId)} onClick={() => startEdit(campaign)} aria-label={`Edit ${campaign.name}`}><PencilIcon className="size-3.5" /></Button><Button size="icon" variant="ghost" className="size-7 text-destructive" disabled={deletingId === campaign.campaignId || Boolean(savingId)} onClick={() => setDeleteTarget({ id: campaign.campaignId, name: campaign.name })} aria-label={`Delete ${campaign.name}`}><Trash2Icon className="size-3.5" /></Button></> : null}
+                  </div>
                 </div>
+                 {editingId === campaign.campaignId ? <div className="grid gap-2 border-t pt-3 sm:grid-cols-2 lg:grid-cols-4"><div className="sm:col-span-2"><label className="text-muted-foreground mb-1 block text-xs">Name</label><Input value={editForm.name} onChange={(e) => setEditForm((f) => ({ ...f, name: e.target.value }))} /></div><div><label className="text-muted-foreground mb-1 block text-xs">Client</label><select className="border-input bg-background h-9 w-full rounded-md border px-2 text-sm" value={editForm.clientId} onChange={(e) => setEditForm((f) => ({ ...f, clientId: e.target.value }))}><option value="">Unassigned</option>{clients.map((c) => <option key={c.clientId} value={c.clientId}>{c.name}</option>)}</select></div><div><label className="text-muted-foreground mb-1 block text-xs">Budget</label><Input type="number" min="0" value={editForm.budget} onChange={(e) => setEditForm((f) => ({ ...f, budget: e.target.value }))} /></div><div><label className="text-muted-foreground mb-1 block text-xs">Status</label><select className="border-input bg-background h-9 w-full rounded-md border px-2 text-sm" value={editForm.status} onChange={(e) => setEditForm((f) => ({ ...f, status: e.target.value as CampaignStatus }))}>{CAMPAIGN_STATUSES.map((status) => <option key={status} value={status}>{status}</option>)}</select></div><div><label className="text-muted-foreground mb-1 block text-xs">StartDate</label><Input type="date" value={editForm.startDate} onChange={(e) => setEditForm((f) => ({ ...f, startDate: e.target.value }))} /></div><div><label className="text-muted-foreground mb-1 block text-xs">EndDate</label><Input type="date" value={editForm.endDate} onChange={(e) => setEditForm((f) => ({ ...f, endDate: e.target.value }))} /></div><div><label className="text-muted-foreground mb-1 block text-xs">Owner</label><Input value={editForm.owner} onChange={(e) => setEditForm((f) => ({ ...f, owner: e.target.value }))} /></div><div className="sm:col-span-2"><label className="text-muted-foreground mb-1 block text-xs">Objective</label><Input value={editForm.objective} onChange={(e) => setEditForm((f) => ({ ...f, objective: e.target.value }))} /></div><div className="flex items-end gap-2"><Button size="sm" disabled={savingId === editingId || !editForm.name.trim()} onClick={() => void handleEdit()}>{savingId === editingId ? <LoaderIcon className="size-3.5 animate-spin" /> : null}Save</Button><Button size="sm" variant="ghost" disabled={savingId === editingId} onClick={() => setEditingId(null)}>Cancel</Button></div></div> : null}
                 {campaign.objective ? (
                   <p className="text-muted-foreground text-sm leading-relaxed">
                     {campaign.objective}
@@ -230,6 +310,7 @@ export function CampaignsPage() {
           })}
         </div>
       )}
+      <ConfirmationDialog open={Boolean(deleteTarget)} onOpenChange={(open) => { if (!open && !deletingId) setDeleteTarget(null) }} title="Delete campaign?" description={deleteTarget ? `This will permanently delete “${deleteTarget.name}”.` : undefined} confirmLabel="Delete" destructive pending={Boolean(deleteTarget && deletingId === deleteTarget.id)} onConfirm={handleDelete} />
     </div>
   )
 }

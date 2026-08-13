@@ -49,6 +49,11 @@ export function PortalHomePage() {
   if (!user) return <Navigate to="/portal/login" replace />
 
   async function decide(id: string, decision: string) {
+    if (user.role !== "client") {
+      clearPortalUser()
+      navigate("/portal/login", { replace: true })
+      return
+    }
     try {
       await portalDecide(id, decision)
       const a = await portalApprovals(user.clientId)

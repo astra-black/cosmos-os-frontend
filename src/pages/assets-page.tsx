@@ -8,17 +8,20 @@ import {
   Loader2Icon,
   SearchIcon,
   UploadIcon,
+  PencilIcon,
+  Trash2Icon,
 } from "lucide-react"
 import { toast } from "sonner"
 
 import { CommentsPanel } from "@/components/shared/comments-panel"
+import { ConfirmationDialog } from "@/components/shared/confirmation-dialog"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useAssets, useProjects } from "@/hooks/use-agency-data"
-import { createApproval, uploadAsset } from "@/lib/api/agency"
+import { createApproval, deleteAsset, updateAsset, uploadAsset } from "@/lib/api/agency"
 import { ApiError } from "@/lib/api/client"
 import { useAuth } from "@/lib/auth"
 import { canPerform } from "@/lib/rbac"
@@ -46,6 +49,7 @@ const statusTone: Record<string, string> = {
   draft: "bg-muted text-muted-foreground",
   archived: "bg-muted text-muted-foreground opacity-80",
 }
+const ASSET_TAGS = ["draft", "final", "hero", "social"] as const
 
 export function AssetsPage() {
   const { user } = useAuth()
@@ -61,8 +65,13 @@ export function AssetsPage() {
   const [projectFilter, setProjectFilter] = useState<string>("all")
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [requestBusy, setRequestBusy] = useState(false)
+  const [pendingAssetId, setPendingAssetId] = useState<string | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<Asset | null>(null)
   const [uploadBusy, setUploadBusy] = useState(false)
   const [uploadProjectId, setUploadProjectId] = useState("")
+  const [uploadVersion, setUploadVersion] = useState("1.0")
+  const [uploadStatus, setUploadStatus] = useState("draft")
+  const [uploadTags, setUploadTags] = useState<string[]>([])
   const fileRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -73,6 +82,10 @@ export function AssetsPage() {
 
   async function onUploadFile(file: File) {
     if (!canRequest) return
+    if (!uploadVersion.trim()) {
+      toast.error("Enter an asset version")
+      return
+    }
     setUploadBusy(true)
     try {
       const form = new FormData()
@@ -83,6 +96,9 @@ export function AssetsPage() {
         const p = projectsList.find((x) => x.projectId === uploadProjectId)
         if (p) form.append("projectName", p.projectName)
       }
+      form.append("version", uploadVersion.trim())
+      form.append("status", uploadStatus)
+      if (uploadTags.length > 0) form.append("tags", uploadTags.join(","))
       const res = await uploadAsset(form)
       await reloadAssets()
       if (res.data?.assetId) setSelectedId(res.data.assetId)
@@ -156,6 +172,48 @@ export function AssetsPage() {
     }
   }
 
+  function assetId(asset: Asset) {
+    return asset.assetId || asset.recordId || ""
+  }
+
+  async function editAsset(asset: Asset) {
+    if (!canRequest || !assetId(asset)) return
+    const name = window.prompt("Asset name", asset.assetName)
+    if (name == null) return
+    if (!name.trim()) {
+      toast.error("Asset name is required")
+      return
+    }
+    if (name.trim() === asset.assetName) return
+    setPendingAssetId(assetId(asset))
+    try {
+      await updateAsset(assetId(asset), { assetName: name.trim() })
+      await reloadAssets()
+      toast.success("Asset updated")
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Unable to update asset")
+    } finally {
+      setPendingAssetId(null)
+    }
+  }
+
+  async function removeAsset() {
+    if (!deleteTarget || !canRequest || !assetId(deleteTarget)) return
+    const id = assetId(deleteTarget)
+    setPendingAssetId(id)
+    try {
+      await deleteAsset(id)
+      await reloadAssets()
+      if (selectedId === id) setSelectedId(null)
+      toast.success("Asset deleted")
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Unable to delete asset")
+    } finally {
+      setPendingAssetId(null)
+      setDeleteTarget(null)
+    }
+  }
+
   return (
     <div className="flex flex-col gap-5">
       <div className="flex flex-col gap-1">
@@ -171,7 +229,7 @@ export function AssetsPage() {
 
       {/* Upload strip */}
       {canRequest ? (
-        <Card className="flex flex-col gap-3 p-3 sm:flex-row sm:items-center">
+        <Card className="flex flex-col gap-3 p-3">
           <input
             ref={fileRef}
             type="file"
@@ -181,7 +239,8 @@ export function AssetsPage() {
               if (f) void onUploadFile(f)
             }}
           />
-          <select
+          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+            <select
             value={uploadProjectId}
             onChange={(e) => setUploadProjectId(e.target.value)}
             className="border-input bg-background h-9 w-full rounded-lg border px-2 text-sm sm:max-w-[14rem]"
@@ -192,7 +251,32 @@ export function AssetsPage() {
                 {p.projectName}
               </option>
             ))}
-          </select>
+            </select>
+            <Input placeholder="Version *" value={uploadVersion} onChange={(e) => setUploadVersion(e.target.value)} />
+            <select
+              value={uploadStatus}
+              onChange={(e) => setUploadStatus(e.target.value)}
+              className="border-input bg-background h-9 w-full rounded-lg border px-2 text-sm"
+            >
+              <option value="draft">Draft</option>
+              <option value="in_review">In review</option>
+              <option value="approved">Approved</option>
+              <option value="archived">Archived</option>
+            </select>
+            <div className="border-input flex min-h-9 flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border px-2 text-xs">
+              {ASSET_TAGS.map((tag) => (
+                <label key={tag} className="flex items-center gap-1">
+                  <input
+                    type="checkbox"
+                    checked={uploadTags.includes(tag)}
+                    onChange={(e) => setUploadTags((current) => e.target.checked ? [...current, tag] : current.filter((item) => item !== tag))}
+                  />
+                  {tag}
+                </label>
+              ))}
+            </div>
+          </div>
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
           <Button
             size="sm"
             disabled={uploadBusy}
@@ -209,6 +293,7 @@ export function AssetsPage() {
           <p className="text-muted-foreground text-xs sm:ml-auto">
             Max 25MB · stored on API server (/uploads)
           </p>
+          </div>
         </Card>
       ) : null}
 
@@ -291,7 +376,7 @@ export function AssetsPage() {
             )}
           >
             {filtered.map((asset) => {
-              const id = asset.assetId || asset.recordId || ""
+              const id = assetId(asset)
               const selected = selectedId === id
               return (
                 <button
@@ -395,20 +480,23 @@ export function AssetsPage() {
                       Open file ({selectedAsset.originalFileName || selectedAsset.fileType})
                     </a>
                   ) : null}
-                  {canRequest ? (
-                    <Button
-                      size="sm"
-                      disabled={requestBusy}
-                      onClick={() => void requestApproval(selectedAsset)}
-                      className="w-full sm:w-auto"
-                    >
-                      {requestBusy ? (
-                        <Loader2Icon className="size-3.5 animate-spin" />
-                      ) : (
-                        <CheckSquareIcon className="size-3.5" />
-                      )}
-                      Request approval
-                    </Button>
+                   {canRequest ? (
+                     <div className="flex flex-wrap gap-2">
+                       <Button
+                         size="sm"
+                         disabled={requestBusy || Boolean(pendingAssetId)}
+                         onClick={() => void requestApproval(selectedAsset)}
+                       >
+                         {requestBusy ? <Loader2Icon className="size-3.5 animate-spin" /> : <CheckSquareIcon className="size-3.5" />}
+                         Request approval
+                       </Button>
+                       <Button size="sm" variant="outline" disabled={Boolean(pendingAssetId)} onClick={() => void editAsset(selectedAsset)}>
+                         <PencilIcon className="size-3.5" />Edit
+                       </Button>
+                       <Button size="sm" variant="destructive" disabled={Boolean(pendingAssetId)} onClick={() => setDeleteTarget(selectedAsset)}>
+                         <Trash2Icon className="size-3.5" />Delete
+                       </Button>
+                     </div>
                   ) : null}
                   {canRequest ? (
                     <p className="text-muted-foreground text-xs">
@@ -437,6 +525,16 @@ export function AssetsPage() {
           </div>
         </div>
       )}
+      <ConfirmationDialog
+        open={Boolean(deleteTarget)}
+        onOpenChange={(open) => { if (!open && !pendingAssetId) setDeleteTarget(null) }}
+        title="Delete asset?"
+        description={deleteTarget ? `This will permanently delete “${deleteTarget.assetName}”.` : undefined}
+        confirmLabel="Delete"
+        destructive
+        pending={Boolean(pendingAssetId)}
+        onConfirm={removeAsset}
+      />
     </div>
   )
 }

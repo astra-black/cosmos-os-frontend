@@ -42,6 +42,13 @@ export type BudgetRow = {
   currency: string
 }
 
+export type CreateBudgetInput = {
+  projectId: string
+  projectName?: string
+  planned: number
+  currency?: string
+}
+
 export type Tenant = {
   tenantId: string
   name: string
@@ -106,8 +113,40 @@ export async function createTimeEntry(body: Partial<TimeEntry>) {
   })
 }
 
+export async function updateTimeEntry(
+  entryId: string,
+  body: Partial<Pick<TimeEntry, "hours" | "date" | "note" | "billable" | "rate">>,
+) {
+  return apiRequest<ApiEnvelope<TimeEntry>>(`/api/v1/agency/finance/time/${entryId}`, {
+    method: "PATCH",
+    body: JSON.stringify(body),
+  })
+}
+
+export async function deleteTimeEntry(entryId: string) {
+  return apiRequest(`/api/v1/agency/finance/time/${entryId}`, { method: "DELETE" })
+}
+
 export async function listBudgets() {
   return apiRequest<ApiEnvelope<BudgetRow[]>>("/api/v1/agency/finance/budgets")
+}
+
+export async function createBudget(body: CreateBudgetInput) {
+  return apiRequest<ApiEnvelope<BudgetRow>>("/api/v1/agency/finance/budgets", {
+    method: "POST",
+    body: JSON.stringify(body),
+  })
+}
+
+export async function updateBudget(budgetId: string, body: Partial<Pick<BudgetRow, "planned" | "currency">>) {
+  return apiRequest<ApiEnvelope<BudgetRow>>(`/api/v1/agency/finance/budgets/${budgetId}`, {
+    method: "PATCH",
+    body: JSON.stringify(body),
+  })
+}
+
+export async function deleteBudget(budgetId: string) {
+  return apiRequest(`/api/v1/agency/finance/budgets/${budgetId}`, { method: "DELETE" })
 }
 
 export async function getTenant() {

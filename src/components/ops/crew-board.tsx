@@ -6,6 +6,8 @@ import {
   MailIcon,
   PhoneIcon,
   UserIcon,
+  PencilIcon,
+  Trash2Icon,
 } from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
@@ -61,11 +63,15 @@ function CrewCard({
   busy,
   canWrite,
   onAdvance,
+  onEdit,
+  onDelete,
 }: {
   member: CrewMember
   busy?: boolean
   canWrite?: boolean
   onAdvance?: (member: CrewMember, nextStatus: string) => void
+  onEdit?: (member: CrewMember) => void
+  onDelete?: (member: CrewMember) => void
 }) {
   const initials = (member.name || "?")
     .split(/\s+/)
@@ -145,6 +151,10 @@ function CrewCard({
           ) : null}
         </div>
       ) : null}
+      {canWrite && (onEdit || onDelete) ? <div className="mt-2 flex gap-1.5">
+        {onEdit ? <Button size="sm" variant="ghost" className="h-7 flex-1 text-xs" disabled={busy} onClick={() => onEdit(member)}><PencilIcon className="size-3" /> Edit</Button> : null}
+        {onDelete ? <Button size="sm" variant="ghost" className="h-7 flex-1 text-xs" disabled={busy} onClick={() => onDelete(member)}><Trash2Icon className="size-3 text-destructive" /> Delete</Button> : null}
+      </div> : null}
     </article>
   )
 }
@@ -156,6 +166,8 @@ export function CrewBoard({
   busyCrewId,
   canWrite = true,
   onStatusChange,
+  onEdit,
+  onDelete,
 }: {
   crew: CrewMember[]
   departments: Department[]
@@ -163,6 +175,8 @@ export function CrewBoard({
   busyCrewId?: string | null
   canWrite?: boolean
   onStatusChange?: (member: CrewMember, nextStatus: string) => void
+  onEdit?: (member: CrewMember) => void
+  onDelete?: (member: CrewMember) => void
 }) {
   const [deptFilter, setDeptFilter] = useState<string>("all")
 
@@ -293,6 +307,8 @@ export function CrewBoard({
                         busy={busyCrewId === member.crewId}
                         canWrite={canWrite}
                         onAdvance={onStatusChange}
+                        onEdit={onEdit}
+                        onDelete={onDelete}
                       />
                     ))
                   )}

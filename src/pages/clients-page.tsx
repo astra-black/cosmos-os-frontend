@@ -5,12 +5,15 @@ import {
   MailIcon,
   PhoneIcon,
   PlusIcon,
+  PencilIcon,
   StickyNoteIcon,
   UserIcon,
+  Trash2Icon,
 } from "lucide-react"
 import { toast } from "sonner"
 
 import { CommentsPanel } from "@/components/shared/comments-panel"
+import { ConfirmationDialog } from "@/components/shared/confirmation-dialog"
 import { EmptyState } from "@/components/shared/empty-state"
 import { PageHeader } from "@/components/shared/page-header"
 import { Badge } from "@/components/ui/badge"
@@ -22,10 +25,13 @@ import { useClients } from "@/hooks/use-agency-data"
 import {
   createClient,
   createCrmActivity,
+  deleteCrmActivity,
   listCrmActivities,
   listCrmContacts,
   listOpportunities,
   updateClient,
+  updateCrmActivity,
+  deleteClient,
 } from "@/lib/api/agency"
 import { ApiError } from "@/lib/api/client"
 import { useAuth } from "@/lib/auth"
@@ -67,8 +73,13 @@ export function ClientsPage() {
   const [activities, setActivities] = useState<CrmActivity[]>([])
   const [detailLoading, setDetailLoading] = useState(false)
   const [creating, setCreating] = useState(false)
+  const [deleting, setDeleting] = useState(false)
   const [newName, setNewName] = useState("")
   const [note, setNote] = useState("")
+  const [editingActivityId, setEditingActivityId] = useState<string | null>(null)
+  const [activityForm, setActivityForm] = useState({ subject: "", body: "" })
+  const [pendingActivityId, setPendingActivityId] = useState<string | null>(null)
+  const [deleteActivityTarget, setDeleteActivityTarget] = useState<CrmActivity | null>(null)
 
   const selectClient = useCallback(
     (id: string, replace = false) => {
@@ -140,7 +151,7 @@ export function ClientsPage() {
     .reduce((s, d) => s + (d.value || 0), 0)
 
   async function handleCreate() {
-    if (!newName.trim()) return
+    if (!newName.trim() || !canWriteCrm) return
     setCreating(true)
     try {
       const res = await createClient({ name: newName.trim(), stage: "prospect" })
@@ -156,6 +167,7 @@ export function ClientsPage() {
   }
 
   async function advanceStage(client: AgencyClient) {
+    if (!canWriteCrm) return
     const idx = STAGES.indexOf(client.stage as (typeof STAGES)[number])
     const next = STAGES[Math.min(idx + 1, STAGES.length - 1)]
     try {
@@ -167,8 +179,23 @@ export function ClientsPage() {
     }
   }
 
+  async function handleDelete(client: AgencyClient) {
+    if (!canWriteCrm || !window.confirm(`Delete account "${client.name}"? This cannot be undone.`)) return
+    setDeleting(true)
+    try {
+      await deleteClient(client.clientId)
+      await reloadClients()
+      selectClient("")
+      toast.success("Account deleted")
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Delete failed")
+    } finally {
+      setDeleting(false)
+    }
+  }
+
   async function logNote() {
-    if (!selectedId || !note.trim()) return
+    if (!canWriteCrm || !selectedId || !note.trim()) return
     try {
       await createCrmActivity({
         clientId: selectedId,
@@ -183,6 +210,49 @@ export function ClientsPage() {
       toast.success("Note logged")
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : "Could not log note")
+    }
+  }
+
+  function startActivityEdit(activity: CrmActivity) {
+    setEditingActivityId(activity.crmActivityId)
+    setActivityForm({ subject: activity.subject, body: activity.body ?? "" })
+  }
+
+  async function saveActivityEdit() {
+    if (!editingActivityId || !canWriteCrm || !selectedId) return
+    if (!activityForm.subject.trim()) {
+      toast.error("Activity subject is required")
+      return
+    }
+    const activityId = editingActivityId
+    setPendingActivityId(`edit:${activityId}`)
+    try {
+      await updateCrmActivity(activityId, { subject: activityForm.subject.trim(), body: activityForm.body.trim() })
+      setEditingActivityId(null)
+      const result = await listCrmActivities({ clientId: selectedId })
+      setActivities(result.data ?? [])
+      toast.success("Activity updated")
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Could not update activity")
+    } finally {
+      setPendingActivityId(null)
+    }
+  }
+
+  async function deleteActivity() {
+    if (!deleteActivityTarget || !canWriteCrm || !selectedId) return
+    const activityId = deleteActivityTarget.crmActivityId
+    setPendingActivityId(`delete:${activityId}`)
+    try {
+      await deleteCrmActivity(activityId)
+      const result = await listCrmActivities({ clientId: selectedId })
+      setActivities(result.data ?? [])
+      toast.success("Activity deleted")
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Could not delete activity")
+    } finally {
+      setPendingActivityId(null)
+      setDeleteActivityTarget(null)
     }
   }
 
@@ -218,7 +288,12 @@ export function ClientsPage() {
       />
 
       {error ? (
-        <Card className="border-destructive/40 text-destructive px-4 py-3 text-sm">{error}</Card>
+        <Card className="border-destructive/40 px-4 py-3 text-sm">
+          <div className="flex items-center justify-between gap-3">
+            <span className="text-destructive">{error}</span>
+            <Button size="sm" variant="outline" onClick={() => void reloadClients()}>Retry</Button>
+          </div>
+        </Card>
       ) : null}
 
       <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
@@ -323,6 +398,11 @@ export function ClientsPage() {
                       {selected.stage !== "churned" ? (
                         <Button size="sm" variant="outline" onClick={() => advanceStage(selected)}>
                           Advance stage
+                        </Button>
+                      ) : null}
+                      {canWriteCrm ? (
+                        <Button size="icon" variant="ghost" className="size-8 text-destructive" disabled={deleting} onClick={() => void handleDelete(selected)} aria-label={`Delete ${selected.name}`}>
+                          <Trash2Icon className="size-3.5" />
                         </Button>
                       ) : null}
                     </div>
@@ -475,15 +555,23 @@ export function ClientsPage() {
                     <EmptyState title="No CRM activity yet" />
                   ) : (
                     <ol className="flex flex-col gap-2">
-                      {activities.map((a) => (
-                        <Card key={a.crmActivityId} className="p-3">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <Badge variant="outline" className="capitalize">
-                              {a.type}
-                            </Badge>
-                            <span className="text-sm font-medium">{a.subject}</span>
-                          </div>
-                          {a.body ? (
+                       {activities.map((a) => (
+                         <Card key={a.crmActivityId} className="p-3">
+                           {editingActivityId === a.crmActivityId ? (
+                             <div className="grid gap-2">
+                               <Input value={activityForm.subject} onChange={(e) => setActivityForm((f) => ({ ...f, subject: e.target.value }))} placeholder="Subject" />
+                               <Input value={activityForm.body} onChange={(e) => setActivityForm((f) => ({ ...f, body: e.target.value }))} placeholder="Details" />
+                               <div className="flex gap-2"><Button size="sm" onClick={() => void saveActivityEdit()} disabled={pendingActivityId === `edit:${a.crmActivityId}` || !activityForm.subject.trim()}>Save</Button><Button size="sm" variant="ghost" onClick={() => setEditingActivityId(null)} disabled={Boolean(pendingActivityId)}>Cancel</Button></div>
+                             </div>
+                           ) : null}
+                           <div className="flex flex-wrap items-center gap-2">
+                             <Badge variant="outline" className="capitalize">
+                               {a.type}
+                             </Badge>
+                             <span className="text-sm font-medium">{a.subject}</span>
+                             {canWriteCrm ? <span className="ml-auto flex gap-1"><Button size="icon-xs" variant="ghost" onClick={() => startActivityEdit(a)} disabled={Boolean(pendingActivityId)} aria-label={`Edit ${a.subject}`}><PencilIcon className="size-3" /></Button><Button size="icon-xs" variant="ghost" className="text-destructive" onClick={() => setDeleteActivityTarget(a)} disabled={Boolean(pendingActivityId)} aria-label={`Delete ${a.subject}`}><Trash2Icon className="size-3" /></Button></span> : null}
+                           </div>
+                           {a.body && editingActivityId !== a.crmActivityId ? (
                             <p className="text-muted-foreground mt-1 text-sm">{a.body}</p>
                           ) : null}
                           <div className="text-muted-foreground mt-2 text-[11px]">
@@ -502,8 +590,18 @@ export function ClientsPage() {
                 )}
               </div>
             )}
-          </div>
-        </div>
+      </div>
+      <ConfirmationDialog
+        open={Boolean(deleteActivityTarget)}
+        onOpenChange={(open) => { if (!open && !pendingActivityId) setDeleteActivityTarget(null) }}
+        title={`Delete ${deleteActivityTarget?.subject ?? "activity"}?`}
+        description="This action cannot be undone."
+        confirmLabel="Delete"
+        destructive
+        pending={deleteActivityTarget ? pendingActivityId === `delete:${deleteActivityTarget.crmActivityId}` : false}
+        onConfirm={deleteActivity}
+      />
+    </div>
       )}
     </div>
   )

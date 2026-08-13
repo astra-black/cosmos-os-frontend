@@ -18,6 +18,7 @@ const ROLE_ROUTES: Record<string, string[]> = {
     "/campaigns",
     "/projects",
     "/tasks",
+    "/milestones",
     "/assets",
     "/approvals",
     "/vendors",
@@ -35,6 +36,7 @@ const ROLE_ROUTES: Record<string, string[]> = {
     "/activity",
     "/projects",
     "/tasks",
+    "/milestones",
     "/assets",
     "/approvals",
     "/campaigns",
@@ -55,15 +57,16 @@ const ROLE_ROUTES: Record<string, string[]> = {
     "/ai",
     "/settings",
   ],
-  creative: ["/", "/projects", "/tasks", "/assets", "/approvals", "/activity", "/ai", "/settings"],
+  creative: ["/", "/projects", "/tasks", "/milestones", "/assets", "/approvals", "/activity", "/ai", "/settings"],
   client: ["/portal"],
 }
 
 export function canAccessRoute(role: AppRole | null | undefined, pathname: string): boolean {
   if (!role) return false
-  const allowed = ROLE_ROUTES[role] || ROLE_ROUTES.creative
+  const allowed = ROLE_ROUTES[role]
+  if (!allowed) return false
+  if (pathname.startsWith("/portal")) return role === "client"
   if (allowed.includes("*")) return true
-  if (pathname.startsWith("/portal")) return role === "client" || role === "admin"
   return allowed.some((route) => {
     if (route === "/") return pathname === "/"
     return pathname === route || pathname.startsWith(`${route}/`)

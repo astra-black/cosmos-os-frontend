@@ -22,6 +22,7 @@ import type {
   Incident,
   IncidentStats,
   MonitoringStats,
+  Milestone,
   PortfolioClient,
   Project,
   Task,
@@ -74,6 +75,12 @@ export async function updateProject(projectId: string, body: Partial<Project>) {
   })
 }
 
+export async function deleteProject(projectId: string) {
+  return apiRequest<ApiEnvelope<Project>>(`/api/v1/agency/projects/${projectId}`, {
+    method: "DELETE",
+  })
+}
+
 export async function listProjects() {
   return apiRequest<{
     success?: boolean
@@ -118,6 +125,21 @@ export async function uploadAsset(form: FormData) {
   return apiRequest<{ success?: boolean; data?: Asset }>("/api/v1/agency/assets/upload", {
     method: "POST",
     body: form,
+    apiKey: true,
+  })
+}
+
+export async function updateAsset(assetId: string, body: Partial<Asset>) {
+  return apiRequest<{ success?: boolean; data?: Asset }>(`/api/v1/agency/assets/${assetId}`, {
+    method: "PATCH",
+    body: JSON.stringify(body),
+    apiKey: true,
+  })
+}
+
+export async function deleteAsset(assetId: string) {
+  return apiRequest<{ success?: boolean; assetId?: string }>(`/api/v1/agency/assets/${assetId}`, {
+    method: "DELETE",
     apiKey: true,
   })
 }
@@ -329,6 +351,12 @@ export async function updateClient(clientId: string, body: Partial<AgencyClient>
   })
 }
 
+export async function deleteClient(clientId: string) {
+  return apiRequest<ApiEnvelope<AgencyClient>>(`/api/v1/agency/clients/${clientId}`, {
+    method: "DELETE",
+  })
+}
+
 export async function listCampaigns() {
   return apiRequest<ApiEnvelope<Campaign[]>>("/api/v1/agency/campaigns")
 }
@@ -344,6 +372,12 @@ export async function updateCampaign(campaignId: string, body: Partial<Campaign>
   return apiRequest<ApiEnvelope<Campaign>>(`/api/v1/agency/campaigns/${campaignId}`, {
     method: "PATCH",
     body: JSON.stringify(body),
+  })
+}
+
+export async function deleteCampaign(campaignId: string) {
+  return apiRequest<ApiEnvelope<Campaign>>(`/api/v1/agency/campaigns/${campaignId}`, {
+    method: "DELETE",
   })
 }
 
@@ -369,6 +403,39 @@ export async function createTask(body: Partial<Task>) {
   })
 }
 
+export async function deleteTask(taskId: string) {
+  return apiRequest<ApiEnvelope<Task>>(`/api/v1/agency/tasks/${taskId}`, {
+    method: "DELETE",
+  })
+}
+
+export async function listMilestones(params: { status?: Milestone["status"] } = {}) {
+  const query = new URLSearchParams()
+  if (params.status) query.set("status", params.status)
+  const suffix = query.toString() ? `?${query}` : ""
+  return apiRequest<ApiEnvelope<Milestone[]>>(`/api/v1/agency/milestones${suffix}`)
+}
+
+export async function createMilestone(body: Partial<Milestone>) {
+  return apiRequest<ApiEnvelope<Milestone>>("/api/v1/agency/milestones", {
+    method: "POST",
+    body: JSON.stringify(body),
+  })
+}
+
+export async function updateMilestone(milestoneId: string, body: Partial<Milestone>) {
+  return apiRequest<ApiEnvelope<Milestone>>(`/api/v1/agency/milestones/${milestoneId}`, {
+    method: "PATCH",
+    body: JSON.stringify(body),
+  })
+}
+
+export async function deleteMilestone(milestoneId: string) {
+  return apiRequest<ApiEnvelope<null>>(`/api/v1/agency/milestones/${milestoneId}`, {
+    method: "DELETE",
+  })
+}
+
 export async function listVendors(params: { category?: string; status?: string } = {}) {
   const q = new URLSearchParams()
   if (params.category) q.set("category", params.category)
@@ -388,6 +455,12 @@ export async function createVendor(body: Partial<Vendor>) {
   return apiRequest<ApiEnvelope<Vendor>>("/api/v1/agency/vendors", {
     method: "POST",
     body: JSON.stringify(body),
+  })
+}
+
+export async function deleteVendor(vendorId: string) {
+  return apiRequest<ApiEnvelope<Vendor>>(`/api/v1/agency/vendors/${vendorId}`, {
+    method: "DELETE",
   })
 }
 
@@ -458,6 +531,81 @@ export async function createEvent(body: Partial<Event>) {
   })
 }
 
+export async function updateEvent(eventId: string, body: Partial<Event>) {
+  return apiRequest<ApiEnvelope<Event>>(`/api/v1/agency/events/${eventId}`, {
+    method: "PUT",
+    body: JSON.stringify(body),
+  })
+}
+
+export async function deleteEvent(eventId: string) {
+  return apiRequest<ApiEnvelope<null>>(`/api/v1/agency/events/${eventId}`, { method: "DELETE" })
+}
+
+export async function updateIncident(incidentId: string, body: Partial<Incident>) {
+  return apiRequest<ApiEnvelope<Incident>>(`/api/v1/agency/incidents/incidents/${incidentId}`, {
+    method: "PUT",
+    body: JSON.stringify(body),
+  })
+}
+
+export async function deleteIncident(incidentId: string) {
+  return apiRequest<ApiEnvelope<null>>(`/api/v1/agency/incidents/incidents/${incidentId}`, {
+    method: "DELETE",
+  })
+}
+
+export async function updateCue(eventId: string, cueId: string, body: Partial<Cue>) {
+  return apiRequest<ApiEnvelope<Cue>>(`/api/v1/agency/cues/events/${eventId}/cues/${cueId}`, {
+    method: "PUT",
+    body: JSON.stringify(body),
+  })
+}
+
+export async function deleteCue(eventId: string, cueId: string) {
+  return apiRequest<ApiEnvelope<null>>(`/api/v1/agency/cues/events/${eventId}/cues/${cueId}`, {
+    method: "DELETE",
+  })
+}
+
+export async function createDepartment(eventId: string, body: Partial<Department>) {
+  return apiRequest<ApiEnvelope<Department>>(`/api/v1/agency/departments/events/${eventId}/departments`, {
+    method: "POST",
+    body: JSON.stringify(body),
+  })
+}
+
+export async function updateDepartment(departmentId: string, body: Partial<Department>) {
+  return apiRequest<ApiEnvelope<Department>>(`/api/v1/agency/departments/departments/${departmentId}`, {
+    method: "PUT",
+    body: JSON.stringify(body),
+  })
+}
+
+export async function deleteDepartment(departmentId: string) {
+  return apiRequest<ApiEnvelope<null>>(`/api/v1/agency/departments/departments/${departmentId}`, {
+    method: "DELETE",
+  })
+}
+
+export async function createCrew(eventId: string, body: Partial<CrewMember>) {
+  return apiRequest<ApiEnvelope<CrewMember>>(`/api/v1/agency/departments/events/${eventId}/crew`, {
+    method: "POST",
+    body: JSON.stringify(body),
+  })
+}
+
+export async function updateCrew(crewId: string, body: Partial<CrewMember>) {
+  return apiRequest<ApiEnvelope<CrewMember>>(`/api/v1/agency/departments/crew/${crewId}`, {
+    method: "PUT",
+    body: JSON.stringify(body),
+  })
+}
+
+export async function deleteCrew(crewId: string) {
+  return apiRequest<ApiEnvelope<null>>(`/api/v1/agency/departments/crew/${crewId}`, { method: "DELETE" })
+}
+
 // —— CRM ——
 export async function getCrmSummary() {
   return apiRequest<ApiEnvelope<CrmSummary>>("/api/v1/agency/crm/summary")
@@ -490,6 +638,13 @@ export async function updateOpportunity(opportunityId: string, body: Partial<Opp
   )
 }
 
+export async function deleteOpportunity(opportunityId: string) {
+  return apiRequest<ApiEnvelope<Opportunity>>(
+    `/api/v1/agency/crm/opportunities/${opportunityId}`,
+    { method: "DELETE" },
+  )
+}
+
 /** Convert a won opportunity into a delivery project (+ campaign/tasks). */
 export async function convertOpportunity(opportunityId: string) {
   return apiRequest<
@@ -519,6 +674,19 @@ export async function createCrmContact(body: Partial<CrmContact>) {
   })
 }
 
+export async function updateCrmContact(contactId: string, body: Partial<CrmContact>) {
+  return apiRequest<ApiEnvelope<CrmContact>>(`/api/v1/agency/crm/contacts/${contactId}`, {
+    method: "PATCH",
+    body: JSON.stringify(body),
+  })
+}
+
+export async function deleteCrmContact(contactId: string) {
+  return apiRequest<ApiEnvelope<CrmContact>>(`/api/v1/agency/crm/contacts/${contactId}`, {
+    method: "DELETE",
+  })
+}
+
 export async function listCrmActivities(params: {
   clientId?: string
   opportunityId?: string
@@ -534,6 +702,19 @@ export async function createCrmActivity(body: Partial<CrmActivity>) {
   return apiRequest<ApiEnvelope<CrmActivity>>("/api/v1/agency/crm/activities", {
     method: "POST",
     body: JSON.stringify(body),
+  })
+}
+
+export async function updateCrmActivity(activityId: string, body: Partial<CrmActivity>) {
+  return apiRequest<ApiEnvelope<CrmActivity>>(`/api/v1/agency/crm/activities/${activityId}`, {
+    method: "PATCH",
+    body: JSON.stringify(body),
+  })
+}
+
+export async function deleteCrmActivity(activityId: string) {
+  return apiRequest<ApiEnvelope<CrmActivity>>(`/api/v1/agency/crm/activities/${activityId}`, {
+    method: "DELETE",
   })
 }
 

@@ -12,6 +12,8 @@ export type AuthUser = {
   email: string
   name: string
   role: string
+  photoUrl?: string
+  avatarUrl?: string
   createdAt?: string
 }
 
@@ -283,14 +285,16 @@ export type AgencyClient = {
   updatedAt?: string
 }
 
+export type CampaignStatus = "planning" | "active" | "completed" | "on_hold"
+
 export type Campaign = {
   campaignId: string
   name: string
-  clientId: string
+  clientId: string | null
   clientName?: string
-  status: string
-  startDate?: string
-  endDate?: string
+  status: CampaignStatus
+  startDate?: string | null
+  endDate?: string | null
   budget?: number
   projectIds?: string[]
   objective?: string
@@ -309,6 +313,19 @@ export type Task = {
   dueDate?: string | null
   estimateHours?: number
   tags?: string[]
+}
+
+export type MilestoneStatus = "upcoming" | "done" | "missed"
+
+export type Milestone = {
+  recordId?: string
+  milestoneId: string
+  name: string
+  dueDate: string
+  status: MilestoneStatus
+  notes?: string
+  projectId?: string | null
+  project?: string | string[] | null
 }
 
 export type Vendor = {

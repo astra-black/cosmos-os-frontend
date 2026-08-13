@@ -13,10 +13,14 @@ import { listTeamMembers, updateTeamMember } from "@/lib/api/agency"
 import { ApiError } from "@/lib/api/client"
 import type { TeamMember } from "@/types/agency"
 import { cn } from "@/lib/utils"
+import { useAuth } from "@/lib/auth"
+import { canPerform } from "@/lib/rbac"
 
 const ROLES = ["admin", "pm", "producer", "ops", "creative", "client"] as const
 
 export function TeamsPage() {
+  const { user } = useAuth()
+  const canManageTeam = canPerform(user?.role, "manage_team")
   const [members, setMembers] = useState<TeamMember[]>([])
   const [teamFilter, setTeamFilter] = useState("all")
   const [loading, setLoading] = useState(true)
@@ -52,6 +56,7 @@ export function TeamsPage() {
   }, [members, teamFilter])
 
   async function cycleRole(member: TeamMember) {
+    if (!canManageTeam) return
     const idx = ROLES.indexOf(member.role as (typeof ROLES)[number])
     const next = ROLES[(idx + 1) % ROLES.length]
     try {
@@ -158,9 +163,9 @@ export function TeamsPage() {
                     {member.role}
                   </Badge>
                 </div>
-                <Button size="sm" variant="outline" onClick={() => cycleRole(member)}>
+                {canManageTeam ? <Button size="sm" variant="outline" onClick={() => cycleRole(member)}>
                   Cycle role
-                </Button>
+                </Button> : null}
               </Card>
             )
           })}

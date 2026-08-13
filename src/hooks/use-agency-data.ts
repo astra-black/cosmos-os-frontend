@@ -4,6 +4,7 @@ import {
   listCampaigns,
   listClients,
   listProjects,
+  listMilestones,
   listTasks,
   listTeamMembers,
   listVendors,
@@ -15,6 +16,7 @@ import type {
   Asset,
   Campaign,
   Project,
+  Milestone,
   Task,
   TeamMember,
   Vendor,
@@ -45,6 +47,15 @@ export function useTasks(params?: { projectId?: string; status?: string }) {
       const res = await listTasks(params)
       return res.data ?? []
     }, [params?.projectId, params?.status]),
+  )
+}
+
+export function useMilestones() {
+  return useAsyncList<Milestone>(
+    useCallback(async () => {
+      const res = await listMilestones()
+      return res.data ?? []
+    }, []),
   )
 }
 

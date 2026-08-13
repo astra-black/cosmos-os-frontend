@@ -5,6 +5,7 @@ import {
   ChevronRightIcon,
   Loader2Icon,
   PlusIcon,
+  Trash2Icon,
 } from "lucide-react"
 import { toast } from "sonner"
 
@@ -16,7 +17,7 @@ import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useProjects, useTasks, useTeamMembers } from "@/hooks/use-agency-data"
-import { createTask, updateTask } from "@/lib/api/agency"
+import { createTask, deleteTask, updateTask } from "@/lib/api/agency"
 import { ApiError } from "@/lib/api/client"
 import { useAuth } from "@/lib/auth"
 import { canPerform } from "@/lib/rbac"
@@ -62,6 +63,7 @@ export function TasksPage() {
   const { data: projects } = useProjects()
   const { data: teamMembers } = useTeamMembers()
   const [busyId, setBusyId] = useState<string | null>(null)
+  const [deletingId, setDeletingId] = useState<string | null>(null)
   const [showAdd, setShowAdd] = useState(false)
   const [form, setForm] = useState({
     title: "",
@@ -161,6 +163,20 @@ export function TasksPage() {
       await reload().catch(() => undefined)
     } finally {
       setBusyId(null)
+    }
+  }
+
+  async function handleDelete(task: Task) {
+    if (!canWrite || !window.confirm(`Delete task "${task.title}"? This cannot be undone.`)) return
+    setDeletingId(task.taskId)
+    try {
+      await deleteTask(task.taskId)
+      await reload()
+      toast.success("Task deleted")
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Delete failed")
+    } finally {
+      setDeletingId(null)
     }
   }
 
@@ -322,7 +338,12 @@ export function TasksPage() {
       </div>
 
       {error ? (
-        <Card className="border-destructive/40 text-destructive px-4 py-3 text-sm">{error}</Card>
+        <Card className="border-destructive/40 px-4 py-3 text-sm">
+          <div className="flex items-center justify-between gap-3">
+            <span className="text-destructive">{error}</span>
+            <Button size="sm" variant="outline" onClick={() => void reload()}>Retry</Button>
+          </div>
+        </Card>
       ) : null}
 
       {!canWrite ? (
@@ -363,7 +384,14 @@ export function TasksPage() {
                         className="bg-card rounded-lg border p-3 shadow-xs"
                       >
                         <div className="flex items-start justify-between gap-2">
-                          <h3 className="text-sm font-medium leading-snug">{task.title}</h3>
+                            <div className="flex min-w-0 items-start gap-1">
+                              <h3 className="text-sm font-medium leading-snug">{task.title}</h3>
+                              {canWrite ? (
+                                <Button size="icon" variant="ghost" className="size-6 shrink-0 text-destructive" disabled={deletingId === task.taskId} onClick={() => void handleDelete(task)} aria-label={`Delete ${task.title}`}>
+                                  <Trash2Icon className="size-3" />
+                                </Button>
+                              ) : null}
+                            </div>
                           {canWrite ? (
                             <select
                               className={cn(
