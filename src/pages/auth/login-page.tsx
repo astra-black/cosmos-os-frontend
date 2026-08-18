@@ -16,7 +16,7 @@ export function LoginPage() {
   const [error, setError] = useState<string | null>(null)
   const [pending, setPending] = useState(false)
 
-  if (isAuthenticated) return <Navigate to="/" replace />
+  if (isAuthenticated) return <Navigate to="/dashboard" replace />
 
   async function onSubmit(event: FormEvent) {
     event.preventDefault()
@@ -24,7 +24,7 @@ export function LoginPage() {
     setError(null)
     try {
       await login(email, password)
-      navigate("/", { replace: true })
+      navigate("/dashboard", { replace: true })
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Unable to sign in")
     } finally {

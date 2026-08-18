@@ -362,6 +362,8 @@ export function CueRunSheet({
               const meta = statusMeta(cue.status)
               const Icon = meta.icon
               const isLive = cue.status === "in_progress"
+              const isNext = nextCue && cue.cueId === nextCue.cueId
+              const isFuturePending = cue.status === "pending" && (!nextCue || cue.cueId !== nextCue.cueId)
               const isLast = index === visible.length - 1
               const busy = busyCueId === cue.cueId
 
@@ -387,8 +389,9 @@ export function CueRunSheet({
                     <div
                       className={cn(
                         "z-10 mt-4 flex size-6 items-center justify-center rounded-full border-2 border-background",
-                        meta.rail,
-                        isLive && "ring-primary/30 size-7 ring-4",
+                        isLive ? "bg-red-500 ring-red-500/30 size-7 ring-4" : 
+                        isNext ? "bg-emerald-500 ring-emerald-500/20 ring-2" : 
+                        isFuturePending ? "bg-purple-500" : meta.rail,
                       )}
                     >
                       <Icon className="size-3 text-white dark:text-black" />
@@ -400,9 +403,12 @@ export function CueRunSheet({
 
                   <div
                     className={cn(
-                      "mb-3 min-w-0 flex-1 rounded-xl border p-3 sm:p-4",
-                      isLive && "border-primary/40 bg-primary/5 shadow-sm",
-                      (cue.status === "completed" || cue.status === "skipped") && "opacity-70",
+                      "relative mb-3 min-w-0 flex-1 rounded-xl border p-3 sm:p-4 overflow-hidden",
+                      isLive ? "border-red-500/40 bg-gradient-to-t from-red-500/10 via-red-500/[0.02] to-card ring-1 ring-red-500/20 shadow-sm" : 
+                      isNext ? "border-emerald-500/40 bg-gradient-to-t from-emerald-500/10 via-emerald-500/[0.02] to-card" : 
+                      isFuturePending ? "border-purple-500/40 bg-gradient-to-t from-purple-500/10 via-purple-500/[0.02] to-card" :
+                      (cue.status === "completed" || cue.status === "skipped") ? "border-border/60 bg-muted/20 opacity-70" :
+                      "border-border bg-card",
                     )}
                   >
                     <div className="flex flex-wrap items-start justify-between gap-2">
@@ -508,6 +514,9 @@ export function CueRunSheet({
                         </span>
                       ) : null}
                     </div>
+                    {isLive && <div className="absolute bottom-0 inset-x-0 h-[2px] bg-gradient-to-r from-red-500 via-red-400/50 to-transparent" />}
+                    {isNext && <div className="absolute bottom-0 inset-x-0 h-[2px] bg-gradient-to-r from-emerald-500 via-emerald-400/50 to-transparent" />}
+                    {isFuturePending && <div className="absolute bottom-0 inset-x-0 h-[2px] bg-gradient-to-r from-purple-500 via-purple-400/50 to-transparent" />}
                   </div>
                 </li>
               )

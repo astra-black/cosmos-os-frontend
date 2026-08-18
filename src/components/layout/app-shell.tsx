@@ -73,7 +73,9 @@ export function AppShell({ incidentCount }: { incidentCount?: number }) {
     .toUpperCase()
 
   return (
-    <div className="flex min-h-dvh w-full">
+    <div className="flex min-h-dvh w-full relative">
+      {/* Ambient background glow for authenticated portal */}
+      <div className="glow" aria-hidden="true" />
       <SidebarProvider>
         <AppSidebar incidentCount={incidentCount} />
         <div className="flex flex-1 flex-col">

@@ -12,7 +12,7 @@ import {
   portalDecide,
 } from "@/lib/api/platform"
 import { ApiError } from "@/lib/api/client"
-import { clearPortalUser, getPortalUser } from "@/pages/portal-login-page"
+import { clearPortalUser, getPortalUser } from "@/pages"
 
 export function PortalHomePage() {
   const navigate = useNavigate()
