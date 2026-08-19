@@ -2,6 +2,7 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
   useState,
   type ReactNode,
@@ -50,6 +51,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null)
     setToken(null)
   }, [])
+
+  useEffect(() => {
+    const handleUnauthorized = () => {
+      logout()
+      const isPortal = window.location.pathname.startsWith("/portal")
+      window.location.href = isPortal ? "/portal/login" : "/login"
+    }
+    window.addEventListener("cosmos-unauthorized", handleUnauthorized)
+    return () => {
+      window.removeEventListener("cosmos-unauthorized", handleUnauthorized)
+    }
+  }, [logout])
 
   const updateUser = useCallback((updates: Partial<AuthUser>) => {
     setUser((current) => {

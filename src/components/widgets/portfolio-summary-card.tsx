@@ -70,7 +70,7 @@ export function PortfolioSummaryCard({
             <div className="flex items-center gap-2.5">
               <Avatar className="size-11 rounded-sm after:rounded-[inherit] after:border-0">
                 <AvatarFallback className="bg-primary/10 shrink-0 rounded-sm text-xs">
-                  {item.label.slice(0, 2).toUpperCase()}
+                  {String(item.label || "?").slice(0, 2).toUpperCase()}
                 </AvatarFallback>
               </Avatar>
               <div className="flex flex-col gap-1">

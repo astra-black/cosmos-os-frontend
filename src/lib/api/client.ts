@@ -83,6 +83,11 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
   const payload = await response.json().catch(() => ({}))
 
   if (!response.ok) {
+    if (response.status === 401) {
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new CustomEvent("cosmos-unauthorized"))
+      }
+    }
     let message =
       (payload as { error?: string; message?: string }).error ||
       (payload as { message?: string }).message ||

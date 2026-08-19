@@ -69,17 +69,21 @@ export function LandingPage() {
       <header className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 py-6 px-4 md:px-8 border-b border-transparent ${isStuck ? "bg-[#060110]/80 backdrop-blur-xl py-4 border-[#241a42]" : ""}`}>
         <div className="max-w-[1080px] mx-auto flex items-center justify-between">
           <div className="flex items-center gap-3">
+            <img src="/logo.png" alt="Astra Black logo" className="h-8 w-auto rounded-lg" />
             <span className="font-extrabold tracking-[0.25em] text-white text-lg font-sans">
               ASTRA<span className="text-[#CAB2FD]">BLACK</span>
             </span>
           </div>
-          <div className="flex items-center gap-3">
-            <Link 
-              to="/portal/login" 
-              className="text-[11px] font-extrabold tracking-wider text-[#9664FF] uppercase border border-[#241a42] hover:border-[#9664FF] hover:bg-[#9664FF]/5 px-4.5 py-2.5 rounded-xl transition-all duration-300"
+          <div className="flex items-center gap-4">
+            <button 
+              onClick={() => {
+                document.getElementById("waitlist-card")?.scrollIntoView({ behavior: "smooth" })
+                document.getElementById("waitlist-name")?.focus()
+              }}
+              className="text-[11px] font-extrabold tracking-wider text-[#9664FF] uppercase hover:text-white transition-all duration-300 hidden sm:block cursor-pointer"
             >
-              Portal Login
-            </Link>
+              Join Waitlist
+            </button>
             <Link 
               to="/login" 
               className="text-[11px] font-extrabold tracking-wider text-white bg-gradient-to-r from-[#6E28FF] to-[#5D0FFF] hover:shadow-[0_0_20px_rgba(110,40,255,0.4)] px-5 py-2.5 rounded-xl transition-all duration-300 transform hover:-translate-y-px"
@@ -102,11 +106,11 @@ export function LandingPage() {
           </h1>
           
           <p className="text-[16px] md:text-[17.5px] font-light text-[#B3ABC9] leading-[1.7] max-w-[620px] mb-12">
-            Astra Black matches creative databases with secure agentic workflows to autonomously ingest CRM leads, allocate production teams, check-in crew, and audit Timesheets.
+            Astra Black matches custom databases with secure agentic workflows to autonomously ingest CRM leads, allocate production teams, check-in crew, and audit billing sheets.
           </p>
 
           {/* Waitlist Subscription Card */}
-          <div className="w-full max-w-[500px] bg-[#0d0620]/60 border border-[#241a42] rounded-2xl p-6 md:p-8 backdrop-blur-lg shadow-[0_0_50px_rgba(110,40,255,0.15)] relative overflow-hidden text-left mb-6">
+          <div id="waitlist-card" className="w-full max-w-[500px] bg-[#0d0620]/60 border border-[#241a42] rounded-2xl p-6 md:p-8 backdrop-blur-lg shadow-[0_0_50px_rgba(110,40,255,0.15)] relative overflow-hidden text-left mb-6">
             {submitted ? (
               <div className="flex flex-col items-center justify-center text-center py-6">
                 <div className="w-12 h-12 rounded-full bg-[#63D516]/10 border border-[#63D516]/30 flex items-center justify-center mb-4">
@@ -133,6 +137,7 @@ export function LandingPage() {
                 </div>
                 <div className="flex flex-col gap-2">
                   <input 
+                    id="waitlist-name"
                     type="text" 
                     placeholder="Your Name" 
                     value={name}
@@ -154,6 +159,49 @@ export function LandingPage() {
                 </button>
               </form>
             )}
+          </div>
+        </div>
+      </section>
+
+      {/* Product Showcase Section (Graphic / Animated tour placeholder) */}
+      <section id="showcase" className="sect pt-0">
+        <div className="wrap">
+          <div className="relative mx-auto max-w-[900px] rounded-2xl border border-[#241a42] bg-[#0d0620]/60 p-2 shadow-[0_0_50px_rgba(110,40,255,0.1)] backdrop-blur-md">
+            {/* Window control bar */}
+            <div className="flex items-center justify-between border-b border-[#241a42]/60 px-4 py-3">
+              <div className="flex items-center gap-1.5">
+                <div className="size-3 rounded-full bg-[#FF5F56]" />
+                <div className="size-3 rounded-full bg-[#FFBD2E]" />
+                <div className="size-3 rounded-full bg-[#27C93F]" />
+              </div>
+              <div className="rounded bg-[#140b2a] border border-[#241a42] px-6 py-1 text-[10px] font-mono text-[#7E769B] tracking-wide">
+                astra.black/agency/dashboard
+              </div>
+              <div className="w-12" /> {/* Spacer */}
+            </div>
+            
+            {/* Visual Screen Content */}
+            <div className="relative aspect-[16/9] w-full overflow-hidden bg-[#060110] flex items-center justify-center group cursor-pointer">
+              {/* Pulsing play hover button */}
+              <div className="absolute z-10 flex size-16 items-center justify-center rounded-full bg-[#6E28FF]/95 text-white shadow-lg shadow-[#6E28FF]/30 transition-transform group-hover:scale-110">
+                <Play className="size-6 fill-current ml-1" />
+              </div>
+              
+              {/* Graphic/Animation placeholder */}
+              <div className="absolute inset-0 bg-gradient-to-tr from-[#0d0620] via-[#140b2a] to-[#060110] opacity-90 flex flex-col justify-end p-8 text-left">
+                <div className="max-w-[420px] z-10">
+                  <span className="text-[10px] font-extrabold tracking-wider text-[#9664FF] uppercase block mb-1">Interactive Showcase</span>
+                  <h4 className="text-white text-lg font-bold mb-2">Watch Astra Black OS in Action</h4>
+                  <p className="text-xs text-[#B3ABC9] leading-relaxed">
+                    Watch the walkthrough of how our specialized agents connect custom databases, Qualification channels, and check-in timelines autonomously.
+                  </p>
+                </div>
+              </div>
+              
+              {/* Glow lights inside screen */}
+              <div className="absolute top-1/4 left-1/3 size-64 rounded-full bg-[#6E28FF] opacity-10 blur-[100px] pointer-events-none" />
+              <div className="absolute bottom-1/4 right-1/4 size-64 rounded-full bg-[#BE46FF] opacity-10 blur-[100px] pointer-events-none" />
+            </div>
           </div>
         </div>
       </section>
@@ -361,10 +409,10 @@ export function LandingPage() {
           <div className="flex flex-col gap-4">
             <div className="card p-6">
               <h4 className="text-white text-[15px] font-bold mb-2 flex items-center gap-2">
-                <HelpCircle className="w-4 h-4 text-[#9664FF]" /> How does Airtable integration work?
+                <HelpCircle className="w-4 h-4 text-[#9664FF]" /> How does the core data synchronization work?
               </h4>
               <p className="text-[13.5px] font-light text-[#B3ABC9] leading-relaxed pl-6">
-                Astra Black connects directly to your Airtable bases via Personal Access Tokens. Agents read data from tables, execute logic in the middleware, and write structural updates back, excluding read-only computed fields.
+                Astra Black integrates directly with your enterprise business databases and APIs. Our background agents monitor records, execute task logic in the secure middleware, and synchronize updates back to your source tables in real time.
               </p>
             </div>
 
@@ -408,10 +456,13 @@ export function LandingPage() {
       {/* Footer */}
       <footer className="py-12 border-t border-[#241a42] bg-[#060110]/50 relative z-10 px-4 md:px-8">
         <div className="max-w-[1080px] mx-auto flex flex-col md:flex-row items-center justify-between gap-6 text-[#7E769B] text-xs">
-          <div className="text-center md:text-left">
-            <span className="font-extrabold tracking-[0.25em] text-white text-md block mb-1">
-              ASTRA<span className="text-[#6E28FF]">BLACK</span>
-            </span>
+          <div className="text-center md:text-left flex flex-col items-center md:items-start">
+            <div className="flex items-center gap-2 mb-1">
+              <img src="/logo.png" alt="Astra Black logo" className="h-6 w-auto rounded-md" />
+              <span className="font-extrabold tracking-[0.25em] text-white text-md">
+                ASTRA<span className="text-[#6E28FF]">BLACK</span>
+              </span>
+            </div>
             <p className="text-[11px] font-light">&copy; 2026 Astra Black. All rights reserved.</p>
           </div>
           <div className="flex gap-6 font-semibold uppercase tracking-wider text-[11px]">
