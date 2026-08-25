@@ -29,8 +29,19 @@ type AuthContextValue = {
 const AuthContext = createContext<AuthContextValue | null>(null)
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<AuthUser | null>(() => getStoredUser<AuthUser>())
-  const [token, setToken] = useState<string | null>(() => getAccessToken())
+  const [user, setUser] = useState<AuthUser | null>(null)
+  const [token, setToken] = useState<string | null>(null)
+  const [hydrated, setHydrated] = useState(false)
+
+  useEffect(() => {
+    const storedToken = getAccessToken()
+    const storedUser = getStoredUser<AuthUser>()
+    if (storedToken && storedUser) {
+      setToken(storedToken)
+      setUser(storedUser)
+    }
+    setHydrated(true)
+  }, [])
 
   const login = useCallback(async (email: string, password: string) => {
     const response = await loginRequest(email, password)
@@ -76,12 +87,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const value = useMemo(
     () => ({
       user,
-      isAuthenticated: Boolean(token),
+      isAuthenticated: hydrated && Boolean(token),
       login,
       logout,
       updateUser,
     }),
-    [user, token, login, logout, updateUser],
+    [user, token, hydrated, login, logout, updateUser],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

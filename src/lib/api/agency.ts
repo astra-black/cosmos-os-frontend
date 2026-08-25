@@ -44,6 +44,42 @@ export async function login(email: string, password: string) {
   })
 }
 
+export async function signup(name: string, email: string, password: string) {
+  return apiRequest<
+    ApiEnvelope<{
+      user: AuthUser
+      accessToken: string
+      refreshToken: string
+    }>
+  >("/api/v1/auth/signup", {
+    method: "POST",
+    auth: false,
+    body: JSON.stringify({ name, email, password }),
+  })
+}
+
+export async function joinWaitlist(name: string, email: string) {
+  return apiRequest<
+    ApiEnvelope<{
+      queuePosition: number
+    }>
+  >("/api/v1/waitlist/join", {
+    method: "POST",
+    auth: false,
+    body: JSON.stringify({ name, email }),
+  })
+}
+
+export async function forgotPassword(email: string) {
+  return apiRequest<
+    ApiEnvelope<{ success: boolean }>
+  >("/api/v1/auth/forgot-password", {
+    method: "POST",
+    auth: false,
+    body: JSON.stringify({ email }),
+  })
+}
+
 export async function listEvents(params: { page?: number; limit?: number; status?: string } = {}) {
   const query = new URLSearchParams()
   if (params.page != null) query.set("page", String(params.page))

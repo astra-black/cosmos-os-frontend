@@ -61,6 +61,7 @@ function ProtectedRoute() {
 
 function PublicRoute() {
   const { isAuthenticated } = useAuth()
+  if (typeof window === "undefined") return <LandingPage />
   return isAuthenticated ? <Navigate to="/dashboard" replace /> : <LandingPage />
 }
 

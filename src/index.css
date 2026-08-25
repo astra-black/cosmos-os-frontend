@@ -252,15 +252,70 @@
   }
 }
 
+@keyframes fadeSlideIn {
+  to {
+    opacity: 1;
+    filter: blur(0px);
+    transform: translateY(0px);
+  }
+}
+
+@keyframes slideRightIn {
+  to {
+    opacity: 1;
+    filter: blur(0px);
+    transform: translateX(0px);
+  }
+}
+
+@keyframes testimonialIn {
+  to {
+    opacity: 1;
+    filter: blur(0px);
+    transform: translateY(0px) scale(1);
+  }
+}
+
+.animate-element {
+  opacity: 0;
+  filter: blur(8px);
+  transform: translateY(20px);
+  animation: fadeSlideIn 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-slide-right {
+  opacity: 0;
+  filter: blur(8px);
+  transform: translateX(30px);
+  animation: slideRightIn 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-testimonial {
+  opacity: 0;
+  filter: blur(8px);
+  transform: translateY(20px) scale(0.95);
+  animation: testimonialIn 0.7s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-delay-100 { animation-delay: 100ms; }
+.animate-delay-200 { animation-delay: 200ms; }
+.animate-delay-300 { animation-delay: 300ms; }
+.animate-delay-400 { animation-delay: 400ms; }
+.animate-delay-500 { animation-delay: 500ms; }
+.animate-delay-600 { animation-delay: 600ms; }
+.animate-delay-700 { animation-delay: 700ms; }
+.animate-delay-800 { animation-delay: 800ms; }
+.animate-delay-900 { animation-delay: 900ms; }
+.animate-delay-1000 { animation-delay: 1000ms; }
+.animate-delay-1200 { animation-delay: 1200ms; }
+.animate-delay-1400 { animation-delay: 1400ms; }
+
 .glow {
   position: fixed;
-  inset: -10%; /* Overflow allows drift scaling without revealing edges */
-  z-index: -1; /* Safely behind all content cards and sidebar items */
+  inset: -10%;
+  z-index: -1;
   pointer-events: none;
   background:
-    /* Highly visible premium cyber dotted grid matrix */
-    radial-gradient(rgba(150, 100, 255, 0.22) 1.5px, transparent 1.5px) 0 0 / 28px 28px,
-    /* Dynamic layered ambient lights */
     radial-gradient(ellipse 1000px 700px at 12% -12%, rgba(110, 40, 255, 0.18), transparent 62%),
     radial-gradient(ellipse 800px 600px at 92% 6%, rgba(190, 70, 255, 0.08), transparent 62%),
     radial-gradient(ellipse 900px 600px at 50% 104%, rgba(110, 40, 255, 0.07), transparent 62%);
@@ -292,8 +347,9 @@
   margin-bottom: 56px;
 }
 
-/* Cards */
-.astra-black-theme .card {
+/* Cards - Dark Mode */
+.astra-black-theme.dark .card,
+.dark .astra-black-theme .card {
   background: var(--ink-2);
   border: 1px solid var(--line);
   border-radius: 14px;
@@ -301,7 +357,8 @@
   transition: border-color .3s, transform .3s, background .3s;
 }
 
-.astra-black-theme .card:hover {
+.astra-black-theme.dark .card:hover,
+.dark .astra-black-theme .card:hover {
   border-color: var(--ac, var(--lavender));
   transform: translateY(-4px);
   background: var(--ink-3);
@@ -326,7 +383,8 @@
   stroke: var(--ac, var(--lavender));
 }
 
-.astra-black-theme .line-card {
+.astra-black-theme.dark .line-card,
+.dark .astra-black-theme .line-card {
   background: var(--ink-2);
   border: 1px solid var(--line);
   border-radius: 12px;
@@ -334,13 +392,15 @@
   transition: border-color .3s, transform .3s;
 }
 
-.astra-black-theme .line-card:hover {
+.astra-black-theme.dark .line-card:hover,
+.dark .astra-black-theme .line-card:hover {
   border-color: var(--ac, var(--lavender));
   transform: translateY(-3px);
   box-shadow: 0 12px 30px -10px rgba(6,1,16,0.8), 0 0 20px -5px var(--ac, var(--lavender));
 }
 
-.astra-black-theme .node {
+.astra-black-theme.dark .node,
+.dark .astra-black-theme .node {
   background: var(--ink-2);
   border: 1px solid var(--line);
   border-top: 2px solid var(--ac);
@@ -349,14 +409,16 @@
   transition: border-color .3s, transform .3s, background .3s;
 }
 
-.astra-black-theme .node:hover {
+.astra-black-theme.dark .node:hover,
+.dark .astra-black-theme .node:hover {
   border-color: var(--ac);
   transform: translateY(-5px);
   background: var(--ink-3);
   box-shadow: 0 15px 35px -12px rgba(6,1,16,0.9), 0 0 25px -5px var(--ac);
 }
 
-.astra-black-theme .agent {
+.astra-black-theme.dark .agent,
+.dark .astra-black-theme .agent {
   background: var(--ink-2);
   border: 1px solid var(--line);
   border-radius: 14px;
@@ -366,7 +428,8 @@
   transition: border-color .3s, transform .3s, background .3s;
 }
 
-.astra-black-theme .agent::before {
+.astra-black-theme.dark .agent::before,
+.dark .astra-black-theme .agent::before {
   content: '';
   position: absolute;
   top: 0;
@@ -376,37 +439,126 @@
   background: var(--ac);
 }
 
-.astra-black-theme .agent:hover {
+.astra-black-theme.dark .agent:hover,
+.dark .astra-black-theme .agent:hover {
   border-color: var(--ac);
   transform: translateY(-4px);
   background: var(--ink-3);
   box-shadow: 0 15px 35px -12px rgba(6,1,16,0.9), 0 0 25px -5px var(--ac);
 }
 
+/* Cards - Light Mode */
+.astra-black-theme:not(.dark) .card,
+.light .astra-black-theme .card {
+  background: #ffffff;
+  border: 1px solid #E0DCE8;
+  border-radius: 14px;
+  padding: 26px 22px;
+  transition: border-color .3s, transform .3s, background .3s;
+}
+
+.astra-black-theme:not(.dark) .card:hover,
+.light .astra-black-theme .card:hover {
+  border-color: #9664FF;
+  transform: translateY(-4px);
+  background: #F5F3F8;
+  box-shadow: 0 15px 35px -12px rgba(0,0,0,0.08), 0 0 25px -5px rgba(150,100,255,0.3);
+}
+
+.astra-black-theme:not(.dark) .line-card,
+.light .astra-black-theme .line-card {
+  background: #ffffff;
+  border: 1px solid #E0DCE8;
+  border-radius: 12px;
+  padding: 22px 18px;
+  transition: border-color .3s, transform .3s;
+}
+
+.astra-black-theme:not(.dark) .line-card:hover,
+.light .astra-black-theme .line-card:hover {
+  border-color: #9664FF;
+  transform: translateY(-3px);
+  box-shadow: 0 12px 30px -10px rgba(0,0,0,0.08), 0 0 20px -5px rgba(150,100,255,0.3);
+}
+
+.astra-black-theme:not(.dark) .node,
+.light .astra-black-theme .node {
+  background: #ffffff;
+  border: 1px solid #E0DCE8;
+  border-top: 2px solid var(--ac);
+  border-radius: 15px;
+  padding: 26px 22px;
+  transition: border-color .3s, transform .3s, background .3s;
+}
+
+.astra-black-theme:not(.dark) .node:hover,
+.light .astra-black-theme .node:hover {
+  border-color: var(--ac);
+  transform: translateY(-5px);
+  background: #F5F3F8;
+  box-shadow: 0 15px 35px -12px rgba(0,0,0,0.08), 0 0 25px -5px var(--ac);
+}
+
+.astra-black-theme:not(.dark) .agent,
+.light .astra-black-theme .agent {
+  background: #ffffff;
+  border: 1px solid #E0DCE8;
+  border-radius: 14px;
+  padding: 24px 22px;
+  position: relative;
+  overflow: hidden;
+  transition: border-color .3s, transform .3s, background .3s;
+}
+
+.astra-black-theme:not(.dark) .agent::before,
+.light .astra-black-theme .agent::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: var(--ac);
+}
+
+.astra-black-theme:not(.dark) .agent:hover,
+.light .astra-black-theme .agent:hover {
+  border-color: var(--ac);
+  transform: translateY(-4px);
+  background: #F5F3F8;
+  box-shadow: 0 15px 35px -12px rgba(0,0,0,0.08), 0 0 25px -5px var(--ac);
+}
+
 /* Buttons */
-.astra-black-theme .btn {
+.btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  gap: 8px;
   background: linear-gradient(180deg, #9B6BFF 0%, #7B33F5 52%, #5D0FFF 100%);
   color: #fff;
   text-decoration: none;
-  padding: 20px 42px;
+  padding: 14px 32px;
   border-radius: 12px;
-  font-family: 'Mulish', sans-serif;
-  font-size: 15px;
-  font-weight: 800;
-  letter-spacing: .13em;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: .06em;
   text-transform: uppercase;
-  transition: transform .25s, box-shadow .25s;
+  transition: transform .25s, box-shadow .25s, opacity .25s;
   box-shadow: 0 0 34px -6px rgba(123,51,245,.62), 0 0 0 1px rgba(180,140,255,.3);
   border: none;
   cursor: pointer;
 }
 
-.astra-black-theme .btn:hover {
+.btn:hover {
   transform: translateY(-2px);
   box-shadow: 0 0 54px -4px rgba(140,80,255,.78), 0 0 0 1px rgba(200,170,255,.45);
+}
+
+.btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
 }
 
 .astra-black-theme .agent .try {
@@ -460,13 +612,13 @@
 }
 
 /* Reveal transition classes */
-.rev {
+.rev, .reveal {
   opacity: 0;
   transform: translateY(26px);
   transition: opacity .85s cubic-bezier(.2,.7,.2,1), transform .85s cubic-bezier(.2,.7,.2,1);
 }
 
-.rev.in {
+.rev.in, .reveal.in {
   opacity: 1;
   transform: none;
 }
