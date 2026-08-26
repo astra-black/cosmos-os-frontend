@@ -54,7 +54,7 @@ const TestimonialCard = ({ testimonial, delay }: { testimonial: Testimonial; del
 export const SignInPage: React.FC<SignInPageProps> = ({
   title = <span className="font-light tracking-tighter">Welcome</span>,
   description = "Access your account and continue your journey with us",
-  heroImageSrc = "https://images.unsplash.com/photo-1642615835477-d303d7dc9ee9?w=2160&q=80",
+  heroImageSrc = "/astra_portal.jpeg",
   testimonials = [],
   onSignIn,
   onSignUp,
