@@ -15,10 +15,13 @@ import { toast } from "sonner"
 
 import { CommentsPanel } from "@/components/shared/comments-panel"
 import { ConfirmationDialog } from "@/components/shared/confirmation-dialog"
+import { EntityFormDialog } from "@/components/shared/entity-form-dialog"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Select } from "@/components/ui/select"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useAssets, useProjects } from "@/hooks/use-agency-data"
 import { createApproval, deleteAsset, updateAsset, uploadAsset } from "@/lib/api/agency"
@@ -50,6 +53,18 @@ const statusTone: Record<string, string> = {
   archived: "bg-muted text-muted-foreground opacity-80",
 }
 const ASSET_TAGS = ["draft", "final", "hero", "social"] as const
+const ASSET_STATUSES = ["draft", "in_review", "approved", "archived"] as const
+
+type AssetEditForm = {
+  assetName: string
+  projectId: string
+  version: string
+  status: string
+  tags: string
+  fileType: string
+  fileSize: string
+  fileUrl: string
+}
 
 export function AssetsPage() {
   const { user } = useAuth()
@@ -67,6 +82,17 @@ export function AssetsPage() {
   const [requestBusy, setRequestBusy] = useState(false)
   const [pendingAssetId, setPendingAssetId] = useState<string | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<Asset | null>(null)
+  const [editTarget, setEditTarget] = useState<Asset | null>(null)
+  const [assetEditForm, setAssetEditForm] = useState<AssetEditForm>({
+    assetName: "",
+    projectId: "",
+    version: "",
+    status: "draft",
+    tags: "",
+    fileType: "",
+    fileSize: "",
+    fileUrl: "",
+  })
   const [uploadBusy, setUploadBusy] = useState(false)
   const [uploadProjectId, setUploadProjectId] = useState("")
   const [uploadVersion, setUploadVersion] = useState("1.0")
@@ -176,20 +202,74 @@ export function AssetsPage() {
     return asset.assetId || asset.recordId || ""
   }
 
-  async function editAsset(asset: Asset) {
+  function startEditAsset(asset: Asset) {
     if (!canRequest || !assetId(asset)) return
-    const name = window.prompt("Asset name", asset.assetName)
-    if (name == null) return
-    if (!name.trim()) {
+    setEditTarget(asset)
+    setAssetEditForm({
+      assetName: asset.assetName,
+      projectId: asset.projectId ?? "",
+      version: asset.version ?? "",
+      status: asset.status ?? "draft",
+      tags: asset.tags?.join(", ") ?? "",
+      fileType: asset.fileType ?? "",
+      fileSize: asset.fileSize == null ? "" : String(asset.fileSize),
+      fileUrl: asset.fileUrl ?? "",
+    })
+  }
+
+  async function saveAsset() {
+    if (!editTarget || !canRequest || !assetId(editTarget)) return
+    const name = assetEditForm.assetName.trim()
+    const version = assetEditForm.version.trim()
+    const fileType = assetEditForm.fileType.trim()
+    const fileSize = assetEditForm.fileSize.trim()
+    const fileUrl = assetEditForm.fileUrl.trim()
+    if (!name) {
       toast.error("Asset name is required")
       return
     }
-    if (name.trim() === asset.assetName) return
-    setPendingAssetId(assetId(asset))
+    if (!version) {
+      toast.error("Asset version is required")
+      return
+    }
+    if (!ASSET_STATUSES.includes(assetEditForm.status as (typeof ASSET_STATUSES)[number])) {
+      toast.error("Select a valid asset status")
+      return
+    }
+    if (fileSize && (!/^\d+$/.test(fileSize) || Number(fileSize) < 0)) {
+      toast.error("File size must be a non-negative whole number")
+      return
+    }
+    if (fileUrl && fileUrl !== (editTarget.fileUrl ?? "")) {
+      try {
+        new URL(fileUrl)
+      } catch {
+        toast.error("File URL must be a valid URL")
+        return
+      }
+    }
+
+    const projectId = assetEditForm.projectId.trim()
+    const project = projectsList.find((item) => item.projectId === projectId)
+    const projectName = project?.projectName ??
+      (projectId === (editTarget.projectId ?? "") ? editTarget.projectName ?? null : null)
+    const fileUrlChanged = fileUrl !== (editTarget.fileUrl ?? "")
+    setPendingAssetId(assetId(editTarget))
     try {
-      await updateAsset(assetId(asset), { assetName: name.trim() })
+      await updateAsset(assetId(editTarget), {
+        assetName: name,
+        projectId: projectId || null,
+        projectName,
+        version,
+        status: assetEditForm.status,
+        tags: assetEditForm.tags.split(",").map((tag) => tag.trim()).filter(Boolean),
+        ...(fileType ? { fileType } : {}),
+        ...(fileSize ? { fileSize: Number(fileSize) } : {}),
+        ...(fileUrlChanged ? { fileUrl: fileUrl || null } : {}),
+      })
       await reloadAssets()
       toast.success("Asset updated")
+      setEditTarget(null)
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : "Unable to update asset")
     } finally {
@@ -490,7 +570,7 @@ export function AssetsPage() {
                          {requestBusy ? <Loader2Icon className="size-3.5 animate-spin" /> : <CheckSquareIcon className="size-3.5" />}
                          Request approval
                        </Button>
-                       <Button size="sm" variant="outline" disabled={Boolean(pendingAssetId)} onClick={() => void editAsset(selectedAsset)}>
+                        <Button size="sm" variant="outline" disabled={Boolean(pendingAssetId)} onClick={() => startEditAsset(selectedAsset)}>
                          <PencilIcon className="size-3.5" />Edit
                        </Button>
                        <Button size="sm" variant="destructive" disabled={Boolean(pendingAssetId)} onClick={() => setDeleteTarget(selectedAsset)}>
@@ -525,6 +605,116 @@ export function AssetsPage() {
           </div>
         </div>
       )}
+      <EntityFormDialog
+        open={Boolean(editTarget)}
+        onOpenChange={(open) => {
+          if (!open && !pendingAssetId) setEditTarget(null)
+        }}
+        title="Edit asset metadata"
+        description="Update the asset details used for delivery and review."
+        onSubmit={saveAsset}
+        submitLabel="Save changes"
+        pending={Boolean(editTarget && pendingAssetId === assetId(editTarget))}
+        submitDisabled={!assetEditForm.assetName.trim() || !assetEditForm.version.trim()}
+        maxWidth="max-w-2xl"
+      >
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid gap-1.5 sm:col-span-2">
+            <Label htmlFor="asset-edit-name">Asset name</Label>
+            <Input
+              id="asset-edit-name"
+              value={assetEditForm.assetName}
+              onChange={(event) => setAssetEditForm((form) => ({ ...form, assetName: event.target.value }))}
+              placeholder="Asset name"
+              required
+            />
+          </div>
+          <div className="grid gap-1.5">
+            <Label htmlFor="asset-edit-project">Project</Label>
+            <Select
+              id="asset-edit-project"
+              value={assetEditForm.projectId}
+              onChange={(event) => setAssetEditForm((form) => ({ ...form, projectId: event.target.value }))}
+            >
+              <option value="">No project</option>
+              {projectsList.map((project) => (
+                <option key={project.projectId} value={project.projectId}>
+                  {project.projectName}
+                </option>
+              ))}
+              {editTarget?.projectId && !projectsList.some((project) => project.projectId === editTarget.projectId) ? (
+                <option value={editTarget.projectId}>
+                  {editTarget.projectName || editTarget.projectId}
+                </option>
+              ) : null}
+            </Select>
+          </div>
+          <div className="grid gap-1.5">
+            <Label htmlFor="asset-edit-version">Version</Label>
+            <Input
+              id="asset-edit-version"
+              value={assetEditForm.version}
+              onChange={(event) => setAssetEditForm((form) => ({ ...form, version: event.target.value }))}
+              placeholder="1.0"
+              required
+            />
+          </div>
+          <div className="grid gap-1.5">
+            <Label htmlFor="asset-edit-status">Status</Label>
+            <Select
+              id="asset-edit-status"
+              value={assetEditForm.status}
+              onChange={(event) => setAssetEditForm((form) => ({ ...form, status: event.target.value }))}
+            >
+              {ASSET_STATUSES.map((status) => (
+                <option key={status} value={status}>
+                  {status.replace("_", " ")}
+                </option>
+              ))}
+            </Select>
+          </div>
+          <div className="grid gap-1.5">
+            <Label htmlFor="asset-edit-tags">Tags</Label>
+            <Input
+              id="asset-edit-tags"
+              value={assetEditForm.tags}
+              onChange={(event) => setAssetEditForm((form) => ({ ...form, tags: event.target.value }))}
+              placeholder="hero, final"
+            />
+          </div>
+          <div className="grid gap-1.5">
+            <Label htmlFor="asset-edit-type">File type</Label>
+            <Input
+              id="asset-edit-type"
+              value={assetEditForm.fileType}
+              onChange={(event) => setAssetEditForm((form) => ({ ...form, fileType: event.target.value }))}
+              placeholder="pdf"
+            />
+          </div>
+          <div className="grid gap-1.5">
+            <Label htmlFor="asset-edit-size">File size (bytes)</Label>
+            <Input
+              id="asset-edit-size"
+              type="number"
+              min="0"
+              step="1"
+              value={assetEditForm.fileSize}
+              onChange={(event) => setAssetEditForm((form) => ({ ...form, fileSize: event.target.value }))}
+              placeholder="Optional"
+            />
+          </div>
+          <div className="grid gap-1.5 sm:col-span-2">
+            <Label htmlFor="asset-edit-url">File URL</Label>
+            <Input
+              id="asset-edit-url"
+              type="url"
+              value={assetEditForm.fileUrl}
+              onChange={(event) => setAssetEditForm((form) => ({ ...form, fileUrl: event.target.value }))}
+              placeholder="https://..."
+            />
+          </div>
+        </div>
+      </EntityFormDialog>
       <ConfirmationDialog
         open={Boolean(deleteTarget)}
         onOpenChange={(open) => { if (!open && !pendingAssetId) setDeleteTarget(null) }}

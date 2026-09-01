@@ -8,8 +8,19 @@ import { ConfirmationDialog } from "@/components/shared/confirmation-dialog"
 import { withMutationFeedback } from "@/components/shared/mutation-feedback"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Select } from "@/components/ui/select"
 import { Skeleton } from "@/components/ui/skeleton"
+import { Textarea } from "@/components/ui/textarea"
 import { useEventScope } from "@/hooks/use-event-scope"
 import {
   advanceCues,
@@ -36,13 +47,53 @@ export function CuesPage() {
   const [error, setError] = useState<string | null>(null)
   const [busyCueId, setBusyCueId] = useState<string | null>(null)
   const [advancing, setAdvancing] = useState(false)
-  const [showAdd, setShowAdd] = useState(false)
-  const [adding, setAdding] = useState(false)
-  const [newName, setNewName] = useState("")
-  const [newDuration, setNewDuration] = useState("10")
-  const [newLocation, setNewLocation] = useState("")
+  const [isSaving, setIsSaving] = useState(false)
+  const [isDialogOpen, setIsDialogOpen] = useState(false)
+  const [editingCue, setEditingCue] = useState<Cue | null>(null)
   const [pendingCueId, setPendingCueId] = useState<string | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<Cue | null>(null)
+
+  interface CueFormData {
+    name: string
+    duration: string
+    location: string
+    description: string
+    priority: string
+    departmentName: string
+    assignedTo: string
+  }
+
+  const emptyForm: CueFormData = {
+    name: "",
+    duration: "10",
+    location: "",
+    description: "",
+    priority: "medium",
+    departmentName: "",
+    assignedTo: "",
+  }
+
+  const [form, setForm] = useState<CueFormData>(emptyForm)
+
+  function openCreateDialog() {
+    setEditingCue(null)
+    setForm(emptyForm)
+    setIsDialogOpen(true)
+  }
+
+  function openEditDialog(cue: Cue) {
+    setEditingCue(cue)
+    setForm({
+      name: cue.name || cue.title || "",
+      duration: String(cue.duration || 10),
+      location: cue.location || "",
+      description: cue.description || "",
+      priority: cue.priority || "medium",
+      departmentName: cue.departmentName || "",
+      assignedTo: cue.assignedTo || "",
+    })
+    setIsDialogOpen(true)
+  }
 
   const reload = useCallback(async () => {
     if (!eventId) return
@@ -179,52 +230,48 @@ export function CuesPage() {
     }
   }
 
-  async function handleAdd() {
-    if (!eventId || !canWrite || !newName.trim()) return
-    setAdding(true)
+  async function handleSave() {
+    if (!eventId || !canWrite || !form.name.trim()) return
+    setIsSaving(true)
     try {
-      // Schedule after last cue by default
-      const last = [...cues].sort(
-        (a, b) =>
-          new Date(a.scheduledTime || 0).getTime() - new Date(b.scheduledTime || 0).getTime(),
-      )[cues.length - 1]
-      const base = last?.scheduledTime
-        ? new Date(last.scheduledTime).getTime() + (last.duration || 10) * 60_000
-        : Date.now()
+      if (editingCue) {
+        await updateCue(eventId, editingCue.cueId, {
+          name: form.name.trim(),
+          duration: Number(form.duration) || 10,
+          location: form.location.trim() || undefined,
+          description: form.description.trim() || undefined,
+          priority: form.priority || "medium",
+          departmentName: form.departmentName.trim() || undefined,
+          assignedTo: form.assignedTo.trim() || undefined,
+        })
+        toast.success("Cue updated")
+      } else {
+        const last = [...cues].sort(
+          (a, b) =>
+            new Date(a.scheduledTime || 0).getTime() - new Date(b.scheduledTime || 0).getTime(),
+        )[cues.length - 1]
+        const base = last?.scheduledTime
+          ? new Date(last.scheduledTime).getTime() + (last.duration || 10) * 60_000
+          : Date.now()
 
-      await createCue(eventId, {
-        name: newName.trim(),
-        duration: Number(newDuration) || 10,
-        location: newLocation.trim() || undefined,
-        scheduledTime: new Date(base).toISOString(),
-        priority: "medium",
-      })
-      setNewName("")
-      setNewLocation("")
-      setNewDuration("10")
-      setShowAdd(false)
+        await createCue(eventId, {
+          name: form.name.trim(),
+          duration: Number(form.duration) || 10,
+          location: form.location.trim() || undefined,
+          description: form.description.trim() || undefined,
+          scheduledTime: new Date(base).toISOString(),
+          priority: form.priority || "medium",
+          departmentName: form.departmentName.trim() || undefined,
+        })
+        toast.success("Cue added to run sheet")
+      }
+      setIsDialogOpen(false)
       await reload()
-      toast.success("Cue added to run sheet")
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "Could not add cue")
+      toast.error(err instanceof ApiError ? err.message : "Save failed")
     } finally {
-      setAdding(false)
+      setIsSaving(false)
     }
-  }
-
-  async function handleEdit(cue: Cue) {
-    if (!eventId || !canWrite) return
-    const name = window.prompt("Cue name", cue.name || cue.title || "")
-    if (name == null || !name.trim() || name.trim() === (cue.name || cue.title)) return
-    setPendingCueId(cue.cueId)
-    try {
-      await withMutationFeedback(updateCue(eventId, cue.cueId, { name: name.trim() }), {
-        loading: "Updating cue...", success: "Cue updated",
-        error: (err) => err instanceof ApiError ? err.message : "Could not update cue",
-      })
-      await reload()
-    } catch (err) { toast.error(err instanceof ApiError ? err.message : "Could not update cue")
-    } finally { setPendingCueId(null) }
   }
 
   async function handleDelete(cue: Cue) {
@@ -254,8 +301,7 @@ export function CuesPage() {
           canWrite ? (
             <Button
               size="sm"
-              variant={showAdd ? "default" : "outline"}
-              onClick={() => setShowAdd((v) => !v)}
+              onClick={openCreateDialog}
             >
               <PlusIcon className="size-3.5" />
               Add cue
@@ -263,40 +309,6 @@ export function CuesPage() {
           ) : undefined
         }
       />
-
-      {showAdd && canWrite ? (
-        <Card className="flex flex-col gap-3 p-4 sm:flex-row sm:items-end">
-          <div className="flex flex-1 flex-col gap-1.5">
-            <label className="text-muted-foreground text-xs font-medium">Cue name</label>
-            <Input
-              placeholder="e.g. Q&A handoff"
-              value={newName}
-              onChange={(e) => setNewName(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && void handleAdd()}
-            />
-          </div>
-          <div className="flex w-24 flex-col gap-1.5">
-            <label className="text-muted-foreground text-xs font-medium">Minutes</label>
-            <Input
-              type="number"
-              min={1}
-              value={newDuration}
-              onChange={(e) => setNewDuration(e.target.value)}
-            />
-          </div>
-          <div className="flex flex-1 flex-col gap-1.5">
-            <label className="text-muted-foreground text-xs font-medium">Location</label>
-            <Input
-              placeholder="Main stage"
-              value={newLocation}
-              onChange={(e) => setNewLocation(e.target.value)}
-            />
-          </div>
-          <Button size="sm" disabled={adding || !newName.trim()} onClick={() => void handleAdd()}>
-            {adding ? "Adding…" : "Save cue"}
-          </Button>
-        </Card>
-      ) : null}
 
       {!canWrite ? (
         <p className="text-muted-foreground text-xs">
@@ -325,10 +337,115 @@ export function CuesPage() {
           onSkip={handleSkip}
           onReset={handleReset}
            onAdvance={handleAdvance}
-            onEdit={pendingCueId ? undefined : handleEdit}
+            onEdit={pendingCueId ? undefined : openEditDialog}
             onDelete={pendingCueId ? undefined : (cue) => setDeleteTarget(cue)}
          />
       )}
+      {/* Add / Edit Cue Modal Dialog */}
+      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>{editingCue ? "Edit Cue" : "Add Cue"}</DialogTitle>
+            <DialogDescription>
+              {editingCue
+                ? "Update cue name, timing, location, and assignment."
+                : "Add a new cue to the run sheet. It will be scheduled after the last cue."}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="grid gap-4 py-2">
+            <div className="grid gap-1.5">
+              <Label htmlFor="cue-name">Cue Name *</Label>
+              <Input
+                id="cue-name"
+                placeholder="e.g. Q&A handoff"
+                value={form.name}
+                onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="grid gap-1.5">
+                <Label htmlFor="cue-duration">Duration (minutes)</Label>
+                <Input
+                  id="cue-duration"
+                  type="number"
+                  min={1}
+                  placeholder="10"
+                  value={form.duration}
+                  onChange={(e) => setForm((f) => ({ ...f, duration: e.target.value }))}
+                />
+              </div>
+
+              <div className="grid gap-1.5">
+                <Label htmlFor="cue-priority">Priority</Label>
+                <Select
+                  id="cue-priority"
+                  value={form.priority}
+                  onChange={(e) => setForm((f) => ({ ...f, priority: e.target.value }))}
+                >
+                  <option value="low">Low</option>
+                  <option value="medium">Medium</option>
+                  <option value="high">High</option>
+                  <option value="critical">Critical</option>
+                </Select>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="grid gap-1.5">
+                <Label htmlFor="cue-location">Location</Label>
+                <Input
+                  id="cue-location"
+                  placeholder="Main stage"
+                  value={form.location}
+                  onChange={(e) => setForm((f) => ({ ...f, location: e.target.value }))}
+                />
+              </div>
+
+              <div className="grid gap-1.5">
+                <Label htmlFor="cue-dept">Department</Label>
+                <Input
+                  id="cue-dept"
+                  placeholder="e.g. Lighting"
+                  value={form.departmentName}
+                  onChange={(e) => setForm((f) => ({ ...f, departmentName: e.target.value }))}
+                />
+              </div>
+            </div>
+
+            <div className="grid gap-1.5">
+              <Label htmlFor="cue-assigned">Assigned To</Label>
+              <Input
+                id="cue-assigned"
+                placeholder="e.g. Marcus Reid"
+                value={form.assignedTo}
+                onChange={(e) => setForm((f) => ({ ...f, assignedTo: e.target.value }))}
+              />
+            </div>
+
+            <div className="grid gap-1.5">
+              <Label htmlFor="cue-desc">Notes</Label>
+              <Textarea
+                id="cue-desc"
+                placeholder="Additional details or instructions..."
+                value={form.description}
+                onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
+              />
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsDialogOpen(false)} disabled={isSaving}>
+              Cancel
+            </Button>
+            <Button onClick={() => void handleSave()} disabled={isSaving || !form.name.trim()}>
+              {isSaving ? "Saving…" : editingCue ? "Save Changes" : "Add Cue"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <ConfirmationDialog
         open={Boolean(deleteTarget)}
         onOpenChange={(open) => { if (!open && !pendingCueId) setDeleteTarget(null) }}

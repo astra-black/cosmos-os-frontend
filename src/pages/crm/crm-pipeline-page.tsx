@@ -1,15 +1,20 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { useNavigate } from "react-router-dom"
-import { Loader2Icon, PlusIcon, RocketIcon, Trash2Icon, TrendingUpIcon } from "lucide-react"
+import { Loader2Icon, PencilIcon, PlusIcon, RocketIcon, Trash2Icon, TrendingUpIcon } from "lucide-react"
 import { toast } from "sonner"
 
 import { EmptyState } from "@/components/shared/empty-state"
+import { ConfirmationDialog } from "@/components/shared/confirmation-dialog"
+import { EntityFormDialog } from "@/components/shared/entity-form-dialog"
 import { PageHeader } from "@/components/shared/page-header"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Select } from "@/components/ui/select"
 import { Skeleton } from "@/components/ui/skeleton"
+import { Textarea } from "@/components/ui/textarea"
 import {
   convertOpportunity,
   createOpportunity,
@@ -33,6 +38,113 @@ const STAGES = [
   { id: "won", label: "Won", next: null },
   { id: "lost", label: "Lost", next: null },
 ] as const
+type OpportunityForm = {
+  name: string
+  clientId: string
+  stage: string
+  value: string
+  probability: string
+  source: string
+  expectedClose: string
+  nextStep: string
+  notes: string
+}
+
+const emptyOpportunityForm = (): OpportunityForm => ({
+  name: "",
+  clientId: "",
+  stage: "lead",
+  value: "",
+  probability: "15",
+  source: "",
+  expectedClose: "",
+  nextStep: "",
+  notes: "",
+})
+
+function opportunityFormFromDeal(deal: Opportunity): OpportunityForm {
+  return {
+    name: deal.name,
+    clientId: deal.clientId ?? "",
+    stage: deal.stage,
+    value: String(deal.value ?? 0),
+    probability: String(deal.probability ?? 0),
+    source: deal.source ?? "",
+    expectedClose: deal.expectedClose?.slice(0, 10) ?? "",
+    nextStep: deal.nextStep ?? "",
+    notes: deal.notes ?? "",
+  }
+}
+
+function validateOpportunityForm(values: OpportunityForm) {
+  if (!values.name.trim()) return "Name is required"
+  const value = Number(values.value)
+  if (!values.value.trim() || !Number.isFinite(value) || value < 0) return "Value must be a non-negative number"
+  const probability = Number(values.probability)
+  if (!values.probability.trim() || !Number.isFinite(probability) || probability < 0 || probability > 100) {
+    return "Probability must be between 0 and 100"
+  }
+  if (values.expectedClose && Number.isNaN(new Date(`${values.expectedClose}T00:00:00`).getTime())) {
+    return "Expected close date is invalid"
+  }
+  return null
+}
+
+function OpportunityFormFields({
+  form,
+  clients,
+  onChange,
+}: {
+  form: OpportunityForm
+  clients: AgencyClient[]
+  onChange: (field: keyof OpportunityForm, value: string) => void
+}) {
+  return (
+    <div className="grid gap-4 sm:grid-cols-2">
+      <div className="grid gap-2 sm:col-span-2">
+        <Label htmlFor="opportunity-form-name">Name</Label>
+        <Input id="opportunity-form-name" value={form.name} onChange={(e) => onChange("name", e.target.value)} placeholder="Opportunity name" required />
+      </div>
+      <div className="grid gap-2">
+        <Label htmlFor="opportunity-form-client">Client</Label>
+        <Select id="opportunity-form-client" value={form.clientId} onChange={(e) => onChange("clientId", e.target.value)}>
+          <option value="">Unassigned</option>
+          {clients.map((client) => <option key={client.clientId} value={client.clientId}>{client.name}</option>)}
+        </Select>
+      </div>
+      <div className="grid gap-2">
+        <Label htmlFor="opportunity-form-stage">Stage</Label>
+        <Select id="opportunity-form-stage" value={form.stage} onChange={(e) => onChange("stage", e.target.value)}>
+          {STAGES.map((stage) => <option key={stage.id} value={stage.id}>{stage.label}</option>)}
+        </Select>
+      </div>
+      <div className="grid gap-2">
+        <Label htmlFor="opportunity-form-value">Value</Label>
+        <Input id="opportunity-form-value" type="number" min="0" step="any" value={form.value} onChange={(e) => onChange("value", e.target.value)} placeholder="0" required />
+      </div>
+      <div className="grid gap-2">
+        <Label htmlFor="opportunity-form-probability">Probability</Label>
+        <Input id="opportunity-form-probability" type="number" min="0" max="100" step="1" value={form.probability} onChange={(e) => onChange("probability", e.target.value)} placeholder="0-100" required />
+      </div>
+      <div className="grid gap-2">
+        <Label htmlFor="opportunity-form-source">Source</Label>
+        <Input id="opportunity-form-source" value={form.source} onChange={(e) => onChange("source", e.target.value)} placeholder="Referral, inbound, ..." />
+      </div>
+      <div className="grid gap-2">
+        <Label htmlFor="opportunity-form-close">Expected close</Label>
+        <Input id="opportunity-form-close" type="date" value={form.expectedClose} onChange={(e) => onChange("expectedClose", e.target.value)} />
+      </div>
+      <div className="grid gap-2 sm:col-span-2">
+        <Label htmlFor="opportunity-form-next-step">Next step</Label>
+        <Input id="opportunity-form-next-step" value={form.nextStep} onChange={(e) => onChange("nextStep", e.target.value)} placeholder="Schedule proposal review" />
+      </div>
+      <div className="grid gap-2 sm:col-span-2">
+        <Label htmlFor="opportunity-form-notes">Notes</Label>
+        <Textarea id="opportunity-form-notes" value={form.notes} onChange={(e) => onChange("notes", e.target.value)} placeholder="Opportunity notes" />
+      </div>
+    </div>
+  )
+}
 
 function money(n: number) {
   if (n >= 1_000_000) return `$${(n / 1_000_000).toFixed(1)}M`
@@ -52,7 +164,10 @@ export function CrmPipelinePage() {
   const [busyId, setBusyId] = useState<string | null>(null)
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [showCreate, setShowCreate] = useState(false)
-  const [form, setForm] = useState({ name: "", clientId: "", value: "" })
+  const [creating, setCreating] = useState(false)
+  const [editingDeal, setEditingDeal] = useState<Opportunity | null>(null)
+  const [form, setForm] = useState<OpportunityForm>(emptyOpportunityForm)
+  const [deleteTarget, setDeleteTarget] = useState<Opportunity | null>(null)
 
   const reload = useCallback(async () => {
     setError(null)
@@ -132,8 +247,14 @@ export function CrmPipelinePage() {
     }
   }
 
-  async function handleDelete(deal: Opportunity) {
-    if (!canWriteCrm || !window.confirm(`Delete opportunity "${deal.name}"? This cannot be undone.`)) return
+  function handleDelete(deal: Opportunity) {
+    if (!canWriteCrm) return
+    setDeleteTarget(deal)
+  }
+
+  async function confirmDelete() {
+    if (!deleteTarget || !canWriteCrm) return
+    const deal = deleteTarget
     setDeletingId(deal.opportunityId)
     try {
       await deleteOpportunity(deal.opportunityId)
@@ -143,26 +264,73 @@ export function CrmPipelinePage() {
       toast.error(err instanceof ApiError ? err.message : "Delete failed")
     } finally {
       setDeletingId(null)
+      setDeleteTarget(null)
+    }
+  }
+
+  function openCreate() {
+    setForm(emptyOpportunityForm())
+    setEditingDeal(null)
+    setShowCreate(true)
+  }
+
+  function openEdit(deal: Opportunity) {
+    setForm(opportunityFormFromDeal(deal))
+    setEditingDeal(deal)
+    setShowCreate(false)
+  }
+
+  function opportunityPayload(values: OpportunityForm): Partial<Opportunity> {
+    return {
+      name: values.name.trim(),
+      clientId: values.clientId || null,
+      stage: values.stage,
+      value: Number(values.value),
+      probability: Number(values.probability),
+      source: values.source.trim(),
+      expectedClose: values.expectedClose || null,
+      nextStep: values.nextStep.trim(),
+      notes: values.notes.trim(),
     }
   }
 
   async function handleCreate() {
-    if (!form.name.trim() || !canWriteCrm) return
+    if (!canWriteCrm) return
+    const validationError = validateOpportunityForm(form)
+    if (validationError) {
+      toast.error(validationError)
+      return
+    }
+    setCreating(true)
     try {
-      await createOpportunity({
-        name: form.name.trim(),
-        clientId: form.clientId || clients[0]?.clientId,
-        value: Number(form.value) || 0,
-        stage: "lead",
-        probability: 15,
-        owner: "Unassigned",
-      })
-      setForm({ name: "", clientId: "", value: "" })
+      await createOpportunity({ ...opportunityPayload(form), owner: "Unassigned" })
       setShowCreate(false)
       await reload()
       toast.success("Opportunity created")
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : "Create failed")
+    } finally {
+      setCreating(false)
+    }
+  }
+
+  async function handleEdit() {
+    if (!editingDeal || !canWriteCrm) return
+    const validationError = validateOpportunityForm(form)
+    if (validationError) {
+      toast.error(validationError)
+      return
+    }
+    setCreating(true)
+    try {
+      await updateOpportunity(editingDeal.opportunityId, opportunityPayload(form))
+      setEditingDeal(null)
+      await reload()
+      toast.success("Opportunity updated")
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Update failed")
+    } finally {
+      setCreating(false)
     }
   }
 
@@ -173,7 +341,7 @@ export function CrmPipelinePage() {
         description="Sales desk — opportunities by stage with weighted pipeline value."
         actions={
           canWriteCrm ? (
-            <Button size="sm" onClick={() => setShowCreate((v) => !v)}>
+            <Button size="sm" onClick={openCreate}>
               <PlusIcon className="size-3.5" />
               New deal
             </Button>
@@ -217,42 +385,6 @@ export function CrmPipelinePage() {
         </div>
       </div>
 
-      {showCreate ? (
-        <Card className="grid gap-2 p-3 sm:grid-cols-2 sm:p-4 lg:grid-cols-4">
-          <Input
-            placeholder="Deal name"
-            value={form.name}
-            onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-          />
-          <select
-            className="border-input bg-background h-8 w-full rounded-lg border px-2 text-sm"
-            value={form.clientId}
-            onChange={(e) => setForm((f) => ({ ...f, clientId: e.target.value }))}
-          >
-            <option value="">Client…</option>
-            {clients.map((c) => (
-              <option key={c.clientId} value={c.clientId}>
-                {c.name}
-              </option>
-            ))}
-          </select>
-          <Input
-            placeholder="Value (USD)"
-            type="number"
-            value={form.value}
-            onChange={(e) => setForm((f) => ({ ...f, value: e.target.value }))}
-          />
-          <div className="flex gap-2">
-            <Button size="sm" className="flex-1 sm:flex-none" disabled={!form.name.trim()} onClick={handleCreate}>
-              Create
-            </Button>
-            <Button size="sm" variant="outline" className="flex-1 sm:flex-none" onClick={() => setShowCreate(false)}>
-              Cancel
-            </Button>
-          </div>
-        </Card>
-      ) : null}
-
       {loading ? (
         <div className="flex gap-3 overflow-x-auto pb-2 md:grid md:grid-cols-3 md:overflow-visible xl:grid-cols-6">
           {STAGES.map((s) => (
@@ -292,7 +424,16 @@ export function CrmPipelinePage() {
                     >
                        <div className="flex items-start justify-between gap-1">
                          <div className="text-sm font-medium leading-snug">{deal.name}</div>
-                         {canWriteCrm ? <Button size="icon" variant="ghost" className="size-6 shrink-0 text-destructive" disabled={deletingId === deal.opportunityId} onClick={() => void handleDelete(deal)} aria-label={`Delete ${deal.name}`}><Trash2Icon className="size-3" /></Button> : null}
+                          {canWriteCrm ? (
+                            <span className="flex shrink-0 gap-0.5">
+                              <Button size="icon" variant="ghost" className="size-6" onClick={() => openEdit(deal)} aria-label={`Edit ${deal.name}`}>
+                                <PencilIcon className="size-3" />
+                              </Button>
+                              <Button size="icon" variant="ghost" className="size-6 text-destructive" disabled={deletingId === deal.opportunityId} onClick={() => handleDelete(deal)} aria-label={`Delete ${deal.name}`}>
+                                <Trash2Icon className="size-3" />
+                              </Button>
+                            </span>
+                          ) : null}
                        </div>
                       <div className="text-muted-foreground mt-1 truncate text-xs">
                         {deal.clientName || "—"}
@@ -369,9 +510,41 @@ export function CrmPipelinePage() {
                 )}
               </div>
             </section>
-          ))}
-        </div>
+         ))}
+       </div>
       )}
+      <EntityFormDialog
+        open={showCreate || editingDeal !== null}
+        onOpenChange={(open) => {
+          if (!open && !creating) {
+            setShowCreate(false)
+            setEditingDeal(null)
+          }
+        }}
+        title={editingDeal ? "Edit opportunity" : "New opportunity"}
+        description="Capture the commercial details and next action for this deal."
+        onSubmit={editingDeal ? handleEdit : handleCreate}
+        submitLabel={editingDeal ? "Save changes" : "Create opportunity"}
+        pending={creating}
+        submitDisabled={!form.name.trim()}
+        maxWidth="max-w-2xl"
+      >
+        <OpportunityFormFields
+          form={form}
+          clients={clients}
+          onChange={(field, value) => setForm((current) => ({ ...current, [field]: value }))}
+        />
+      </EntityFormDialog>
+      <ConfirmationDialog
+        open={Boolean(deleteTarget)}
+        onOpenChange={(open) => { if (!open && !deletingId) setDeleteTarget(null) }}
+        title={`Delete opportunity "${deleteTarget?.name ?? ""}"?`}
+        description="This action cannot be undone."
+        confirmLabel="Delete"
+        destructive
+        pending={Boolean(deleteTarget && deletingId === deleteTarget.opportunityId)}
+        onConfirm={confirmDelete}
+      />
     </div>
   )
 }

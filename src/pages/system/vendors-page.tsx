@@ -5,6 +5,7 @@ import {
   HammerIcon,
   MailIcon,
   PaletteIcon,
+  PencilIcon,
   PlusIcon,
   SparklesIcon,
   StarIcon,
@@ -15,12 +16,23 @@ import {
 } from "lucide-react"
 import { toast } from "sonner"
 
+import { ConfirmationDialog } from "@/components/shared/confirmation-dialog"
 import { EmptyState } from "@/components/shared/empty-state"
 import { PageHeader } from "@/components/shared/page-header"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Select } from "@/components/ui/select"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useVendors } from "@/hooks/use-agency-data"
 import { createVendor, deleteVendor, updateVendor } from "@/lib/api/agency"
@@ -57,6 +69,28 @@ const CATEGORIES = [
   "general",
 ] as const
 
+interface VendorFormData {
+  name: string
+  category: string
+  contact: string
+  email: string
+  rateCard: string
+  skills: string
+  regions: string
+  status: string
+}
+
+const emptyForm: VendorFormData = {
+  name: "",
+  category: "general",
+  contact: "",
+  email: "",
+  rateCard: "",
+  skills: "",
+  regions: "",
+  status: "trial",
+}
+
 export function VendorsPage() {
   const { user } = useAuth()
   const canWrite = canPerform(user?.role, "write_crm")
@@ -71,15 +105,11 @@ export function VendorsPage() {
   const [statusFilter, setStatusFilter] = useState("all")
   const [search, setSearch] = useState("")
   const [busyId, setBusyId] = useState<string | null>(null)
-  const [deletingId, setDeletingId] = useState<string | null>(null)
-  const [showAdd, setShowAdd] = useState(false)
-  const [form, setForm] = useState({
-    name: "",
-    category: "general",
-    contact: "",
-    email: "",
-    rateCard: "",
-  })
+  const [deleteTarget, setDeleteTarget] = useState<Vendor | null>(null)
+  const [isDialogOpen, setIsDialogOpen] = useState(false)
+  const [editingVendor, setEditingVendor] = useState<Vendor | null>(null)
+  const [form, setForm] = useState<VendorFormData>(emptyForm)
+  const [isSaving, setIsSaving] = useState(false)
 
   const categories = useMemo(() => {
     return [...new Set([...CATEGORIES, ...vendors.map((v) => v.category)])]
@@ -100,6 +130,27 @@ export function VendorsPage() {
   }, [vendors, category, statusFilter, search])
 
   const preferred = vendors.filter((v) => v.status === "preferred").length
+
+  function openCreateDialog() {
+    setEditingVendor(null)
+    setForm(emptyForm)
+    setIsDialogOpen(true)
+  }
+
+  function openEditDialog(vendor: Vendor) {
+    setEditingVendor(vendor)
+    setForm({
+      name: vendor.name,
+      category: vendor.category || "general",
+      contact: vendor.contact || "",
+      email: vendor.email || "",
+      rateCard: vendor.rateCard || "",
+      skills: (vendor.skills || []).join(", "),
+      regions: (vendor.regions || []).join(", "),
+      status: vendor.status || "active",
+    })
+    setIsDialogOpen(true)
+  }
 
   async function patchVendor(vendor: Vendor, body: Partial<Vendor>, label: string) {
     if (!canWrite) return
@@ -124,37 +175,63 @@ export function VendorsPage() {
     }
   }
 
-  async function handleCreate() {
+  async function handleSave() {
     if (!form.name.trim() || !canWrite) return
+    setIsSaving(true)
+    const skills = form.skills
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean)
+    const regions = form.regions
+      .split(",")
+      .map((r) => r.trim())
+      .filter(Boolean)
+
     try {
-      await createVendor({
-        name: form.name.trim(),
-        category: form.category,
-        contact: form.contact,
-        email: form.email,
-        rateCard: form.rateCard,
-        status: "trial",
-      })
-      setForm({ name: "", category: "general", contact: "", email: "", rateCard: "" })
-      setShowAdd(false)
+      if (editingVendor) {
+        await updateVendor(editingVendor.vendorId, {
+          name: form.name.trim(),
+          category: form.category,
+          contact: form.contact.trim() || undefined,
+          email: form.email.trim() || undefined,
+          rateCard: form.rateCard.trim() || undefined,
+          status: form.status,
+          skills,
+          regions,
+        })
+        toast.success("Vendor updated")
+      } else {
+        await createVendor({
+          name: form.name.trim(),
+          category: form.category,
+          contact: form.contact.trim() || undefined,
+          email: form.email.trim() || undefined,
+          rateCard: form.rateCard.trim() || undefined,
+          status: form.status,
+          skills,
+          regions,
+        })
+        toast.success("Vendor added")
+      }
+      setIsDialogOpen(false)
       await reload()
-      toast.success("Vendor added")
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "Create failed")
+      toast.error(err instanceof ApiError ? err.message : "Save failed")
+    } finally {
+      setIsSaving(false)
     }
   }
 
-  async function handleDelete(vendor: Vendor) {
-    if (!canWrite || !window.confirm(`Delete vendor "${vendor.name}"? This cannot be undone.`)) return
-    setDeletingId(vendor.vendorId)
+  async function handleDeleteConfirm() {
+    if (!deleteTarget || !canWrite) return
+    const id = deleteTarget.vendorId
     try {
-      await deleteVendor(vendor.vendorId)
+      await deleteVendor(id)
       await reload()
       toast.success("Vendor deleted")
+      setDeleteTarget(null)
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : "Delete failed")
-    } finally {
-      setDeletingId(null)
     }
   }
 
@@ -165,11 +242,7 @@ export function VendorsPage() {
         description="Preferred and active partners — staging, A/V, post, hospitality."
         actions={
           canWrite ? (
-            <Button
-              size="sm"
-              variant={showAdd ? "default" : "outline"}
-              onClick={() => setShowAdd((v) => !v)}
-            >
+            <Button size="sm" onClick={openCreateDialog}>
               <PlusIcon className="size-3.5" />
               Add vendor
             </Button>
@@ -191,50 +264,6 @@ export function VendorsPage() {
           <span className="font-semibold tabular-nums">{filtered.length}</span>
         </div>
       </div>
-
-      {showAdd && canWrite ? (
-        <Card className="grid gap-2 p-3 sm:grid-cols-2 sm:p-4 lg:grid-cols-3">
-          <Input
-            placeholder="Vendor name"
-            value={form.name}
-            onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-          />
-          <select
-            className="border-input bg-background h-8 rounded-lg border px-2 text-sm capitalize"
-            value={form.category}
-            onChange={(e) => setForm((f) => ({ ...f, category: e.target.value }))}
-          >
-            {CATEGORIES.map((c) => (
-              <option key={c} value={c}>
-                {c.replace("_", " ")}
-              </option>
-            ))}
-          </select>
-          <Input
-            placeholder="Contact"
-            value={form.contact}
-            onChange={(e) => setForm((f) => ({ ...f, contact: e.target.value }))}
-          />
-          <Input
-            placeholder="Email"
-            value={form.email}
-            onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
-          />
-          <Input
-            placeholder="Rate card"
-            value={form.rateCard}
-            onChange={(e) => setForm((f) => ({ ...f, rateCard: e.target.value }))}
-          />
-          <div className="flex gap-2">
-            <Button size="sm" disabled={!form.name.trim()} onClick={() => void handleCreate()}>
-              Save
-            </Button>
-            <Button size="sm" variant="outline" onClick={() => setShowAdd(false)}>
-              Cancel
-            </Button>
-          </div>
-        </Card>
-      ) : null}
 
       {error ? (
         <Card className="border-destructive/40 px-4 py-3 text-sm">
@@ -326,44 +355,65 @@ export function VendorsPage() {
                     </p>
                   </div>
                   <div className="flex items-center gap-1">
-                  {canWrite ? (
-                    <select
-                      className={cn(
-                        "h-6 shrink-0 rounded-full border px-2 text-[10px] font-mono font-medium capitalize outline-none bg-background cursor-pointer",
-                        vendor.status === "preferred" && "border-amber-500/40 bg-amber-500/10 text-amber-500",
-                        vendor.status === "active" && "border-primary/40 bg-primary/10 text-primary",
-                        vendor.status === "trial" && "border-cyan-500/40 bg-cyan-500/10 text-cyan-500",
-                      )}
-                      value={vendor.status}
-                      disabled={busyId === vendor.vendorId}
-                      onChange={(e) =>
-                        void patchVendor(
-                          vendor,
-                          { status: e.target.value },
-                          `${vendor.name} → ${e.target.value}`,
-                        )
-                      }
-                    >
-                      {STATUSES.map((s) => (
-                        <option key={s} value={s}>
-                          {s}
-                        </option>
-                      ))}
-                    </select>
-                  ) : (
-                    <Badge
-                      className={cn(
-                        "capitalize text-[9px] font-mono py-0 h-4.5 px-2",
-                        vendor.status === "preferred" ? "bg-amber-500/10 text-amber-500 border-amber-500/30" :
-                        vendor.status === "active" ? "bg-primary/10 text-primary border-primary/30" :
-                        "bg-muted text-muted-foreground border-transparent",
-                      )}
-                      variant="outline"
-                    >
-                      {vendor.status}
-                    </Badge>
-                  )}
-                  {canWrite ? <Button size="icon" variant="ghost" className="size-7 text-destructive" disabled={deletingId === vendor.vendorId} onClick={() => void handleDelete(vendor)} aria-label={`Delete ${vendor.name}`}><Trash2Icon className="size-3.5" /></Button> : null}
+                    {canWrite ? (
+                      <select
+                        className={cn(
+                          "h-6 shrink-0 rounded-full border px-2 text-[10px] font-mono font-medium capitalize outline-none bg-background cursor-pointer",
+                          vendor.status === "preferred" && "border-amber-500/40 bg-amber-500/10 text-amber-500",
+                          vendor.status === "active" && "border-primary/40 bg-primary/10 text-primary",
+                          vendor.status === "trial" && "border-cyan-500/40 bg-cyan-500/10 text-cyan-500",
+                        )}
+                        value={vendor.status}
+                        disabled={busyId === vendor.vendorId}
+                        onChange={(e) =>
+                          void patchVendor(
+                            vendor,
+                            { status: e.target.value },
+                            `${vendor.name} → ${e.target.value}`,
+                          )
+                        }
+                      >
+                        {STATUSES.map((s) => (
+                          <option key={s} value={s}>
+                            {s}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <Badge
+                        className={cn(
+                          "capitalize text-[9px] font-mono py-0 h-4.5 px-2",
+                          vendor.status === "preferred" ? "bg-amber-500/10 text-amber-500 border-amber-500/30" :
+                          vendor.status === "active" ? "bg-primary/10 text-primary border-primary/30" :
+                          "bg-muted text-muted-foreground border-transparent",
+                        )}
+                        variant="outline"
+                      >
+                        {vendor.status}
+                      </Badge>
+                    )}
+                    {canWrite ? (
+                      <>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="size-7 text-muted-foreground hover:text-foreground"
+                          onClick={() => openEditDialog(vendor)}
+                          aria-label={`Edit ${vendor.name}`}
+                        >
+                          <PencilIcon className="size-3.5" />
+                        </Button>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="size-7 text-destructive"
+                          onClick={() => setDeleteTarget(vendor)}
+                          aria-label={`Delete ${vendor.name}`}
+                        >
+                          <Trash2Icon className="size-3.5" />
+                        </Button>
+                      </>
+                    ) : null}
                   </div>
                 </div>
 
@@ -494,6 +544,139 @@ export function VendorsPage() {
           })}
         </div>
       )}
+
+      {/* Add / Edit Vendor Modal Dialog */}
+      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>{editingVendor ? "Edit Vendor" : "Add Vendor"}</DialogTitle>
+            <DialogDescription>
+              {editingVendor
+                ? "Update partner details, rate cards, and capabilities."
+                : "Register a new partner, staging provider, or creative vendor."}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="grid gap-4 py-2">
+            <div className="grid gap-1.5">
+              <Label htmlFor="vendor-name">Partner Name *</Label>
+              <Input
+                id="vendor-name"
+                placeholder="e.g. Apex Stage Works"
+                value={form.name}
+                onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="grid gap-1.5">
+                <Label htmlFor="vendor-category">Category</Label>
+                <Select
+                  id="vendor-category"
+                  value={form.category}
+                  onChange={(e) => setForm((f) => ({ ...f, category: e.target.value }))}
+                >
+                  {CATEGORIES.map((c) => (
+                    <option key={c} value={c}>
+                      {c.replace("_", " ")}
+                    </option>
+                  ))}
+                </Select>
+              </div>
+
+              <div className="grid gap-1.5">
+                <Label htmlFor="vendor-status">Status</Label>
+                <Select
+                  id="vendor-status"
+                  value={form.status}
+                  onChange={(e) => setForm((f) => ({ ...f, status: e.target.value }))}
+                >
+                  {STATUSES.map((s) => (
+                    <option key={s} value={s}>
+                      {s}
+                    </option>
+                  ))}
+                </Select>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="grid gap-1.5">
+                <Label htmlFor="vendor-contact">Contact Person</Label>
+                <Input
+                  id="vendor-contact"
+                  placeholder="e.g. Marcus Reid"
+                  value={form.contact}
+                  onChange={(e) => setForm((f) => ({ ...f, contact: e.target.value }))}
+                />
+              </div>
+
+              <div className="grid gap-1.5">
+                <Label htmlFor="vendor-email">Email Address</Label>
+                <Input
+                  id="vendor-email"
+                  type="email"
+                  placeholder="vendor@company.com"
+                  value={form.email}
+                  onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
+                />
+              </div>
+            </div>
+
+            <div className="grid gap-1.5">
+              <Label htmlFor="vendor-rate">Rate Card / Pricing Model</Label>
+              <Input
+                id="vendor-rate"
+                placeholder="e.g. $1,200/day · Fixed Kit"
+                value={form.rateCard}
+                onChange={(e) => setForm((f) => ({ ...f, rateCard: e.target.value }))}
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="grid gap-1.5">
+                <Label htmlFor="vendor-skills">Skills / Tags (comma separated)</Label>
+                <Input
+                  id="vendor-skills"
+                  placeholder="Lighting, Truss, Rigging"
+                  value={form.skills}
+                  onChange={(e) => setForm((f) => ({ ...f, skills: e.target.value }))}
+                />
+              </div>
+
+              <div className="grid gap-1.5">
+                <Label htmlFor="vendor-regions">Regions (comma separated)</Label>
+                <Input
+                  id="vendor-regions"
+                  placeholder="US-West, NYC, Global"
+                  value={form.regions}
+                  onChange={(e) => setForm((f) => ({ ...f, regions: e.target.value }))}
+                />
+              </div>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsDialogOpen(false)} disabled={isSaving}>
+              Cancel
+            </Button>
+            <Button onClick={() => void handleSave()} disabled={isSaving || !form.name.trim()}>
+              {isSaving ? "Saving…" : editingVendor ? "Save Changes" : "Create Vendor"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Confirmation Dialog for Delete */}
+      <ConfirmationDialog
+        open={Boolean(deleteTarget)}
+        onOpenChange={(open) => !open && setDeleteTarget(null)}
+        title="Delete Vendor"
+        description={`Are you sure you want to delete "${deleteTarget?.name}"? This action cannot be undone.`}
+        confirmLabel="Delete Vendor"
+        destructive
+        onConfirm={() => void handleDeleteConfirm()}
+      />
     </div>
   )
 }

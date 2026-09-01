@@ -1,15 +1,17 @@
 import { useMemo, useState } from "react"
 import { Link } from "react-router-dom"
-import { LoaderIcon, MegaphoneIcon, PencilIcon, PlusIcon, Trash2Icon } from "lucide-react"
+import { MegaphoneIcon, PencilIcon, PlusIcon, Trash2Icon } from "lucide-react"
 import { toast } from "sonner"
 
 import { EmptyState } from "@/components/shared/empty-state"
 import { ConfirmationDialog } from "@/components/shared/confirmation-dialog"
+import { EntityFormDialog } from "@/components/shared/entity-form-dialog"
 import { PageHeader } from "@/components/shared/page-header"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 import { Progress } from "@/components/ui/progress"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useCampaigns, useClients } from "@/hooks/use-agency-data"
@@ -32,6 +34,58 @@ function validateCampaignForm(values: CampaignForm) {
   return null
 }
 
+function CampaignFormFields({
+  form,
+  clients,
+  onChange,
+}: {
+  form: CampaignForm
+  clients: { clientId: string; name: string }[]
+  onChange: (field: keyof CampaignForm, value: string) => void
+}) {
+  return (
+    <div className="grid gap-4 sm:grid-cols-2">
+      <div className="grid gap-1.5 sm:col-span-2">
+        <Label htmlFor="campaign-form-name">Name</Label>
+        <Input id="campaign-form-name" value={form.name} onChange={(e) => onChange("name", e.target.value)} placeholder="Campaign name" required />
+      </div>
+      <div className="grid gap-1.5">
+        <Label htmlFor="campaign-form-client">Client</Label>
+        <select id="campaign-form-client" className="border-input bg-background h-9 w-full rounded-md border px-2 text-sm" value={form.clientId} onChange={(e) => onChange("clientId", e.target.value)}>
+          <option value="">Unassigned</option>
+          {clients.map((client) => <option key={client.clientId} value={client.clientId}>{client.name}</option>)}
+        </select>
+      </div>
+      <div className="grid gap-1.5">
+        <Label htmlFor="campaign-form-status">Status</Label>
+        <select id="campaign-form-status" className="border-input bg-background h-9 w-full rounded-md border px-2 text-sm" value={form.status} onChange={(e) => onChange("status", e.target.value)}>
+          {CAMPAIGN_STATUSES.map((status) => <option key={status} value={status}>{status.replace("_", " ")}</option>)}
+        </select>
+      </div>
+      <div className="grid gap-1.5">
+        <Label htmlFor="campaign-form-start">Start date</Label>
+        <Input id="campaign-form-start" type="date" value={form.startDate} onChange={(e) => onChange("startDate", e.target.value)} />
+      </div>
+      <div className="grid gap-1.5">
+        <Label htmlFor="campaign-form-end">End date</Label>
+        <Input id="campaign-form-end" type="date" value={form.endDate} onChange={(e) => onChange("endDate", e.target.value)} />
+      </div>
+      <div className="grid gap-1.5">
+        <Label htmlFor="campaign-form-budget">Budget</Label>
+        <Input id="campaign-form-budget" type="number" min="0" step="any" value={form.budget} onChange={(e) => onChange("budget", e.target.value)} placeholder="0" />
+      </div>
+      <div className="grid gap-1.5">
+        <Label htmlFor="campaign-form-owner">Owner</Label>
+        <Input id="campaign-form-owner" value={form.owner} onChange={(e) => onChange("owner", e.target.value)} placeholder="Owner name" />
+      </div>
+      <div className="grid gap-1.5 sm:col-span-2">
+        <Label htmlFor="campaign-form-objective">Objective</Label>
+        <Input id="campaign-form-objective" value={form.objective} onChange={(e) => onChange("objective", e.target.value)} placeholder="Campaign objective" />
+      </div>
+    </div>
+  )
+}
+
 export function CampaignsPage() {
   const { user } = useAuth()
   const canWrite = canPerform(user?.role, "write_crm")
@@ -44,7 +98,6 @@ export function CampaignsPage() {
   const [editingId, setEditingId] = useState<string | null>(null)
   const [savingId, setSavingId] = useState<string | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null)
-  const [editForm, setEditForm] = useState<CampaignForm>(emptyForm)
   const [form, setForm] = useState<CampaignForm>(emptyForm)
 
   const filtered = useMemo(() => {
@@ -85,18 +138,18 @@ export function CampaignsPage() {
 
   function startEdit(campaign: Campaign) {
     setEditingId(campaign.campaignId)
-    setEditForm({ name: campaign.name, clientId: campaign.clientId || "", status: campaign.status, startDate: campaign.startDate?.slice(0, 10) || "", endDate: campaign.endDate?.slice(0, 10) || "", objective: campaign.objective || "", owner: campaign.owner || "", budget: campaign.budget == null ? "" : String(campaign.budget) })
+    setForm({ name: campaign.name, clientId: campaign.clientId || "", status: campaign.status, startDate: campaign.startDate?.slice(0, 10) || "", endDate: campaign.endDate?.slice(0, 10) || "", objective: campaign.objective || "", owner: campaign.owner || "", budget: campaign.budget == null ? "" : String(campaign.budget) })
   }
 
   async function handleEdit() {
     if (!editingId || !canWrite) return
-    const validationError = validateCampaignForm(editForm)
+    const validationError = validateCampaignForm(form)
     if (validationError) { toast.error(validationError); return }
-    const budget = editForm.budget ? Number(editForm.budget) : 0
+    const budget = form.budget ? Number(form.budget) : 0
     setSavingId(editingId)
     try {
-      const client = clients.find((c) => c.clientId === editForm.clientId)
-      await updateCampaign(editingId, { name: editForm.name.trim(), clientId: editForm.clientId || null, clientName: client?.name, budget, status: editForm.status, startDate: editForm.startDate || null, endDate: editForm.endDate || null, objective: editForm.objective.trim(), owner: editForm.owner.trim() })
+      const client = clients.find((c) => c.clientId === form.clientId)
+      await updateCampaign(editingId, { name: form.name.trim(), clientId: form.clientId || null, clientName: client?.name, budget, status: form.status, startDate: form.startDate || null, endDate: form.endDate || null, objective: form.objective.trim(), owner: form.owner.trim() })
       await reload()
       setEditingId(null)
       toast.success("Campaign updated")
@@ -130,7 +183,7 @@ export function CampaignsPage() {
         description="Client programs that group projects — budget, dates, and ownership."
         actions={
           canWrite ? (
-            <Button size="sm" onClick={() => setShowCreate((v) => !v)}>
+            <Button size="sm" onClick={() => { setForm(emptyForm()); setEditingId(null); setShowCreate(true) }}>
               <PlusIcon className="size-3.5" />
               New campaign
             </Button>
@@ -144,52 +197,6 @@ export function CampaignsPage() {
             <span className="text-destructive">{error}</span>
             <Button size="sm" variant="outline" onClick={() => void reload()}>Retry</Button>
           </div>
-        </Card>
-      ) : null}
-
-      {showCreate ? (
-        <Card className="grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-4">
-          <div className="sm:col-span-2">
-            <label className="text-muted-foreground mb-1 block text-xs">Name</label>
-            <Input
-              placeholder="Campaign name"
-              value={form.name}
-              onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-            />
-          </div>
-          <div>
-            <label className="text-muted-foreground mb-1 block text-xs">Client</label>
-            <select
-              className="border-input bg-background h-9 w-full rounded-md border px-2 text-sm"
-              value={form.clientId}
-              onChange={(e) => setForm((f) => ({ ...f, clientId: e.target.value }))}
-            >
-              <option value="">Unassigned</option>
-              {clients.map((c) => (
-                <option key={c.clientId} value={c.clientId}>
-                  {c.name}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="text-muted-foreground mb-1 block text-xs">Budget</label>
-            <Input
-              type="number"
-              placeholder="0"
-              value={form.budget}
-              onChange={(e) => setForm((f) => ({ ...f, budget: e.target.value }))}
-            />
-          </div>
-          <div><label className="text-muted-foreground mb-1 block text-xs">Status</label><select className="border-input bg-background h-9 w-full rounded-md border px-2 text-sm" value={form.status} onChange={(e) => setForm((f) => ({ ...f, status: e.target.value as CampaignStatus }))}>{CAMPAIGN_STATUSES.map((status) => <option key={status} value={status}>{status}</option>)}</select></div>
-          <div><label className="text-muted-foreground mb-1 block text-xs">StartDate</label><Input type="date" value={form.startDate} onChange={(e) => setForm((f) => ({ ...f, startDate: e.target.value }))} /></div>
-          <div><label className="text-muted-foreground mb-1 block text-xs">EndDate</label><Input type="date" value={form.endDate} onChange={(e) => setForm((f) => ({ ...f, endDate: e.target.value }))} /></div>
-          <div><label className="text-muted-foreground mb-1 block text-xs">Owner</label><Input value={form.owner} onChange={(e) => setForm((f) => ({ ...f, owner: e.target.value }))} /></div>
-          <div className="sm:col-span-2"><label className="text-muted-foreground mb-1 block text-xs">Objective</label><Input value={form.objective} onChange={(e) => setForm((f) => ({ ...f, objective: e.target.value }))} /></div>
-          <Button size="sm" disabled={creating || !form.name.trim()} onClick={handleCreate}>
-            {creating ? <LoaderIcon className="size-3.5 animate-spin" /> : <PlusIcon className="size-3.5" />}
-            Create
-          </Button>
         </Card>
       ) : null}
 
@@ -263,7 +270,6 @@ export function CampaignsPage() {
                      {canWrite ? <><Button size="icon" variant="ghost" className="size-7" disabled={Boolean(savingId) || Boolean(deletingId)} onClick={() => startEdit(campaign)} aria-label={`Edit ${campaign.name}`}><PencilIcon className="size-3.5" /></Button><Button size="icon" variant="ghost" className="size-7 text-destructive" disabled={deletingId === campaign.campaignId || Boolean(savingId)} onClick={() => setDeleteTarget({ id: campaign.campaignId, name: campaign.name })} aria-label={`Delete ${campaign.name}`}><Trash2Icon className="size-3.5" /></Button></> : null}
                   </div>
                 </div>
-                 {editingId === campaign.campaignId ? <div className="grid gap-2 border-t pt-3 sm:grid-cols-2 lg:grid-cols-4"><div className="sm:col-span-2"><label className="text-muted-foreground mb-1 block text-xs">Name</label><Input value={editForm.name} onChange={(e) => setEditForm((f) => ({ ...f, name: e.target.value }))} /></div><div><label className="text-muted-foreground mb-1 block text-xs">Client</label><select className="border-input bg-background h-9 w-full rounded-md border px-2 text-sm" value={editForm.clientId} onChange={(e) => setEditForm((f) => ({ ...f, clientId: e.target.value }))}><option value="">Unassigned</option>{clients.map((c) => <option key={c.clientId} value={c.clientId}>{c.name}</option>)}</select></div><div><label className="text-muted-foreground mb-1 block text-xs">Budget</label><Input type="number" min="0" value={editForm.budget} onChange={(e) => setEditForm((f) => ({ ...f, budget: e.target.value }))} /></div><div><label className="text-muted-foreground mb-1 block text-xs">Status</label><select className="border-input bg-background h-9 w-full rounded-md border px-2 text-sm" value={editForm.status} onChange={(e) => setEditForm((f) => ({ ...f, status: e.target.value as CampaignStatus }))}>{CAMPAIGN_STATUSES.map((status) => <option key={status} value={status}>{status}</option>)}</select></div><div><label className="text-muted-foreground mb-1 block text-xs">StartDate</label><Input type="date" value={editForm.startDate} onChange={(e) => setEditForm((f) => ({ ...f, startDate: e.target.value }))} /></div><div><label className="text-muted-foreground mb-1 block text-xs">EndDate</label><Input type="date" value={editForm.endDate} onChange={(e) => setEditForm((f) => ({ ...f, endDate: e.target.value }))} /></div><div><label className="text-muted-foreground mb-1 block text-xs">Owner</label><Input value={editForm.owner} onChange={(e) => setEditForm((f) => ({ ...f, owner: e.target.value }))} /></div><div className="sm:col-span-2"><label className="text-muted-foreground mb-1 block text-xs">Objective</label><Input value={editForm.objective} onChange={(e) => setEditForm((f) => ({ ...f, objective: e.target.value }))} /></div><div className="flex items-end gap-2"><Button size="sm" disabled={savingId === editingId || !editForm.name.trim()} onClick={() => void handleEdit()}>{savingId === editingId ? <LoaderIcon className="size-3.5 animate-spin" /> : null}Save</Button><Button size="sm" variant="ghost" disabled={savingId === editingId} onClick={() => setEditingId(null)}>Cancel</Button></div></div> : null}
                 {campaign.objective ? (
                   <p className="text-muted-foreground text-sm leading-relaxed">
                     {campaign.objective}
@@ -310,6 +316,28 @@ export function CampaignsPage() {
           })}
         </div>
       )}
+      <EntityFormDialog
+        open={showCreate || editingId !== null}
+        onOpenChange={(open) => {
+          if (!open && !creating && !savingId) {
+            setShowCreate(false)
+            setEditingId(null)
+          }
+        }}
+        title={editingId ? "Edit campaign" : "New campaign"}
+        description="Set the campaign client, schedule, budget, objective, and owner."
+        onSubmit={editingId ? handleEdit : handleCreate}
+        submitLabel={editingId ? "Save changes" : "Create campaign"}
+        pending={creating || Boolean(savingId)}
+        submitDisabled={!form.name.trim()}
+        maxWidth="max-w-2xl"
+      >
+        <CampaignFormFields
+          form={form}
+          clients={clients}
+          onChange={(field, value) => setForm((current) => ({ ...current, [field]: value }))}
+        />
+      </EntityFormDialog>
       <ConfirmationDialog open={Boolean(deleteTarget)} onOpenChange={(open) => { if (!open && !deletingId) setDeleteTarget(null) }} title="Delete campaign?" description={deleteTarget ? `This will permanently delete “${deleteTarget.name}”.` : undefined} confirmLabel="Delete" destructive pending={Boolean(deleteTarget && deletingId === deleteTarget.id)} onConfirm={handleDelete} />
     </div>
   )

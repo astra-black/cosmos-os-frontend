@@ -1,16 +1,19 @@
 import { useEffect, useState } from "react"
-import { AlertTriangleIcon, LoaderIcon, PencilIcon, PlusIcon, RefreshCwIcon, Trash2Icon } from "lucide-react"
+import { AlertTriangleIcon, PencilIcon, PlusIcon, RefreshCwIcon, Trash2Icon } from "lucide-react"
 import { toast } from "sonner"
 import { Link } from "react-router-dom"
 
 import { EmptyState } from "@/components/shared/empty-state"
 import { ConfirmationDialog } from "@/components/shared/confirmation-dialog"
+import { EntityFormDialog } from "@/components/shared/entity-form-dialog"
 import { PageHeader } from "@/components/shared/page-header"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 import { Progress } from "@/components/ui/progress"
+import { Select } from "@/components/ui/select"
 import { Skeleton } from "@/components/ui/skeleton"
 import { listProjects, normalizeProjects } from "@/lib/api/agency"
 import {
@@ -74,6 +77,7 @@ export function FinancePage() {
   const [editingRate, setEditingRate] = useState("")
   const [editingNote, setEditingNote] = useState("")
   const [editingBillable, setEditingBillable] = useState(false)
+  const [showTimeForm, setShowTimeForm] = useState(false)
   const [pendingItem, setPendingItem] = useState<string | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<{ type: "budget" | "time"; id: string; label: string } | null>(null)
 
@@ -146,7 +150,8 @@ export function FinancePage() {
          date: entryDate,
       })
        setNote("")
-      await reload()
+       setShowTimeForm(false)
+       await reload()
       toast.success("Time logged")
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : "Failed to log time")
@@ -327,20 +332,10 @@ export function FinancePage() {
           <div className="flex flex-wrap items-center justify-between gap-2">
             <h2 className="font-semibold">Project budgets</h2>
             <div className="flex gap-2">
-              {canWrite ? <Button size="sm" onClick={() => setShowBudgetForm((value) => !value)}><PlusIcon className="size-3.5" /> New budget</Button> : null}
+              {canWrite ? <Button size="sm" onClick={() => setShowBudgetForm(true)}><PlusIcon className="size-3.5" /> New budget</Button> : null}
               <Button size="sm" variant="outline" render={<Link to="/projects" />}>Manage projects</Button>
             </div>
           </div>
-          {showBudgetForm && canWrite ? (
-            <div className="grid gap-2 rounded-lg border p-3 sm:grid-cols-[minmax(0,1fr)_7rem_5rem_auto]">
-              <select className="border-input bg-background h-8 rounded-lg border px-2 text-sm" value={budgetProjectId} onChange={(e) => setBudgetProjectId(e.target.value)}>
-                {projects.map((p) => <option key={p.projectId} value={p.projectId}>{p.projectName}</option>)}
-              </select>
-              <Input type="number" min="0" placeholder="Planned" value={budgetPlanned} onChange={(e) => setBudgetPlanned(e.target.value)} />
-              <Input maxLength={3} value={budgetCurrency} onChange={(e) => setBudgetCurrency(e.target.value.toUpperCase())} />
-              <Button size="sm" onClick={() => void saveBudget()} disabled={saving || !budgetProjectId}>Create</Button>
-            </div>
-          ) : null}
           {budgets.length === 0 ? (
             <EmptyState
               className="py-10"
@@ -350,23 +345,15 @@ export function FinancePage() {
           ) : (
              budgets.map((b) => (
                <div key={b.budgetId} className="space-y-1.5">
-                 {editingBudgetId === b.budgetId ? (
-                   <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_7rem_5rem_auto_auto]">
-                     <span className="self-center text-sm font-medium">{b.projectName}</span>
-                     <Input type="number" min="0" value={editingPlanned} onChange={(e) => setEditingPlanned(e.target.value)} />
-                     <Input maxLength={3} value={editingCurrency} onChange={(e) => setEditingCurrency(e.target.value.toUpperCase())} />
-                      <Button size="sm" onClick={() => void saveBudgetEdit()} disabled={pendingItem === `budget-edit:${b.budgetId}`}>Save</Button>
-                      <Button size="sm" variant="ghost" onClick={() => setEditingBudgetId(null)} disabled={pendingItem === `budget-edit:${b.budgetId}`}>Cancel</Button>
-                    </div>
-                  ) : <div className="flex justify-between text-sm">
-                   <span className="font-medium">{b.projectName}</span>
-                   <span className="text-muted-foreground flex items-center gap-2 tabular-nums">
+                 <div className="flex justify-between text-sm">
+                    <span className="font-medium">{b.projectName}</span>
+                    <span className="text-muted-foreground flex items-center gap-2 tabular-nums">
                       {money(b.spent)} / {money(b.planned)} {canWrite ? <span className="flex items-center gap-1">
                         <Button size="icon-xs" variant="ghost" aria-label={`Edit ${b.projectName} budget`} onClick={() => { setEditingBudgetId(b.budgetId); setEditingPlanned(String(b.planned)); setEditingCurrency(b.currency) }} disabled={pendingItem === `budget-delete:${b.budgetId}`}><PencilIcon className="size-3" /></Button>
                         <Button size="icon-xs" variant="ghost" aria-label={`Delete ${b.projectName} budget`} onClick={() => setDeleteTarget({ type: "budget", id: b.budgetId, label: `${b.projectName} budget` })} disabled={pendingItem === `budget-delete:${b.budgetId}`}><Trash2Icon className="text-destructive size-3" /></Button>
                       </span> : null}
                    </span>
-                 </div>}
+                 </div>
                 <Progress value={Math.min(b.utilization, 100)} />
                 <div className="text-muted-foreground flex justify-between text-[11px]">
                   <span>{b.utilization}% used</span>
@@ -380,61 +367,15 @@ export function FinancePage() {
         </Card>
 
         <Card className="flex min-w-0 flex-col gap-3 p-4">
-          <h2 className="font-semibold">Log time</h2>
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h2 className="font-semibold">Time entries</h2>
+            {canWrite && projects.length > 0 ? <Button size="sm" onClick={() => setShowTimeForm(true)}><PlusIcon className="size-3.5" /> Log time</Button> : null}
+          </div>
           {!canWrite ? <p className="text-muted-foreground text-sm">You do not have permission to log time.</p> : null}
           {canWrite && projects.length === 0 ? (
             <p className="text-muted-foreground text-sm">
               No projects available. Create a project before logging time.
             </p>
-          ) : canWrite ? (
-            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-[minmax(0,1fr)_6rem_9rem_6rem_auto]">
-              <select
-                className="border-input bg-background h-8 min-w-0 rounded-lg border px-2 text-sm"
-                value={projectId}
-                onChange={(e) => setProjectId(e.target.value)}
-              >
-                <option value="" disabled>
-                  Project…
-                </option>
-                {projects.map((p) => (
-                  <option key={p.projectId} value={p.projectId}>
-                    {p.projectName}
-                  </option>
-                ))}
-              </select>
-              <Input
-                type="number"
-                step="0.5"
-                className="w-full"
-                min="0.5"
-                value={hours}
-                onChange={(e) => setHours(e.target.value)}
-              />
-              <Input type="date" value={entryDate} onChange={(e) => setEntryDate(e.target.value)} aria-label="Date" />
-              <Input
-                type="number"
-                min="0"
-                step="0.01"
-                placeholder="Rate"
-                value={rate}
-                onChange={(e) => setRate(e.target.value)}
-                aria-label="Hourly rate"
-              />
-              <label className="border-input flex h-8 items-center gap-2 rounded-lg border px-2 text-sm">
-                <input type="checkbox" checked={billable} onChange={(e) => setBillable(e.target.checked)} />
-                Billable
-              </label>
-              <Input
-                className="min-w-0"
-                placeholder="What did you work on?"
-                value={note}
-                onChange={(e) => setNote(e.target.value)}
-              />
-              <Button size="sm" onClick={() => void logTime()} disabled={!projectId || saving}>
-                {saving ? <LoaderIcon className="size-3.5 animate-spin" /> : <PlusIcon className="size-3.5" />}
-                {saving ? "Logging" : "Log"}
-              </Button>
-            </div>
           ) : null}
           <div className="max-h-64 space-y-2 overflow-y-auto">
             {entries.length === 0 ? (
@@ -449,16 +390,7 @@ export function FinancePage() {
                   key={e.entryId}
                   className="bg-muted/40 flex flex-wrap items-center justify-between gap-2 rounded-lg px-3 py-2 text-sm"
                 >
-                  {editingEntryId === e.entryId ? (
-                    <div className="grid w-full gap-2 sm:grid-cols-2 lg:grid-cols-[5rem_9rem_6rem_minmax(0,1fr)_auto_auto]">
-                      <Input type="number" min="0" step="0.5" value={editingHours} onChange={(event) => setEditingHours(event.target.value)} aria-label="Hours" />
-                      <Input type="date" value={editingDate} onChange={(event) => setEditingDate(event.target.value)} aria-label="Date" />
-                      <Input type="number" min="0" step="0.01" value={editingRate} onChange={(event) => setEditingRate(event.target.value)} aria-label="Hourly rate" />
-                      <Input value={editingNote} onChange={(event) => setEditingNote(event.target.value)} placeholder="Note" aria-label="Note" />
-                      <label className="border-input flex h-8 items-center gap-2 rounded-lg border px-2 text-xs"><input type="checkbox" checked={editingBillable} onChange={(event) => setEditingBillable(event.target.checked)} /> Billable</label>
-                      <span className="flex gap-1"><Button size="sm" onClick={() => void saveEntryEdit()} disabled={pendingItem === `time-edit:${e.entryId}`}>Save</Button><Button size="sm" variant="ghost" onClick={() => setEditingEntryId(null)} disabled={pendingItem === `time-edit:${e.entryId}`}>Cancel</Button></span>
-                    </div>
-                  ) : <>
+                  <>
                     <div>
                       <div className="font-medium">{e.projectName}</div>
                       <div className="text-muted-foreground text-xs">{e.user} · {e.date}{e.note ? ` · ${e.note}` : ""}</div>
@@ -468,13 +400,151 @@ export function FinancePage() {
                       <Badge variant={e.billable ? "default" : "secondary"}>{e.billable ? "Billable" : "Internal"}</Badge>
                       {canWrite ? <><Button size="icon-xs" variant="ghost" aria-label={`Edit time entry for ${e.projectName}`} onClick={() => startEntryEdit(e)} disabled={pendingItem === `time-delete:${e.entryId}`}><PencilIcon className="size-3" /></Button><Button size="icon-xs" variant="ghost" aria-label={`Delete time entry for ${e.projectName}`} onClick={() => setDeleteTarget({ type: "time", id: e.entryId, label: `${e.projectName} time entry` })} disabled={pendingItem === `time-delete:${e.entryId}`}><Trash2Icon className="text-destructive size-3" /></Button></> : null}
                     </div>
-                  </>}
+                  </>
                 </div>
               ))
             )}
           </div>
         </Card>
       </div>
+      <EntityFormDialog
+        open={showBudgetForm || editingBudgetId !== null}
+        onOpenChange={(open) => {
+          const editingPending = editingBudgetId !== null && pendingItem === `budget-edit:${editingBudgetId}`
+          if (!open && !saving && !editingPending) {
+            setShowBudgetForm(false)
+            setEditingBudgetId(null)
+          }
+        }}
+        title={editingBudgetId ? "Edit budget" : "New budget"}
+        description="Set the planned project budget. Spent, utilization, and remaining are calculated from finance data."
+        onSubmit={editingBudgetId ? saveBudgetEdit : saveBudget}
+        submitLabel={editingBudgetId ? "Save changes" : "Create budget"}
+        pending={saving || (editingBudgetId !== null && pendingItem === `budget-edit:${editingBudgetId}`)}
+        submitDisabled={!editingBudgetId && !budgetProjectId}
+      >
+        {editingBudgetId ? (
+          <div className="grid gap-1.5">
+            <Label>Project</Label>
+            <p className="bg-muted/40 rounded-lg px-2.5 py-2 text-sm font-medium">
+              {budgets.find((budget) => budget.budgetId === editingBudgetId)?.projectName}
+            </p>
+          </div>
+        ) : (
+          <div className="grid gap-1.5">
+            <Label htmlFor="budget-project">Project</Label>
+            <Select id="budget-project" value={budgetProjectId} onChange={(event) => setBudgetProjectId(event.target.value)}>
+              <option value="">Select a project</option>
+              {projects.map((project) => <option key={project.projectId} value={project.projectId}>{project.projectName}</option>)}
+            </Select>
+          </div>
+        )}
+        <div className="grid gap-1.5 sm:grid-cols-2">
+          <div className="grid gap-1.5">
+            <Label htmlFor="budget-planned">Planned amount</Label>
+            <Input
+              id="budget-planned"
+              type="number"
+              min="0"
+              value={editingBudgetId ? editingPlanned : budgetPlanned}
+              onChange={(event) => editingBudgetId ? setEditingPlanned(event.target.value) : setBudgetPlanned(event.target.value)}
+            />
+          </div>
+          <div className="grid gap-1.5">
+            <Label htmlFor="budget-currency">Currency</Label>
+            <Input
+              id="budget-currency"
+              maxLength={3}
+              value={editingBudgetId ? editingCurrency : budgetCurrency}
+              onChange={(event) => editingBudgetId ? setEditingCurrency(event.target.value.toUpperCase()) : setBudgetCurrency(event.target.value.toUpperCase())}
+            />
+          </div>
+        </div>
+      </EntityFormDialog>
+      <EntityFormDialog
+        open={showTimeForm || editingEntryId !== null}
+        onOpenChange={(open) => {
+          const editingPending = editingEntryId !== null && pendingItem === `time-edit:${editingEntryId}`
+          if (!open && !saving && !editingPending) {
+            setShowTimeForm(false)
+            setEditingEntryId(null)
+          }
+        }}
+        title={editingEntryId ? "Edit time entry" : "Log time"}
+        description="Record the hours, date, rate, and billable status for this project."
+        onSubmit={editingEntryId ? saveEntryEdit : logTime}
+        submitLabel={editingEntryId ? "Save changes" : "Log time"}
+        pending={saving || (editingEntryId !== null && pendingItem === `time-edit:${editingEntryId}`)}
+        submitDisabled={!editingEntryId && !projectId}
+        maxWidth="max-w-2xl"
+      >
+        {editingEntryId ? (
+          <div className="grid gap-1.5">
+            <Label>Project</Label>
+            <p className="bg-muted/40 rounded-lg px-2.5 py-2 text-sm font-medium">
+              {entries.find((entry) => entry.entryId === editingEntryId)?.projectName}
+            </p>
+          </div>
+        ) : (
+          <div className="grid gap-1.5">
+            <Label htmlFor="time-project">Project</Label>
+            <Select id="time-project" value={projectId} onChange={(event) => setProjectId(event.target.value)}>
+              <option value="">Select a project</option>
+              {projects.map((project) => <option key={project.projectId} value={project.projectId}>{project.projectName}</option>)}
+            </Select>
+          </div>
+        )}
+        <div className="grid gap-4 sm:grid-cols-3">
+          <div className="grid gap-1.5">
+            <Label htmlFor="time-hours">Hours</Label>
+            <Input
+              id="time-hours"
+              type="number"
+              min={editingEntryId ? "0" : "0.5"}
+              step="0.5"
+              value={editingEntryId ? editingHours : hours}
+              onChange={(event) => editingEntryId ? setEditingHours(event.target.value) : setHours(event.target.value)}
+            />
+          </div>
+          <div className="grid gap-1.5">
+            <Label htmlFor="time-date">Date</Label>
+            <Input
+              id="time-date"
+              type="date"
+              value={editingEntryId ? editingDate : entryDate}
+              onChange={(event) => editingEntryId ? setEditingDate(event.target.value) : setEntryDate(event.target.value)}
+            />
+          </div>
+          <div className="grid gap-1.5">
+            <Label htmlFor="time-rate">Hourly rate</Label>
+            <Input
+              id="time-rate"
+              type="number"
+              min="0"
+              step="0.01"
+              value={editingEntryId ? editingRate : rate}
+              onChange={(event) => editingEntryId ? setEditingRate(event.target.value) : setRate(event.target.value)}
+            />
+          </div>
+        </div>
+        <div className="grid gap-1.5">
+          <Label htmlFor="time-note">Note</Label>
+          <Input
+            id="time-note"
+            placeholder="What did you work on?"
+            value={editingEntryId ? editingNote : note}
+            onChange={(event) => editingEntryId ? setEditingNote(event.target.value) : setNote(event.target.value)}
+          />
+        </div>
+        <label className="border-input flex h-9 items-center gap-2 rounded-lg border px-2.5 text-sm">
+          <input
+            type="checkbox"
+            checked={editingEntryId ? editingBillable : billable}
+            onChange={(event) => editingEntryId ? setEditingBillable(event.target.checked) : setBillable(event.target.checked)}
+          />
+          Billable
+        </label>
+      </EntityFormDialog>
       <ConfirmationDialog
         open={deleteTarget !== null}
         onOpenChange={(open) => { if (!open && !pendingItem) setDeleteTarget(null) }}

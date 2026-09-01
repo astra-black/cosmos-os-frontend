@@ -5,12 +5,15 @@ import { toast } from "sonner"
 
 import { EmptyState } from "@/components/shared/empty-state"
 import { CommentsPanel } from "@/components/shared/comments-panel"
+import { EntityFormDialog } from "@/components/shared/entity-form-dialog"
 import { PageHeader } from "@/components/shared/page-header"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 import { Skeleton } from "@/components/ui/skeleton"
+import { Textarea } from "@/components/ui/textarea"
 import { createApproval, decideApproval, listApprovals } from "@/lib/api/agency"
 import { ApiError } from "@/lib/api/client"
 import { useAuth } from "@/lib/auth"
@@ -20,6 +23,7 @@ import { cn } from "@/lib/utils"
 
 const ENTITY_TYPES = ["asset", "deliverable", "budget", "other"] as const
 const PRIORITIES = ["low", "medium", "high", "critical"] as const
+type ApprovalDecision = "approved" | "rejected" | "changes_requested"
 
 export function ApprovalsPage() {
   const { user } = useAuth()
@@ -30,6 +34,7 @@ export function ApprovalsPage() {
   const [busyId, setBusyId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [decisionTarget, setDecisionTarget] = useState<{ approval: Approval; decision: ApprovalDecision } | null>(null)
   const [decisionNotes, setDecisionNotes] = useState("")
   const [createOpen, setCreateOpen] = useState(false)
   const [createBusy, setCreateBusy] = useState(false)
@@ -86,18 +91,19 @@ export function ApprovalsPage() {
 
   async function decide(
     approval: Approval,
-    decision: "approved" | "rejected" | "changes_requested",
+    decision: ApprovalDecision,
   ) {
     if (!canDecide) return
+    const notes = decisionNotes.trim()
+    if (decision === "changes_requested" && !notes) {
+      toast.error("Add notes explaining the requested changes")
+      return
+    }
     setBusyId(approval.approvalId)
     try {
-      const notes = decisionNotes.trim()
-      if (decision === "changes_requested" && !notes) {
-        toast.error("Add notes explaining the requested changes")
-        return
-      }
       await decideApproval(approval.approvalId, decision, notes || undefined)
       await reload()
+      setDecisionTarget(null)
       setSelectedId(null)
       setDecisionNotes("")
       toast.success(`${approval.title} → ${decision.replace("_", " ")}`)
@@ -106,6 +112,12 @@ export function ApprovalsPage() {
     } finally {
       setBusyId(null)
     }
+  }
+
+  function openDecision(approval: Approval, decision: ApprovalDecision) {
+    setSelectedId(approval.approvalId)
+    setDecisionNotes("")
+    setDecisionTarget({ approval, decision })
   }
 
   async function create() {
@@ -194,42 +206,6 @@ export function ApprovalsPage() {
         }
       />
 
-      {createOpen && canDecide ? (
-        <Card className="flex flex-col gap-3 p-4">
-          <div>
-            <h2 className="font-semibold">Request an approval</h2>
-            <p className="text-muted-foreground text-xs">Create a review item for an asset, deliverable, or budget ask.</p>
-          </div>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <Input placeholder="Title *" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} />
-            <Input placeholder="Entity ID *" value={form.entityId} onChange={(e) => setForm({ ...form, entityId: e.target.value })} />
-            <select className="h-8 rounded-lg border border-input bg-transparent px-2.5 text-sm" value={form.entityType} onChange={(e) => setForm({ ...form, entityType: e.target.value })}>
-              {ENTITY_TYPES.map((type) => <option key={type} value={type}>{type[0].toUpperCase() + type.slice(1)}</option>)}
-            </select>
-            <select className="h-8 rounded-lg border border-input bg-transparent px-2.5 text-sm" value={form.priority} onChange={(e) => setForm({ ...form, priority: e.target.value })}>
-              <option value="low">Low priority</option>
-              <option value="medium">Medium priority</option>
-              <option value="high">High priority</option>
-              <option value="critical">Critical priority</option>
-            </select>
-            <Input placeholder="Project ID (optional)" value={form.projectId} onChange={(e) => setForm({ ...form, projectId: e.target.value })} />
-            <Input placeholder="Client ID (optional)" value={form.clientId} onChange={(e) => setForm({ ...form, clientId: e.target.value })} />
-            <Input placeholder="Requester (optional)" value={form.requester} onChange={(e) => setForm({ ...form, requester: e.target.value })} />
-            <Input placeholder="Reviewer (optional)" value={form.reviewer} onChange={(e) => setForm({ ...form, reviewer: e.target.value })} />
-            <Input type="date" aria-label="Due date" value={form.dueDate} onChange={(e) => setForm({ ...form, dueDate: e.target.value })} />
-          </div>
-          <textarea className="min-h-20 rounded-lg border border-input bg-transparent px-2.5 py-2 text-sm outline-none focus-visible:ring-3 focus-visible:ring-ring/50" placeholder="Notes (optional)" value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
-          {formError ? <p className="text-destructive text-xs">{formError}</p> : null}
-          <div className="flex gap-2">
-            <Button size="sm" disabled={createBusy} onClick={() => void create()}>
-              {createBusy ? <Loader2Icon className="size-3.5 animate-spin" /> : null}
-              Create request
-            </Button>
-            <Button size="sm" variant="outline" onClick={() => setCreateOpen(false)}>Cancel</Button>
-          </div>
-        </Card>
-      ) : null}
-
       {error ? (
         <Card className="flex items-center justify-between gap-3 border-destructive/40 px-4 py-3 text-sm">
           <span className="text-destructive">{error}</span>
@@ -257,7 +233,7 @@ export function ApprovalsPage() {
                     "p-4",
                     approval.priority === "critical" && "border-l-destructive border-l-4",
                     approval.priority === "high" && "border-l-chart-4 border-l-4",
-                  )}
+       )}
                 >
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div className="min-w-0">
@@ -310,21 +286,10 @@ export function ApprovalsPage() {
                     </div>
                     {open && canDecide ? (
                       <div className="flex flex-wrap gap-1.5">
-                        {selectedId === approval.approvalId ? (
-                          <input
-                            className="h-7 min-w-48 rounded-lg border border-input bg-transparent px-2 text-xs"
-                            placeholder="Decision notes"
-                            value={decisionNotes}
-                            onChange={(e) => setDecisionNotes(e.target.value)}
-                          />
-                        ) : null}
                         <Button
                           size="sm"
                           disabled={busy}
-                          onClick={() => {
-                            setSelectedId(approval.approvalId)
-                            void decide(approval, "approved")
-                          }}
+                          onClick={() => openDecision(approval, "approved")}
                         >
                           {busy ? (
                             <Loader2Icon className="size-3.5 animate-spin" />
@@ -337,10 +302,7 @@ export function ApprovalsPage() {
                           size="sm"
                           variant="outline"
                           disabled={busy}
-                          onClick={() => {
-                            setSelectedId(approval.approvalId)
-                            void decide(approval, "changes_requested")
-                          }}
+                          onClick={() => openDecision(approval, "changes_requested")}
                         >
                           <MessageSquareWarningIcon className="size-3.5" />
                           Changes
@@ -349,10 +311,7 @@ export function ApprovalsPage() {
                           size="sm"
                           variant="outline"
                           disabled={busy}
-                          onClick={() => {
-                            setSelectedId(approval.approvalId)
-                            void decide(approval, "rejected")
-                          }}
+                          onClick={() => openDecision(approval, "rejected")}
                         >
                           <XIcon className="size-3.5" />
                           Reject
@@ -371,8 +330,93 @@ export function ApprovalsPage() {
               </li>
             )
           })}
-        </ul>
+       </ul>
       )}
+      <EntityFormDialog
+        open={createOpen && canDecide}
+        onOpenChange={(open) => {
+          if (!open && !createBusy) {
+            setCreateOpen(false)
+            setFormError(null)
+          }
+        }}
+        title="Request an approval"
+        description="Create a review item for an asset, deliverable, or budget ask."
+        onSubmit={create}
+        submitLabel="Create request"
+        pending={createBusy}
+        submitDisabled={!form.title.trim() || !form.entityId.trim()}
+        maxWidth="max-w-2xl"
+      >
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid gap-1.5 sm:col-span-2">
+            <Label htmlFor="approval-form-title">Title</Label>
+            <Input id="approval-form-title" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder="Approval title" required />
+          </div>
+          <div className="grid gap-1.5">
+            <Label htmlFor="approval-form-entity-id">Entity ID</Label>
+            <Input id="approval-form-entity-id" value={form.entityId} onChange={(e) => setForm({ ...form, entityId: e.target.value })} placeholder="Asset or deliverable ID" required />
+          </div>
+          <div className="grid gap-1.5">
+            <Label htmlFor="approval-form-entity-type">Entity type</Label>
+            <select id="approval-form-entity-type" className="h-9 rounded-md border border-input bg-transparent px-2 text-sm" value={form.entityType} onChange={(e) => setForm({ ...form, entityType: e.target.value })}>
+              {ENTITY_TYPES.map((type) => <option key={type} value={type}>{type[0].toUpperCase() + type.slice(1)}</option>)}
+            </select>
+          </div>
+          <div className="grid gap-1.5">
+            <Label htmlFor="approval-form-priority">Priority</Label>
+            <select id="approval-form-priority" className="h-9 rounded-md border border-input bg-transparent px-2 text-sm" value={form.priority} onChange={(e) => setForm({ ...form, priority: e.target.value })}>
+              {PRIORITIES.map((priority) => <option key={priority} value={priority}>{priority[0].toUpperCase() + priority.slice(1)}</option>)}
+            </select>
+          </div>
+          <div className="grid gap-1.5">
+            <Label htmlFor="approval-form-due-date">Due date</Label>
+            <Input id="approval-form-due-date" type="date" value={form.dueDate} onChange={(e) => setForm({ ...form, dueDate: e.target.value })} />
+          </div>
+          <div className="grid gap-1.5">
+            <Label htmlFor="approval-form-project">Project ID</Label>
+            <Input id="approval-form-project" value={form.projectId} onChange={(e) => setForm({ ...form, projectId: e.target.value })} placeholder="Optional" />
+          </div>
+          <div className="grid gap-1.5">
+            <Label htmlFor="approval-form-client">Client ID</Label>
+            <Input id="approval-form-client" value={form.clientId} onChange={(e) => setForm({ ...form, clientId: e.target.value })} placeholder="Optional" />
+          </div>
+          <div className="grid gap-1.5">
+            <Label htmlFor="approval-form-requester">Requester</Label>
+            <Input id="approval-form-requester" value={form.requester} onChange={(e) => setForm({ ...form, requester: e.target.value })} placeholder="Optional" />
+          </div>
+          <div className="grid gap-1.5">
+            <Label htmlFor="approval-form-reviewer">Reviewer</Label>
+            <Input id="approval-form-reviewer" value={form.reviewer} onChange={(e) => setForm({ ...form, reviewer: e.target.value })} placeholder="Optional" />
+          </div>
+        </div>
+        <div className="grid gap-1.5">
+          <Label htmlFor="approval-form-notes">Notes</Label>
+          <Textarea id="approval-form-notes" value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} placeholder="Optional context for the reviewer" />
+        </div>
+        {formError ? <p className="text-destructive text-xs">{formError}</p> : null}
+      </EntityFormDialog>
+      <EntityFormDialog
+        open={decisionTarget !== null}
+        onOpenChange={(open) => {
+          if (!open && !busyId) {
+            setDecisionTarget(null)
+            setSelectedId(null)
+            setDecisionNotes("")
+          }
+        }}
+        title={decisionTarget ? `Decision: ${decisionTarget.decision.replace("_", " ")}` : "Approval decision"}
+        description={decisionTarget ? `Add optional notes for ${decisionTarget.approval.title}. Notes are required when requesting changes.` : undefined}
+        onSubmit={() => decisionTarget ? decide(decisionTarget.approval, decisionTarget.decision) : undefined}
+        submitLabel={decisionTarget?.decision === "changes_requested" ? "Request changes" : decisionTarget?.decision === "approved" ? "Approve" : "Reject"}
+        pending={Boolean(decisionTarget && busyId === decisionTarget.approval.approvalId)}
+        submitDisabled={decisionTarget?.decision === "changes_requested" && !decisionNotes.trim()}
+      >
+        <div className="grid gap-1.5">
+          <Label htmlFor="approval-decision-notes">Decision notes</Label>
+          <Textarea id="approval-decision-notes" value={decisionNotes} onChange={(e) => setDecisionNotes(e.target.value)} placeholder="Optional for approve or reject; required for requested changes" autoFocus />
+        </div>
+      </EntityFormDialog>
     </div>
   )
 }

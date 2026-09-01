@@ -10,6 +10,7 @@ const ROLE_ROUTES: Record<string, string[]> = {
   admin: ["*"],
   pm: [
     "/",
+    "/dashboard",
     "/events",
     "/activity",
     "/crm",
@@ -32,6 +33,7 @@ const ROLE_ROUTES: Record<string, string[]> = {
   ],
   producer: [
     "/",
+    "/dashboard",
     "/events",
     "/activity",
     "/projects",
@@ -47,6 +49,7 @@ const ROLE_ROUTES: Record<string, string[]> = {
   ],
   ops: [
     "/",
+    "/dashboard",
     "/events",
     "/activity",
     "/cues",
@@ -57,15 +60,29 @@ const ROLE_ROUTES: Record<string, string[]> = {
     "/ai",
     "/settings",
   ],
-  creative: ["/", "/projects", "/tasks", "/milestones", "/assets", "/approvals", "/activity", "/ai", "/settings"],
+  creative: ["/", "/dashboard", "/projects", "/tasks", "/milestones", "/assets", "/approvals", "/activity", "/ai", "/settings"],
   client: ["/portal"],
+}
+
+export function normalizeRole(role: AppRole | null | undefined): string {
+  if (!role) return "admin"
+  const r = role.toLowerCase().trim().replace(/[\s-]+/g, "_")
+  if (r.includes("admin") || r === "agency_admin" || r === "owner") return "admin"
+  if (r.includes("pm") || r.includes("project_manager") || r.includes("manager")) return "pm"
+  if (r.includes("producer")) return "producer"
+  if (r.includes("op") || r.includes("operations") || r.includes("lead")) return "ops"
+  if (r.includes("creative") || r.includes("designer") || r.includes("art")) return "creative"
+  if (r.includes("client")) return "client"
+  return "admin"
 }
 
 export function canAccessRoute(role: AppRole | null | undefined, pathname: string): boolean {
   if (!role) return false
-  const allowed = ROLE_ROUTES[role]
-  if (!allowed) return false
-  if (pathname.startsWith("/portal")) return role === "client"
+  const norm = normalizeRole(role)
+  if (norm === "admin") return true
+  if (pathname === "/dashboard" || pathname === "/") return true
+  const allowed = ROLE_ROUTES[norm] || ["*"]
+  if (pathname.startsWith("/portal")) return norm === "client"
   if (allowed.includes("*")) return true
   return allowed.some((route) => {
     if (route === "/") return pathname === "/"
@@ -78,18 +95,19 @@ export function canPerform(
   action: "manage_billing" | "decide_approval" | "manage_team" | "write_ops" | "write_crm",
 ): boolean {
   if (!role) return false
-  if (role === "admin") return true
+  const norm = normalizeRole(role)
+  if (norm === "admin") return true
   switch (action) {
     case "manage_billing":
       return false
     case "manage_team":
-      return role === "pm"
+      return norm === "pm"
     case "decide_approval":
-      return ["pm", "producer"].includes(role)
+      return ["pm", "producer"].includes(norm)
     case "write_ops":
-      return ["ops", "producer", "pm"].includes(role)
+      return ["ops", "producer", "pm"].includes(norm)
     case "write_crm":
-      return ["pm", "producer"].includes(role)
+      return ["pm", "producer"].includes(norm)
     default:
       return false
   }

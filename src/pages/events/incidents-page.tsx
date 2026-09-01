@@ -5,46 +5,77 @@ import { toast } from "sonner"
 import { EventScopeBar } from "@/components/ops/event-scope-bar"
 import { IncidentTriage } from "@/components/ops/incident-triage"
 import { ConfirmationDialog } from "@/components/shared/confirmation-dialog"
+import { EntityFormDialog } from "@/components/shared/entity-form-dialog"
 import { withMutationFeedback } from "@/components/shared/mutation-feedback"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Select } from "@/components/ui/select"
 import { Skeleton } from "@/components/ui/skeleton"
+import { Textarea } from "@/components/ui/textarea"
 import { useEventScope } from "@/hooks/use-event-scope"
 import {
   createIncident,
-  escalateIncident,
+  listDepartments,
   listIncidents,
+  updateIncident,
+  escalateIncident,
   reopenIncident,
   resolveIncident,
-  updateIncident,
   deleteIncident,
 } from "@/lib/api/agency"
 import { ApiError } from "@/lib/api/client"
 import { useAuth } from "@/lib/auth"
 import { canPerform } from "@/lib/rbac"
-import type { Incident } from "@/types/agency"
+import type { Department, Incident } from "@/types/agency"
+
+type IncidentFormData = {
+  title: string
+  description: string
+  severity: string
+  category: string
+  departmentId: string
+  location: string
+  assignedTo: string
+}
+
+const emptyIncidentForm: IncidentFormData = {
+  title: "",
+  description: "",
+  severity: "warning",
+  category: "ops",
+  departmentId: "",
+  location: "",
+  assignedTo: "",
+}
+
+const INCIDENT_SEVERITIES = ["info", "warning", "critical"] as const
 
 export function IncidentsPage() {
   const { user } = useAuth()
   const canWrite = canPerform(user?.role, "write_ops")
   const { events, eventId, setEventId, selectedEvent, loadingEvents } = useEventScope()
   const [incidents, setIncidents] = useState<Incident[]>([])
+  const [departments, setDepartments] = useState<Department[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [busyIncidentId, setBusyIncidentId] = useState<string | null>(null)
-  const [showLog, setShowLog] = useState(false)
+  const [incidentFormMode, setIncidentFormMode] = useState<"create" | "edit" | null>(null)
+  const [editingIncident, setEditingIncident] = useState<Incident | null>(null)
   const [logging, setLogging] = useState(false)
-  const [title, setTitle] = useState("")
-  const [severity, setSeverity] = useState("warning")
-  const [location, setLocation] = useState("")
+  const [incidentForm, setIncidentForm] = useState<IncidentFormData>(emptyIncidentForm)
   const [pendingMutationId, setPendingMutationId] = useState<string | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<Incident | null>(null)
 
   const reload = useCallback(async () => {
     if (!eventId) return
-    const listRes = await listIncidents(eventId)
+    const [listRes, departmentsRes] = await Promise.all([
+      listIncidents(eventId),
+      listDepartments(eventId).catch(() => null),
+    ])
     setIncidents(listRes.data ?? [])
+    setDepartments(departmentsRes?.data ?? [])
   }, [eventId])
 
   function patchLocal(updated: Incident | null | undefined) {
@@ -150,25 +181,58 @@ export function IncidentsPage() {
     }
   }
 
-  async function handleLog() {
-    if (!eventId || !canWrite || !title.trim()) return
+  function openCreateDialog() {
+    setEditingIncident(null)
+    setIncidentForm(emptyIncidentForm)
+    setIncidentFormMode("create")
+  }
+
+  function openEditDialog(incident: Incident) {
+    setEditingIncident(incident)
+    setIncidentForm({
+      title: incident.title ?? "",
+      description: incident.description ?? "",
+      severity: incident.severity,
+      category: incident.category ?? "",
+      departmentId: incident.departmentId ?? "",
+      location: incident.location ?? "",
+      assignedTo: incident.assignedTo ?? "",
+    })
+    setIncidentFormMode("edit")
+  }
+
+  async function handleSaveIncident() {
+    if (!eventId || !canWrite || !incidentForm.title.trim()) return
     setLogging(true)
+    const incidentId = editingIncident?.incidentId
+    const payload = {
+      title: incidentForm.title.trim(),
+      description: incidentForm.description.trim() || undefined,
+      severity: incidentForm.severity,
+      category: incidentForm.category.trim() || undefined,
+      departmentId: incidentForm.departmentId || undefined,
+      location: incidentForm.location.trim() || undefined,
+      assignedTo: incidentForm.assignedTo.trim() || undefined,
+    }
     try {
-      const res = await createIncident(eventId, {
-        title: title.trim(),
-        severity,
-        location: location.trim() || undefined,
-        category: "ops",
-      })
-      if (res.data) setIncidents((prev) => [res.data as Incident, ...prev])
-      else await reload()
-      setTitle("")
-      setLocation("")
-      setSeverity("warning")
-      setShowLog(false)
-      toast.success("Incident logged")
+      if (incidentId) {
+        await withMutationFeedback(updateIncident(incidentId, payload), {
+          loading: "Updating incident...",
+          success: "Incident updated",
+          error: (err) => err instanceof ApiError ? err.message : "Could not update incident",
+        })
+      } else {
+        const res = await createIncident(eventId, payload)
+        if (res.data) setIncidents((prev) => [res.data, ...prev])
+        else await reload()
+        toast.success("Incident logged")
+      }
+      setIncidentForm(emptyIncidentForm)
+      setEditingIncident(null)
+      setIncidentFormMode(null)
+      if (incidentId) await reload()
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "Could not log incident")
+      toast.error(err instanceof ApiError ? err.message : incidentId ? "Could not update incident" : "Could not log incident")
     } finally {
       setLogging(false)
     }
@@ -176,17 +240,7 @@ export function IncidentsPage() {
 
   async function handleEdit(incident: Incident) {
     if (!canWrite) return
-    const nextTitle = window.prompt("Incident title", incident.title || "")
-    if (nextTitle == null || !nextTitle.trim() || nextTitle.trim() === incident.title) return
-    setPendingMutationId(incident.incidentId)
-    try {
-      await withMutationFeedback(updateIncident(incident.incidentId, { title: nextTitle.trim() }), {
-        loading: "Updating incident...", success: "Incident updated",
-        error: (err) => err instanceof ApiError ? err.message : "Could not update incident",
-      })
-      await reload()
-    } catch (err) { toast.error(err instanceof ApiError ? err.message : "Could not update incident")
-    } finally { setPendingMutationId(null) }
+    openEditDialog(incident)
   }
 
   async function handleDelete(incident: Incident) {
@@ -216,8 +270,8 @@ export function IncidentsPage() {
           canWrite ? (
             <Button
               size="sm"
-              variant={showLog ? "default" : "outline"}
-              onClick={() => setShowLog((v) => !v)}
+              variant={incidentFormMode === "create" ? "default" : "outline"}
+              onClick={openCreateDialog}
             >
               <PlusIcon className="size-3.5" />
               Log incident
@@ -225,43 +279,6 @@ export function IncidentsPage() {
           ) : undefined
         }
       />
-
-      {showLog && canWrite ? (
-        <Card className="flex flex-col gap-3 p-4 sm:flex-row sm:items-end">
-          <div className="flex min-w-0 flex-1 flex-col gap-1.5">
-            <label className="text-muted-foreground text-xs font-medium">Title</label>
-            <Input
-              placeholder="e.g. Mic drop on presenter 2"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && void handleLog()}
-            />
-          </div>
-          <div className="flex w-full flex-col gap-1.5 sm:w-36">
-            <label className="text-muted-foreground text-xs font-medium">Severity</label>
-            <select
-              className="border-input bg-background h-8 rounded-lg border px-2 text-sm"
-              value={severity}
-              onChange={(e) => setSeverity(e.target.value)}
-            >
-              <option value="info">Info</option>
-              <option value="warning">Warning</option>
-              <option value="critical">Critical</option>
-            </select>
-          </div>
-          <div className="flex min-w-0 flex-1 flex-col gap-1.5">
-            <label className="text-muted-foreground text-xs font-medium">Location</label>
-            <Input
-              placeholder="Main stage"
-              value={location}
-              onChange={(e) => setLocation(e.target.value)}
-            />
-          </div>
-          <Button size="sm" disabled={logging || !title.trim()} onClick={() => void handleLog()}>
-            {logging ? "Logging…" : "Submit"}
-          </Button>
-        </Card>
-      ) : null}
 
       {!canWrite ? (
         <p className="text-muted-foreground text-xs">
@@ -296,6 +313,32 @@ export function IncidentsPage() {
           onDelete={pendingMutationId ? undefined : (incident) => setDeleteTarget(incident)}
         />
       )}
+      <EntityFormDialog
+        open={incidentFormMode !== null}
+        onOpenChange={(open) => {
+          if (!open && !logging) {
+            setIncidentFormMode(null)
+            setEditingIncident(null)
+          }
+        }}
+        title={incidentFormMode === "edit" ? "Edit incident" : "Log incident"}
+        description="Capture the incident details and route it to the right department or owner."
+        onSubmit={handleSaveIncident}
+        submitLabel={incidentFormMode === "edit" ? "Save changes" : "Log incident"}
+        pending={logging}
+        submitDisabled={!incidentForm.title.trim()}
+        maxWidth="max-w-2xl"
+      >
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid gap-1.5 sm:col-span-2"><Label htmlFor="incident-title">Title</Label><Input id="incident-title" value={incidentForm.title} onChange={(e) => setIncidentForm((f) => ({ ...f, title: e.target.value }))} placeholder="e.g. Mic drop on presenter 2" required /></div>
+          <div className="grid gap-1.5"><Label htmlFor="incident-severity">Severity</Label><Select id="incident-severity" value={incidentForm.severity} onChange={(e) => setIncidentForm((f) => ({ ...f, severity: e.target.value }))}>{INCIDENT_SEVERITIES.map((severity) => <option key={severity} value={severity}>{severity}</option>)}</Select></div>
+          <div className="grid gap-1.5"><Label htmlFor="incident-category">Category</Label><Input id="incident-category" value={incidentForm.category} onChange={(e) => setIncidentForm((f) => ({ ...f, category: e.target.value }))} placeholder="Operations" /></div>
+          <div className="grid gap-1.5"><Label htmlFor="incident-department">Department</Label><Select id="incident-department" value={incidentForm.departmentId} onChange={(e) => setIncidentForm((f) => ({ ...f, departmentId: e.target.value }))}><option value="">Unassigned department</option>{departments.map((department) => <option key={department.departmentId} value={department.departmentId}>{department.name}</option>)}</Select></div>
+          <div className="grid gap-1.5"><Label htmlFor="incident-assignee">Assigned to</Label><Input id="incident-assignee" value={incidentForm.assignedTo} onChange={(e) => setIncidentForm((f) => ({ ...f, assignedTo: e.target.value }))} placeholder="Person or team" /></div>
+          <div className="grid gap-1.5 sm:col-span-2"><Label htmlFor="incident-location">Location</Label><Input id="incident-location" value={incidentForm.location} onChange={(e) => setIncidentForm((f) => ({ ...f, location: e.target.value }))} placeholder="Main stage" /></div>
+        </div>
+        <div className="grid gap-1.5"><Label htmlFor="incident-description">Description</Label><Textarea id="incident-description" value={incidentForm.description} onChange={(e) => setIncidentForm((f) => ({ ...f, description: e.target.value }))} placeholder="What happened?" /></div>
+      </EntityFormDialog>
       <ConfirmationDialog
         open={Boolean(deleteTarget)}
         onOpenChange={(open) => { if (!open && !pendingMutationId) setDeleteTarget(null) }}

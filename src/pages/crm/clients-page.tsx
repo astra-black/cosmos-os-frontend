@@ -14,13 +14,17 @@ import { toast } from "sonner"
 
 import { CommentsPanel } from "@/components/shared/comments-panel"
 import { ConfirmationDialog } from "@/components/shared/confirmation-dialog"
+import { EntityFormDialog } from "@/components/shared/entity-form-dialog"
 import { EmptyState } from "@/components/shared/empty-state"
 import { PageHeader } from "@/components/shared/page-header"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Select } from "@/components/ui/select"
 import { Skeleton } from "@/components/ui/skeleton"
+import { Textarea } from "@/components/ui/textarea"
 import { useClients } from "@/hooks/use-agency-data"
 import {
   createClient,
@@ -45,7 +49,112 @@ import type {
 import { cn } from "@/lib/utils"
 
 const STAGES = ["prospect", "onboarding", "active", "paused", "churned"] as const
+const HEALTH_OPTIONS = ["strong", "watch", "new", "risk"] as const
 type Tab = "overview" | "contacts" | "deals" | "activity" | "comments"
+type ClientForm = {
+  name: string
+  industry: string
+  stage: string
+  email: string
+  phone: string
+  health: string
+  arr: string
+  tags: string
+  notes: string
+}
+
+const emptyClientForm = (): ClientForm => ({
+  name: "",
+  industry: "",
+  stage: "prospect",
+  email: "",
+  phone: "",
+  health: "",
+  arr: "",
+  tags: "",
+  notes: "",
+})
+
+function clientFormFromClient(client: AgencyClient): ClientForm {
+  return {
+    name: client.name,
+    industry: client.industry ?? "",
+    stage: client.stage,
+    email: client.email ?? "",
+    phone: client.phone ?? "",
+    health: client.health ?? "",
+    arr: client.arr == null ? "" : String(client.arr),
+    tags: client.tags?.join(", ") ?? "",
+    notes: client.notes ?? "",
+  }
+}
+
+function validateClientForm(values: ClientForm) {
+  if (!values.name.trim()) return "Name is required"
+  if (values.email.trim() && !/^\S+@\S+\.\S+$/.test(values.email.trim())) return "Email is invalid"
+  if (values.arr.trim()) {
+    const arr = Number(values.arr)
+    if (!Number.isFinite(arr) || arr < 0) return "ARR must be a non-negative number"
+  }
+  return null
+}
+
+function ClientFormFields({
+  form,
+  onChange,
+}: {
+  form: ClientForm
+  onChange: (field: keyof ClientForm, value: string) => void
+}) {
+  return (
+    <>
+      <div className="grid gap-2 sm:grid-cols-2">
+        <div className="grid gap-2 sm:col-span-2">
+          <Label htmlFor="client-form-name">Name</Label>
+          <Input id="client-form-name" value={form.name} onChange={(e) => onChange("name", e.target.value)} placeholder="Account name" required />
+        </div>
+        <div className="grid gap-2">
+          <Label htmlFor="client-form-industry">Industry</Label>
+          <Input id="client-form-industry" value={form.industry} onChange={(e) => onChange("industry", e.target.value)} placeholder="Industry" />
+        </div>
+        <div className="grid gap-2">
+          <Label htmlFor="client-form-stage">Stage</Label>
+          <Select id="client-form-stage" value={form.stage} onChange={(e) => onChange("stage", e.target.value)}>
+            {STAGES.map((stage) => <option key={stage} value={stage}>{stage}</option>)}
+          </Select>
+        </div>
+        <div className="grid gap-2">
+          <Label htmlFor="client-form-email">Email</Label>
+          <Input id="client-form-email" type="email" value={form.email} onChange={(e) => onChange("email", e.target.value)} placeholder="contact@example.com" />
+        </div>
+        <div className="grid gap-2">
+          <Label htmlFor="client-form-phone">Phone</Label>
+          <Input id="client-form-phone" type="tel" value={form.phone} onChange={(e) => onChange("phone", e.target.value)} placeholder="Phone number" />
+        </div>
+        <div className="grid gap-2">
+          <Label htmlFor="client-form-health">Health</Label>
+          <Select id="client-form-health" value={form.health} onChange={(e) => onChange("health", e.target.value)}>
+            <option value="">Not set</option>
+            {HEALTH_OPTIONS.map((health) => <option key={health} value={health}>{health}</option>)}
+          </Select>
+        </div>
+        <div className="grid gap-2">
+          <Label htmlFor="client-form-arr">ARR</Label>
+          <Input id="client-form-arr" type="number" min="0" step="any" value={form.arr} onChange={(e) => onChange("arr", e.target.value)} placeholder="0" />
+        </div>
+        <div className="grid gap-2 sm:col-span-2">
+          <Label htmlFor="client-form-tags">Tags</Label>
+          <Input id="client-form-tags" value={form.tags} onChange={(e) => onChange("tags", e.target.value)} placeholder="retainer, priority, launch" />
+          <p className="text-muted-foreground text-xs">Separate tags with commas.</p>
+        </div>
+        <div className="grid gap-2 sm:col-span-2">
+          <Label htmlFor="client-form-notes">Notes</Label>
+          <Textarea id="client-form-notes" value={form.notes} onChange={(e) => onChange("notes", e.target.value)} placeholder="Account notes" />
+        </div>
+      </div>
+    </>
+  )
+}
 
 function money(n?: number) {
   if (n == null) return "—"
@@ -72,9 +181,12 @@ export function ClientsPage() {
   const [deals, setDeals] = useState<Opportunity[]>([])
   const [activities, setActivities] = useState<CrmActivity[]>([])
   const [detailLoading, setDetailLoading] = useState(false)
-  const [creating, setCreating] = useState(false)
+  const [savingClient, setSavingClient] = useState(false)
   const [deleting, setDeleting] = useState(false)
-  const [newName, setNewName] = useState("")
+  const [clientFormMode, setClientFormMode] = useState<"create" | "edit" | null>(null)
+  const [clientForm, setClientForm] = useState<ClientForm>(emptyClientForm)
+  const [editClientTarget, setEditClientTarget] = useState<AgencyClient | null>(null)
+  const [deleteClientTarget, setDeleteClientTarget] = useState<AgencyClient | null>(null)
   const [note, setNote] = useState("")
   const [editingActivityId, setEditingActivityId] = useState<string | null>(null)
   const [activityForm, setActivityForm] = useState({ subject: "", body: "" })
@@ -150,19 +262,54 @@ export function ClientsPage() {
     .filter((d) => !["won", "lost"].includes(d.stage))
     .reduce((s, d) => s + (d.value || 0), 0)
 
-  async function handleCreate() {
-    if (!newName.trim() || !canWriteCrm) return
-    setCreating(true)
+  function openCreateClient() {
+    setClientForm(emptyClientForm())
+    setEditClientTarget(null)
+    setClientFormMode("create")
+  }
+
+  function openEditClient(client: AgencyClient) {
+    setClientForm(clientFormFromClient(client))
+    setEditClientTarget(client)
+    setClientFormMode("edit")
+  }
+
+  function clientPayload(values: ClientForm): Partial<AgencyClient> {
+    return {
+      name: values.name.trim(),
+      industry: values.industry.trim(),
+      stage: values.stage,
+      email: values.email.trim(),
+      phone: values.phone.trim(),
+      health: values.health,
+      arr: values.arr.trim() ? Number(values.arr) : 0,
+      tags: values.tags.split(",").map((tag) => tag.trim()).filter(Boolean),
+      notes: values.notes.trim(),
+    }
+  }
+
+  async function handleSaveClient() {
+    if (!canWriteCrm) return
+    const validationError = validateClientForm(clientForm)
+    if (validationError) {
+      toast.error(validationError)
+      return
+    }
+    setSavingClient(true)
     try {
-      const res = await createClient({ name: newName.trim(), stage: "prospect" })
+      const payload = clientPayload(clientForm)
+      const res = clientFormMode === "edit" && editClientTarget
+        ? await updateClient(editClientTarget.clientId, payload)
+        : await createClient(payload)
       await reloadClients()
-      if (res.data?.clientId) selectClient(res.data.clientId)
-      setNewName("")
-      toast.success("Account created")
+      if (clientFormMode === "create" && res.data?.clientId) selectClient(res.data.clientId)
+      setClientFormMode(null)
+      setEditClientTarget(null)
+      toast.success(clientFormMode === "edit" ? "Account updated" : "Account created")
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "Create failed")
+      toast.error(err instanceof ApiError ? err.message : clientFormMode === "edit" ? "Update failed" : "Create failed")
     } finally {
-      setCreating(false)
+      setSavingClient(false)
     }
   }
 
@@ -179,8 +326,14 @@ export function ClientsPage() {
     }
   }
 
-  async function handleDelete(client: AgencyClient) {
-    if (!canWriteCrm || !window.confirm(`Delete account "${client.name}"? This cannot be undone.`)) return
+  function handleDelete(client: AgencyClient) {
+    if (!canWriteCrm) return
+    setDeleteClientTarget(client)
+  }
+
+  async function confirmDeleteClient() {
+    if (!deleteClientTarget || !canWriteCrm) return
+    const client = deleteClientTarget
     setDeleting(true)
     try {
       await deleteClient(client.clientId)
@@ -191,6 +344,7 @@ export function ClientsPage() {
       toast.error(err instanceof ApiError ? err.message : "Delete failed")
     } finally {
       setDeleting(false)
+      setDeleteClientTarget(null)
     }
   }
 
@@ -271,18 +425,10 @@ export function ClientsPage() {
         description="CRM accounts — stage, health, contacts, deals, and activity log."
         actions={
           canWriteCrm ? (
-            <div className="flex w-full max-w-full flex-col gap-2 sm:w-auto sm:flex-row">
-              <Input
-                placeholder="New account name"
-                value={newName}
-                onChange={(e) => setNewName(e.target.value)}
-                className="w-full sm:w-44"
-              />
-              <Button size="sm" disabled={creating || !newName.trim()} onClick={handleCreate}>
-                <PlusIcon className="size-3.5" />
-                Add
-              </Button>
-            </div>
+            <Button size="sm" onClick={openCreateClient}>
+              <PlusIcon className="size-3.5" />
+              Add account
+            </Button>
           ) : undefined
         }
       />
@@ -395,16 +541,21 @@ export function ClientsPage() {
                       <Badge variant="outline" className="capitalize">
                         {selected.health}
                       </Badge>
-                      {selected.stage !== "churned" ? (
-                        <Button size="sm" variant="outline" onClick={() => advanceStage(selected)}>
-                          Advance stage
-                        </Button>
-                      ) : null}
-                      {canWriteCrm ? (
-                        <Button size="icon" variant="ghost" className="size-8 text-destructive" disabled={deleting} onClick={() => void handleDelete(selected)} aria-label={`Delete ${selected.name}`}>
-                          <Trash2Icon className="size-3.5" />
-                        </Button>
-                      ) : null}
+                       {selected.stage !== "churned" ? (
+                         <Button size="sm" variant="outline" onClick={() => advanceStage(selected)}>
+                           Advance stage
+                         </Button>
+                       ) : null}
+                       {canWriteCrm ? (
+                         <>
+                           <Button size="icon" variant="ghost" className="size-8" onClick={() => openEditClient(selected)} aria-label={`Edit ${selected.name}`}>
+                             <PencilIcon className="size-3.5" />
+                           </Button>
+                           <Button size="icon" variant="ghost" className="size-8 text-destructive" disabled={deleting} onClick={() => handleDelete(selected)} aria-label={`Delete ${selected.name}`}>
+                             <Trash2Icon className="size-3.5" />
+                           </Button>
+                         </>
+                       ) : null}
                     </div>
                   </div>
                   <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
@@ -590,9 +741,40 @@ export function ClientsPage() {
                 )}
               </div>
             )}
-      </div>
-      <ConfirmationDialog
-        open={Boolean(deleteActivityTarget)}
+       </div>
+       <EntityFormDialog
+         open={clientFormMode !== null}
+         onOpenChange={(open) => {
+           if (!open && !savingClient) {
+             setClientFormMode(null)
+             setEditClientTarget(null)
+           }
+         }}
+         title={clientFormMode === "edit" ? "Edit account" : "Add account"}
+         description="Keep account details, health, and commercial context in one place."
+         onSubmit={handleSaveClient}
+         submitLabel={clientFormMode === "edit" ? "Save changes" : "Create account"}
+         pending={savingClient}
+         submitDisabled={!clientForm.name.trim()}
+         maxWidth="max-w-2xl"
+       >
+         <ClientFormFields
+           form={clientForm}
+           onChange={(field, value) => setClientForm((current) => ({ ...current, [field]: value }))}
+         />
+       </EntityFormDialog>
+       <ConfirmationDialog
+         open={Boolean(deleteClientTarget)}
+         onOpenChange={(open) => { if (!open && !deleting) setDeleteClientTarget(null) }}
+         title={`Delete account "${deleteClientTarget?.name ?? ""}"?`}
+         description="This action cannot be undone."
+         confirmLabel="Delete"
+         destructive
+         pending={deleting}
+         onConfirm={confirmDeleteClient}
+       />
+       <ConfirmationDialog
+         open={Boolean(deleteActivityTarget)}
         onOpenChange={(open) => { if (!open && !pendingActivityId) setDeleteActivityTarget(null) }}
         title={`Delete ${deleteActivityTarget?.subject ?? "activity"}?`}
         description="This action cannot be undone."

@@ -2,10 +2,13 @@ import { useEffect, useState } from "react"
 import { Navigate, useNavigate } from "react-router-dom"
 import { toast } from "sonner"
 
+import { EntityFormDialog } from "@/components/shared/entity-form-dialog"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
+import { Label } from "@/components/ui/label"
 import { Skeleton } from "@/components/ui/skeleton"
+import { Textarea } from "@/components/ui/textarea"
 import {
   portalApprovals,
   portalAssets,
@@ -20,6 +23,9 @@ export function PortalHomePage() {
   const [approvals, setApprovals] = useState<any[]>([])
   const [assets, setAssets] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
+  const [decisionTarget, setDecisionTarget] = useState<any | null>(null)
+  const [decisionNotes, setDecisionNotes] = useState("")
+  const [decisionBusy, setDecisionBusy] = useState(false)
 
   useEffect(() => {
     if (!user?.clientId) return
@@ -48,19 +54,37 @@ export function PortalHomePage() {
 
   if (!user) return <Navigate to="/portal/login" replace />
 
-  async function decide(id: string, decision: string) {
+  async function decide(id: string, decision: string, notes?: string) {
     if (user.role !== "client") {
       clearPortalUser()
       navigate("/portal/login", { replace: true })
-      return
+      return false
     }
+    setDecisionBusy(true)
     try {
-      await portalDecide(id, decision)
+      await portalDecide(id, decision, notes)
       const a = await portalApprovals(user.clientId)
       setApprovals((a.data as any[]) ?? [])
       toast.success(`Marked ${decision}`)
+      return true
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : "Failed")
+      return false
+    } finally {
+      setDecisionBusy(false)
+    }
+  }
+
+  async function submitChangesRequest() {
+    if (!decisionTarget) return
+    const notes = decisionNotes.trim()
+    if (!notes) {
+      toast.error("Add notes explaining the requested changes")
+      return
+    }
+    if (await decide(decisionTarget.approvalId, "changes_requested", notes)) {
+      setDecisionTarget(null)
+      setDecisionNotes("")
     }
   }
 
@@ -105,13 +129,17 @@ export function PortalHomePage() {
                   </div>
                   {(a.status === "pending" || a.status === "changes_requested") && (
                     <div className="flex gap-2">
-                      <Button size="sm" onClick={() => void decide(a.approvalId, "approved")}>
+                      <Button size="sm" disabled={decisionBusy} onClick={() => void decide(a.approvalId, "approved")}>
                         Approve
                       </Button>
                       <Button
                         size="sm"
                         variant="outline"
-                        onClick={() => void decide(a.approvalId, "changes_requested")}
+                        disabled={decisionBusy}
+                        onClick={() => {
+                          setDecisionTarget(a)
+                          setDecisionNotes("")
+                        }}
                       >
                         Request changes
                       </Button>
@@ -142,6 +170,33 @@ export function PortalHomePage() {
           )}
         </section>
       </main>
+      <EntityFormDialog
+        open={Boolean(decisionTarget)}
+        onOpenChange={(open) => {
+          if (!open && !decisionBusy) {
+            setDecisionTarget(null)
+            setDecisionNotes("")
+          }
+        }}
+        title="Request changes"
+        description={decisionTarget ? `Add notes for ${decisionTarget.title}.` : undefined}
+        onSubmit={submitChangesRequest}
+        submitLabel="Send request"
+        pending={decisionBusy}
+        submitDisabled={!decisionNotes.trim()}
+      >
+        <div className="grid gap-1.5">
+          <Label htmlFor="portal-decision-notes">Notes</Label>
+          <Textarea
+            id="portal-decision-notes"
+            value={decisionNotes}
+            onChange={(event) => setDecisionNotes(event.target.value)}
+            placeholder="Explain what needs to be changed before approval."
+            required
+            autoFocus
+          />
+        </div>
+      </EntityFormDialog>
     </div>
   )
 }

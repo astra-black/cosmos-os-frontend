@@ -1,14 +1,17 @@
 import { useState } from "react"
-import { FlagIcon, Loader2Icon, PencilIcon, PlusIcon, RefreshCwIcon, Trash2Icon } from "lucide-react"
+import { FlagIcon, PencilIcon, PlusIcon, RefreshCwIcon, Trash2Icon } from "lucide-react"
 import { toast } from "sonner"
 
-import { EmptyState } from "@/components/shared/empty-state"
 import { ConfirmationDialog } from "@/components/shared/confirmation-dialog"
+import { EmptyState } from "@/components/shared/empty-state"
+import { EntityFormDialog } from "@/components/shared/entity-form-dialog"
 import { PageHeader } from "@/components/shared/page-header"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Select } from "@/components/ui/select"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useMilestones, useProjects } from "@/hooks/use-agency-data"
 import { createMilestone, deleteMilestone, updateMilestone } from "@/lib/api/agency"
@@ -145,49 +148,6 @@ export function MilestonesPage() {
     }
   }
 
-  const formPanel = showCreate || editingId
-    ? <Card className="gap-3 p-4">
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <label className="grid gap-1 text-xs font-medium">
-            MilestoneId
-            <Input value={form.milestoneId} onChange={(event) => updateForm("milestoneId", event.target.value)} placeholder="Generated if blank" />
-          </label>
-          <label className="grid gap-1 text-xs font-medium sm:col-span-2">
-            Name
-            <Input value={form.name} onChange={(event) => updateForm("name", event.target.value)} placeholder="Launch creative review" />
-          </label>
-          <label className="grid gap-1 text-xs font-medium">
-            DueDate
-            <Input type="date" value={form.dueDate} onChange={(event) => updateForm("dueDate", event.target.value)} />
-          </label>
-          <label className="grid gap-1 text-xs font-medium">
-            Status
-            <select className="border-input bg-background h-8 rounded-lg border px-2 text-sm" value={form.status} onChange={(event) => updateForm("status", event.target.value)}>
-              {STATUSES.map((status) => <option key={status} value={status}>{status}</option>)}
-            </select>
-          </label>
-          <label className="grid gap-1 text-xs font-medium sm:col-span-2">
-            Project link
-            <select className="border-input bg-background h-8 rounded-lg border px-2 text-sm" value={form.projectId} onChange={(event) => updateForm("projectId", event.target.value)}>
-              <option value="">Select a project</option>
-              {projects.map((project) => <option key={project.projectId} value={project.projectId}>{project.projectName}</option>)}
-            </select>
-          </label>
-          <label className="grid gap-1 text-xs font-medium sm:col-span-2">
-            Notes
-            <textarea className="border-input bg-background min-h-8 rounded-lg border px-2 py-1.5 text-sm" value={form.notes} onChange={(event) => updateForm("notes", event.target.value)} placeholder="Optional context" />
-          </label>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <Button size="sm" disabled={busy} onClick={() => void save()}>
-            {busy ? <Loader2Icon className="size-3.5 animate-spin" /> : null}
-            {editingId ? "Save changes" : "Create milestone"}
-          </Button>
-          <Button size="sm" variant="outline" disabled={busy} onClick={cancelForm}>Cancel</Button>
-        </div>
-      </Card>
-    : null
-
   return (
     <div className="flex flex-col gap-5">
       <PageHeader
@@ -195,7 +155,6 @@ export function MilestonesPage() {
         description="Track delivery dates and project checkpoints."
         actions={canWrite ? <Button size="sm" variant={showCreate ? "default" : "outline"} onClick={showCreate ? cancelForm : startCreate}><PlusIcon className="size-3.5" />Add milestone</Button> : undefined}
       />
-      {formPanel}
       {loading ? (
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">{[1, 2, 3].map((item) => <Skeleton key={item} className="h-40 rounded-xl" />)}</div>
       ) : error ? (
@@ -229,8 +188,88 @@ export function MilestonesPage() {
               </div> : null}
             </Card>
           })}
+         </div>
+       )}
+      <EntityFormDialog
+        open={showCreate || Boolean(editingId)}
+        onOpenChange={(open) => {
+          if (!open && !busy) cancelForm()
+        }}
+        title={editingId ? "Edit milestone" : "Create milestone"}
+        description="Keep the checkpoint linked to a project with a valid delivery date."
+        onSubmit={save}
+        submitLabel={editingId ? "Save changes" : "Create milestone"}
+        pending={busy}
+        submitDisabled={!form.name.trim()}
+        maxWidth="max-w-2xl"
+      >
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid gap-1.5">
+            <Label htmlFor="milestone-form-id">Milestone ID</Label>
+            <Input
+              id="milestone-form-id"
+              value={form.milestoneId}
+              onChange={(event) => updateForm("milestoneId", event.target.value)}
+              placeholder="Generated if blank"
+            />
+          </div>
+          <div className="grid gap-1.5 sm:col-span-2">
+            <Label htmlFor="milestone-form-name">Name</Label>
+            <Input
+              id="milestone-form-name"
+              value={form.name}
+              onChange={(event) => updateForm("name", event.target.value)}
+              placeholder="Launch creative review"
+              required
+            />
+          </div>
+          <div className="grid gap-1.5">
+            <Label htmlFor="milestone-form-date">Due date</Label>
+            <Input
+              id="milestone-form-date"
+              type="date"
+              value={form.dueDate}
+              onChange={(event) => updateForm("dueDate", event.target.value)}
+              required
+            />
+          </div>
+          <div className="grid gap-1.5">
+            <Label htmlFor="milestone-form-status">Status</Label>
+            <Select
+              id="milestone-form-status"
+              value={form.status}
+              onChange={(event) => updateForm("status", event.target.value)}
+            >
+              {STATUSES.map((status) => <option key={status} value={status}>{status}</option>)}
+            </Select>
+          </div>
+          <div className="grid gap-1.5 sm:col-span-2">
+            <Label htmlFor="milestone-form-project">Project</Label>
+            <Select
+              id="milestone-form-project"
+              value={form.projectId}
+              onChange={(event) => updateForm("projectId", event.target.value)}
+              required
+            >
+              <option value="">Select a project</option>
+              {projects.map((project) => <option key={project.projectId} value={project.projectId}>{project.projectName}</option>)}
+              {form.projectId && !projects.some((project) => project.projectId === form.projectId) ? (
+                <option value={form.projectId}>{form.projectId}</option>
+              ) : null}
+            </Select>
+          </div>
+          <div className="grid gap-1.5 sm:col-span-2">
+            <Label htmlFor="milestone-form-notes">Notes</Label>
+            <textarea
+              id="milestone-form-notes"
+              className="border-input bg-background min-h-20 rounded-lg border px-2.5 py-2 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+              value={form.notes}
+              onChange={(event) => updateForm("notes", event.target.value)}
+              placeholder="Optional context"
+            />
+          </div>
         </div>
-      )}
+      </EntityFormDialog>
       <ConfirmationDialog
         open={Boolean(deleteTarget)}
         onOpenChange={(open) => { if (!open && !pendingMilestoneId) setDeleteTarget(null) }}

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react"
 import { ApiError } from "@/lib/api/client"
 
 /**
- * Shared list loader for agency pages — reduces copy-paste useEffect patterns.
+ * Shared list loader for agency pages — clean lifecycle without cross-hook cache collision.
  */
 export function useAsyncList<T>(
   loader: () => Promise<T[]>,

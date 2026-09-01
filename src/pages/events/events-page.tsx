@@ -10,11 +10,15 @@ import { toast } from "sonner"
 
 import { PageHeader } from "@/components/shared/page-header"
 import { ConfirmationDialog } from "@/components/shared/confirmation-dialog"
+import { EntityFormDialog } from "@/components/shared/entity-form-dialog"
 import { withMutationFeedback } from "@/components/shared/mutation-feedback"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Select } from "@/components/ui/select"
 import { Skeleton } from "@/components/ui/skeleton"
+import { Textarea } from "@/components/ui/textarea"
 import { EventOpsMetricsCard } from "@/components/widgets/event-ops-metrics-card"
 import { EventsDatatable } from "@/components/widgets/events-datatable"
 import { PortfolioSummaryCard } from "@/components/widgets/portfolio-summary-card"
@@ -23,9 +27,46 @@ import { createEvent, deleteEvent, listEvents, updateEvent } from "@/lib/api/age
 import { ApiError } from "@/lib/api/client"
 import { useAuth } from "@/lib/auth"
 import { canPerform } from "@/lib/rbac"
-import type { Event } from "@/types/agency"
+import type { Event, EventStatus } from "@/types/agency"
 
 const EVENT_TYPES = ["festival", "concert", "conference", "corporate", "tour", "private", "Product"] as const
+const EVENT_STATUSES = ["draft", "planning", "confirmed", "live", "completed", "cancelled"] as const
+
+type EventFormData = {
+  name: string
+  type: string
+  status: EventStatus
+  location: string
+  venue: string
+  description: string
+  organizerId: string
+  expectedAttendees: string
+  budget: string
+  startDate: string
+  endDate: string
+}
+
+const emptyEventForm: EventFormData = {
+  name: "",
+  type: "corporate",
+  status: "draft",
+  location: "",
+  venue: "",
+  description: "",
+  organizerId: "",
+  expectedAttendees: "",
+  budget: "",
+  startDate: "",
+  endDate: "",
+}
+
+function toDateTimeLocal(value?: string) {
+  if (!value) return ""
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return ""
+  const pad = (part: number) => String(part).padStart(2, "0")
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`
+}
 
 const STATUS_COLORS: Record<string, string> = {
   draft: "var(--chart-3)",
@@ -42,23 +83,13 @@ export function EventsPage() {
   const [events, setEvents] = useState<Event[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [showCreate, setShowCreate] = useState(false)
+  const [eventFormMode, setEventFormMode] = useState<"create" | "edit" | null>(null)
+  const [editingEvent, setEditingEvent] = useState<Event | null>(null)
   const [creating, setCreating] = useState(false)
   const [saving, setSaving] = useState(false)
   const [pendingEventId, setPendingEventId] = useState<string | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<Event | null>(null)
-  const [form, setForm] = useState({
-    name: "",
-    type: "corporate",
-    location: "",
-    venue: "",
-    description: "",
-    organizerId: "",
-    expectedAttendees: "",
-    budget: "",
-    startDate: "",
-    endDate: "",
-  })
+  const [form, setForm] = useState<EventFormData>(emptyEventForm)
 
   async function reload() {
     const response = await listEvents({ page: 1, limit: 100 })
@@ -86,7 +117,31 @@ export function EventsPage() {
     }
   }, [])
 
-  async function handleCreate() {
+  function openCreateDialog() {
+    setEditingEvent(null)
+    setForm(emptyEventForm)
+    setEventFormMode("create")
+  }
+
+  function openEditDialog(event: Event) {
+    setEditingEvent(event)
+    setForm({
+      name: event.name,
+      type: event.type,
+      status: event.status,
+      location: event.location,
+      venue: event.venue ?? "",
+      description: event.description ?? "",
+      organizerId: event.organizerId ?? "",
+      expectedAttendees: event.expectedAttendees != null ? String(event.expectedAttendees) : "",
+      budget: event.budget != null ? String(event.budget) : "",
+      startDate: toDateTimeLocal(event.startDate),
+      endDate: toDateTimeLocal(event.endDate),
+    })
+    setEventFormMode("edit")
+  }
+
+  async function handleSaveEvent() {
     if (!canWrite) return
     if (!form.name.trim() || !form.type || !form.location.trim() || !form.startDate || !form.endDate) {
       toast.error("Name, type, location, start date, and end date are required")
@@ -107,49 +162,46 @@ export function EventsPage() {
       toast.error("Attendees must be a positive whole number and budget must be positive")
       return
     }
-    setCreating(true)
+    const pending = eventFormMode === "create" ? setCreating : setSaving
+    pending(true)
     try {
-      await createEvent({
+      const payload = {
         name: form.name.trim(),
         type: form.type,
+        status: form.status,
         location: form.location.trim(),
         venue: form.venue.trim() || undefined,
         description: form.description.trim() || undefined,
         organizerId: form.organizerId.trim() || undefined,
         expectedAttendees,
         budget,
-        status: "draft",
         startDate: startDate.toISOString(),
         endDate: endDate.toISOString(),
-      })
-      setForm({ name: "", type: "corporate", location: "", venue: "", description: "", organizerId: "", expectedAttendees: "", budget: "", startDate: "", endDate: "" })
-      setShowCreate(false)
+      }
+      await withMutationFeedback(
+        eventFormMode === "edit" && editingEvent
+          ? updateEvent(editingEvent.eventId, payload)
+          : createEvent(payload),
+        {
+          loading: eventFormMode === "edit" ? "Updating event..." : "Creating event...",
+          success: eventFormMode === "edit" ? "Event updated" : "Event created",
+          error: (err) => err instanceof ApiError ? err.message : eventFormMode === "edit" ? "Update failed" : "Create failed",
+        },
+      )
+      setForm(emptyEventForm)
+      setEditingEvent(null)
+      setEventFormMode(null)
       await reload()
-      toast.success("Event created")
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "Create failed")
+      toast.error(err instanceof ApiError ? err.message : eventFormMode === "edit" ? "Update failed" : "Create failed")
     } finally {
-      setCreating(false)
+      pending(false)
     }
   }
 
   async function handleEdit(event: Event) {
     if (!canWrite) return
-    const name = window.prompt("Event name", event.name)
-    if (name == null || !name.trim() || name.trim() === event.name) return
-    setSaving(true)
-    setPendingEventId(event.eventId)
-    try {
-      await withMutationFeedback(
-        updateEvent(event.eventId, { name: name.trim() }),
-        { loading: "Updating event...", success: "Event updated", error: (err) => err instanceof ApiError ? err.message : "Update failed" },
-      )
-      await reload()
-    } catch {
-    } finally {
-      setSaving(false)
-      setPendingEventId(null)
-    }
+    openEditDialog(event)
   }
 
   async function handleDelete(event: Event) {
@@ -216,59 +268,12 @@ export function EventsPage() {
         title="Events"
         description="Agency calendar and show pipeline — open a row for cues, crew, and incidents."
         actions={
-          canWrite ? <Button size="sm" onClick={() => setShowCreate((v) => !v)}>
+          canWrite ? <Button size="sm" onClick={openCreateDialog}>
             <PlusIcon className="size-3.5" />
             New event
           </Button> : undefined
         }
       />
-
-      {showCreate ? (
-        <Card className="grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-3">
-          <Input
-            placeholder="Event name"
-            value={form.name}
-            onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-          />
-          <select
-            className="border-input bg-background h-9 w-full rounded-md border px-2 text-sm"
-            value={form.type}
-            onChange={(e) => setForm((f) => ({ ...f, type: e.target.value }))}
-          >
-            {EVENT_TYPES.map((type) => (
-              <option key={type} value={type}>{type}</option>
-            ))}
-          </select>
-          <Input
-            placeholder="Location"
-            value={form.location}
-            onChange={(e) => setForm((f) => ({ ...f, location: e.target.value }))}
-          />
-          <Input placeholder="Venue" value={form.venue} onChange={(e) => setForm((f) => ({ ...f, venue: e.target.value }))} />
-          <Input placeholder="Organizer ID" value={form.organizerId} onChange={(e) => setForm((f) => ({ ...f, organizerId: e.target.value }))} />
-          <Input type="number" min="1" step="1" placeholder="Expected attendees" value={form.expectedAttendees} onChange={(e) => setForm((f) => ({ ...f, expectedAttendees: e.target.value }))} />
-          <Input type="number" min="0.01" step="0.01" placeholder="Budget" value={form.budget} onChange={(e) => setForm((f) => ({ ...f, budget: e.target.value }))} />
-          <textarea className="border-input bg-background min-h-9 rounded-md border px-3 py-2 text-sm" placeholder="Description" value={form.description} onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))} />
-          <Input
-            type="datetime-local"
-            value={form.startDate}
-            onChange={(e) => setForm((f) => ({ ...f, startDate: e.target.value }))}
-          />
-          <Input
-            type="datetime-local"
-            value={form.endDate}
-            onChange={(e) => setForm((f) => ({ ...f, endDate: e.target.value }))}
-          />
-          <div className="flex gap-2">
-            <Button disabled={creating || !form.name.trim() || !form.location.trim() || !form.startDate || !form.endDate} onClick={handleCreate}>
-              Create
-            </Button>
-            <Button variant="outline" onClick={() => setShowCreate(false)}>
-              Cancel
-            </Button>
-          </div>
-        </Card>
-      ) : null}
 
       {error ? (
         <Card className="border-destructive/40 text-destructive px-4 py-3 text-sm">
@@ -363,6 +368,73 @@ export function EventsPage() {
           )}
         </Card>
       </div>
+      <EntityFormDialog
+        open={eventFormMode !== null}
+        onOpenChange={(open) => {
+          if (!open && !creating && !saving) {
+            setEventFormMode(null)
+            setEditingEvent(null)
+          }
+        }}
+        title={eventFormMode === "edit" ? "Edit event" : "New event"}
+        description="Set the event schedule, venue, status, and operating details."
+        onSubmit={handleSaveEvent}
+        submitLabel={eventFormMode === "edit" ? "Save changes" : "Create event"}
+        pending={creating || saving}
+        submitDisabled={!form.name.trim() || !form.type || !form.location.trim() || !form.startDate || !form.endDate}
+        maxWidth="max-w-2xl"
+      >
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid gap-1.5">
+            <Label htmlFor="event-name">Name</Label>
+            <Input id="event-name" value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} placeholder="Event name" required />
+          </div>
+          <div className="grid gap-1.5">
+            <Label htmlFor="event-type">Type</Label>
+            <Select id="event-type" value={form.type} onChange={(e) => setForm((f) => ({ ...f, type: e.target.value }))}>
+              {EVENT_TYPES.map((type) => <option key={type} value={type}>{type}</option>)}
+            </Select>
+          </div>
+          <div className="grid gap-1.5">
+            <Label htmlFor="event-status">Status</Label>
+            <Select id="event-status" value={form.status} onChange={(e) => setForm((f) => ({ ...f, status: e.target.value as EventStatus }))}>
+              {EVENT_STATUSES.map((status) => <option key={status} value={status}>{status}</option>)}
+            </Select>
+          </div>
+          <div className="grid gap-1.5">
+            <Label htmlFor="event-location">Location</Label>
+            <Input id="event-location" value={form.location} onChange={(e) => setForm((f) => ({ ...f, location: e.target.value }))} placeholder="City or site" required />
+          </div>
+          <div className="grid gap-1.5">
+            <Label htmlFor="event-venue">Venue</Label>
+            <Input id="event-venue" value={form.venue} onChange={(e) => setForm((f) => ({ ...f, venue: e.target.value }))} placeholder="Venue name" />
+          </div>
+          <div className="grid gap-1.5">
+            <Label htmlFor="event-organizer">Organizer ID</Label>
+            <Input id="event-organizer" value={form.organizerId} onChange={(e) => setForm((f) => ({ ...f, organizerId: e.target.value }))} placeholder="Optional organizer ID" />
+          </div>
+          <div className="grid gap-1.5">
+            <Label htmlFor="event-start">Start</Label>
+            <Input id="event-start" type="datetime-local" value={form.startDate} onChange={(e) => setForm((f) => ({ ...f, startDate: e.target.value }))} required />
+          </div>
+          <div className="grid gap-1.5">
+            <Label htmlFor="event-end">End</Label>
+            <Input id="event-end" type="datetime-local" value={form.endDate} onChange={(e) => setForm((f) => ({ ...f, endDate: e.target.value }))} required />
+          </div>
+          <div className="grid gap-1.5">
+            <Label htmlFor="event-attendees">Expected attendees</Label>
+            <Input id="event-attendees" type="number" min="1" step="1" value={form.expectedAttendees} onChange={(e) => setForm((f) => ({ ...f, expectedAttendees: e.target.value }))} placeholder="Optional" />
+          </div>
+          <div className="grid gap-1.5">
+            <Label htmlFor="event-budget">Budget</Label>
+            <Input id="event-budget" type="number" min="0.01" step="0.01" value={form.budget} onChange={(e) => setForm((f) => ({ ...f, budget: e.target.value }))} placeholder="Optional" />
+          </div>
+        </div>
+        <div className="grid gap-1.5">
+          <Label htmlFor="event-description">Description</Label>
+          <Textarea id="event-description" value={form.description} onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))} placeholder="Event description" />
+        </div>
+      </EntityFormDialog>
       <ConfirmationDialog
         open={Boolean(deleteTarget)}
         onOpenChange={(open) => { if (!open && !pendingEventId) setDeleteTarget(null) }}

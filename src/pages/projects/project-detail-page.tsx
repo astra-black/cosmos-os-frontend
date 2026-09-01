@@ -8,16 +8,23 @@ import {
   ImagesIcon,
   ListTodoIcon,
   Loader2Icon,
+  PencilIcon,
 } from "lucide-react"
 import { toast } from "sonner"
 
 import { CommentsPanel } from "@/components/shared/comments-panel"
 import { EmptyState } from "@/components/shared/empty-state"
+import { EntityFormDialog } from "@/components/shared/entity-form-dialog"
 import { PageHeader } from "@/components/shared/page-header"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Select } from "@/components/ui/select"
 import { Skeleton } from "@/components/ui/skeleton"
+import { Textarea } from "@/components/ui/textarea"
+import { useCampaigns, useClients } from "@/hooks/use-agency-data"
 import {
   getProject,
   listApprovals,
@@ -35,7 +42,33 @@ import { cn } from "@/lib/utils"
 
 type Tab = "overview" | "tasks" | "assets" | "approvals" | "comments"
 
+type ProjectEditForm = {
+  projectName: string
+  clientId: string
+  campaignId: string
+  status: string
+  startDate: string
+  endDate: string
+  weight: string
+  budget: string
+  description: string
+}
+
 const STATUS_ORDER = ["NotStarted", "InProgress", "Review", "Approved", "Archived"] as const
+
+const PROJECT_STATUSES = [...STATUS_ORDER]
+
+const emptyProjectForm: ProjectEditForm = {
+  projectName: "",
+  clientId: "",
+  campaignId: "",
+  status: "NotStarted",
+  startDate: "",
+  endDate: "",
+  weight: "",
+  budget: "",
+  description: "",
+}
 
 const statusClass: Record<string, string> = {
   NotStarted: "bg-muted text-muted-foreground",
@@ -63,6 +96,8 @@ export function ProjectDetailPage() {
   const { projectId = "" } = useParams()
   const navigate = useNavigate()
   const { user } = useAuth()
+  const { data: clients } = useClients()
+  const { data: campaigns } = useCampaigns()
   const canWrite =
     canPerform(user?.role, "write_crm") || canPerform(user?.role, "write_ops")
 
@@ -75,6 +110,9 @@ export function ProjectDetailPage() {
   const [error, setError] = useState<string | null>(null)
   const [statusBusy, setStatusBusy] = useState(false)
   const [taskBusy, setTaskBusy] = useState<string | null>(null)
+  const [projectDialogOpen, setProjectDialogOpen] = useState(false)
+  const [projectSaving, setProjectSaving] = useState(false)
+  const [projectForm, setProjectForm] = useState<ProjectEditForm>(emptyProjectForm)
 
   const load = useCallback(async () => {
     if (!projectId) return
@@ -167,6 +205,67 @@ export function ProjectDetailPage() {
     }
   }
 
+  function openProjectEditor() {
+    if (!project || !canWrite) return
+    setProjectForm({
+      projectName: project.projectName,
+      clientId: project.clientId ?? "",
+      campaignId: project.campaignId ?? "",
+      status: project.status || "NotStarted",
+      startDate: project.startDate ? project.startDate.slice(0, 10) : "",
+      endDate: project.endDate ? project.endDate.slice(0, 10) : "",
+      weight: project.weight == null ? "" : String(project.weight),
+      budget: project.budget == null ? "" : String(project.budget),
+      description: project.description ?? "",
+    })
+    setProjectDialogOpen(true)
+  }
+
+  async function saveProject() {
+    if (!project || !canWrite) return
+    const name = projectForm.projectName.trim()
+    const weight = projectForm.weight.trim() ? Number(projectForm.weight) : 0
+    const budget = projectForm.budget.trim() ? Number(projectForm.budget) : 0
+    if (!name) {
+      toast.error("Project name is required")
+      return
+    }
+    if (
+      !Number.isFinite(weight) ||
+      weight < 0 ||
+      !Number.isFinite(budget) ||
+      budget < 0 ||
+      (projectForm.startDate && projectForm.endDate && projectForm.startDate > projectForm.endDate)
+    ) {
+      toast.error("Enter valid non-negative numbers and ensure the end date is after the start date.")
+      return
+    }
+
+    const client = clients.find((item) => item.clientId === projectForm.clientId)
+    setProjectSaving(true)
+    try {
+      await updateProject(project.projectId, {
+        projectName: name,
+        clientId: projectForm.clientId || null,
+        clientName: client?.name || null,
+        campaignId: projectForm.campaignId || null,
+        status: projectForm.status,
+        startDate: projectForm.startDate || null,
+        endDate: projectForm.endDate || null,
+        weight,
+        budget,
+        description: projectForm.description.trim(),
+      })
+      setProjectDialogOpen(false)
+      await load()
+      toast.success("Project updated")
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Project update failed")
+    } finally {
+      setProjectSaving(false)
+    }
+  }
+
   const tabs: { id: Tab; label: string }[] = [
     { id: "overview", label: "Overview" },
     { id: "tasks", label: `Tasks (${tasks.length})` },
@@ -217,14 +316,20 @@ export function ProjectDetailPage() {
           description={project.description || "Delivery workspace — tasks, assets, approvals."}
           actions={
             canWrite ? (
-              <Button size="sm" disabled={statusBusy} onClick={advanceStatus}>
-                {statusBusy ? (
-                  <Loader2Icon className="size-3.5 animate-spin" />
-                ) : (
-                  <ChevronRightIcon className="size-3.5" />
-                )}
-                Advance status
-              </Button>
+              <div className="flex flex-wrap gap-2">
+                <Button size="sm" variant="outline" onClick={openProjectEditor}>
+                  <PencilIcon className="size-3.5" />
+                  Edit project
+                </Button>
+                <Button size="sm" disabled={statusBusy} onClick={advanceStatus}>
+                  {statusBusy ? (
+                    <Loader2Icon className="size-3.5 animate-spin" />
+                  ) : (
+                    <ChevronRightIcon className="size-3.5" />
+                  )}
+                  Advance status
+                </Button>
+              </div>
             ) : undefined
           }
         />
@@ -502,6 +607,125 @@ export function ProjectDetailPage() {
       {tab === "comments" ? (
         <CommentsPanel entityType="project" entityId={project.projectId} />
       ) : null}
+
+      <EntityFormDialog
+        open={projectDialogOpen}
+        onOpenChange={(open) => {
+          if (!open && !projectSaving) setProjectDialogOpen(false)
+        }}
+        title="Edit project"
+        description="Update the project details used across delivery planning."
+        onSubmit={saveProject}
+        submitLabel="Save changes"
+        pending={projectSaving}
+        submitDisabled={!projectForm.projectName.trim()}
+        maxWidth="max-w-2xl"
+      >
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid gap-1.5 sm:col-span-2">
+            <Label htmlFor="project-detail-name">Project name</Label>
+            <Input
+              id="project-detail-name"
+              value={projectForm.projectName}
+              onChange={(event) => setProjectForm((form) => ({ ...form, projectName: event.target.value }))}
+              required
+            />
+          </div>
+          <div className="grid gap-1.5">
+            <Label htmlFor="project-detail-client">Client</Label>
+            <Select
+              id="project-detail-client"
+              value={projectForm.clientId}
+              onChange={(event) => setProjectForm((form) => ({ ...form, clientId: event.target.value }))}
+            >
+              <option value="">Unassigned</option>
+              {clients.map((client) => (
+                <option key={client.clientId} value={client.clientId}>
+                  {client.name}
+                </option>
+              ))}
+              {project.clientId && !clients.some((client) => client.clientId === project.clientId) ? (
+                <option value={project.clientId}>{project.clientName || project.clientId}</option>
+              ) : null}
+            </Select>
+          </div>
+          <div className="grid gap-1.5">
+            <Label htmlFor="project-detail-campaign">Campaign</Label>
+            <Select
+              id="project-detail-campaign"
+              value={projectForm.campaignId}
+              onChange={(event) => setProjectForm((form) => ({ ...form, campaignId: event.target.value }))}
+            >
+              <option value="">Unassigned</option>
+              {campaigns.map((campaign) => (
+                <option key={campaign.campaignId} value={campaign.campaignId}>
+                  {campaign.name} ({campaign.campaignId})
+                </option>
+              ))}
+              {project.campaignId && !campaigns.some((campaign) => campaign.campaignId === project.campaignId) ? (
+                <option value={project.campaignId}>{project.campaignId}</option>
+              ) : null}
+            </Select>
+          </div>
+          <div className="grid gap-1.5">
+            <Label htmlFor="project-detail-status">Status</Label>
+            <Select
+              id="project-detail-status"
+              value={projectForm.status}
+              onChange={(event) => setProjectForm((form) => ({ ...form, status: event.target.value }))}
+            >
+              {PROJECT_STATUSES.map((status) => <option key={status} value={status}>{status}</option>)}
+            </Select>
+          </div>
+          <div className="grid gap-1.5">
+            <Label htmlFor="project-detail-weight">Weight (%)</Label>
+            <Input
+              id="project-detail-weight"
+              type="number"
+              min="0"
+              value={projectForm.weight}
+              onChange={(event) => setProjectForm((form) => ({ ...form, weight: event.target.value }))}
+            />
+          </div>
+          <div className="grid gap-1.5">
+            <Label htmlFor="project-detail-budget">Budget ($ USD)</Label>
+            <Input
+              id="project-detail-budget"
+              type="number"
+              min="0"
+              value={projectForm.budget}
+              onChange={(event) => setProjectForm((form) => ({ ...form, budget: event.target.value }))}
+            />
+          </div>
+          <div className="grid gap-1.5">
+            <Label htmlFor="project-detail-start">Start date</Label>
+            <Input
+              id="project-detail-start"
+              type="date"
+              value={projectForm.startDate}
+              onChange={(event) => setProjectForm((form) => ({ ...form, startDate: event.target.value }))}
+            />
+          </div>
+          <div className="grid gap-1.5">
+            <Label htmlFor="project-detail-end">End date</Label>
+            <Input
+              id="project-detail-end"
+              type="date"
+              value={projectForm.endDate}
+              onChange={(event) => setProjectForm((form) => ({ ...form, endDate: event.target.value }))}
+            />
+          </div>
+          <div className="grid gap-1.5 sm:col-span-2">
+            <Label htmlFor="project-detail-description">Description</Label>
+            <Textarea
+              id="project-detail-description"
+              value={projectForm.description}
+              onChange={(event) => setProjectForm((form) => ({ ...form, description: event.target.value }))}
+              placeholder="Scope, deliverables, and requirements..."
+            />
+          </div>
+        </div>
+      </EntityFormDialog>
     </div>
   )
 }

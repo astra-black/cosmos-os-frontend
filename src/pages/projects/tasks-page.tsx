@@ -4,19 +4,24 @@ import {
   ChevronLeftIcon,
   ChevronRightIcon,
   Loader2Icon,
+  PencilIcon,
   PlusIcon,
   Trash2Icon,
 } from "lucide-react"
 import { toast } from "sonner"
 
+import { EntityFormDialog } from "@/components/shared/entity-form-dialog"
+import { ConfirmationDialog } from "@/components/shared/confirmation-dialog"
 import { EmptyState } from "@/components/shared/empty-state"
 import { PageHeader } from "@/components/shared/page-header"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Select } from "@/components/ui/select"
 import { Skeleton } from "@/components/ui/skeleton"
-import { useProjects, useTasks, useTeamMembers } from "@/hooks/use-agency-data"
+import { useCampaigns, useProjects, useTasks, useTeamMembers } from "@/hooks/use-agency-data"
 import { createTask, deleteTask, updateTask } from "@/lib/api/agency"
 import { ApiError } from "@/lib/api/client"
 import { useAuth } from "@/lib/auth"
@@ -50,6 +55,30 @@ const FALLBACK_ASSIGNEES = [
   "Unassigned",
 ]
 
+type TaskForm = {
+  title: string
+  projectId: string
+  campaignId: string
+  assignee: string
+  status: string
+  priority: string
+  dueDate: string
+  estimateHours: string
+  tags: string
+}
+
+const emptyTaskForm: TaskForm = {
+  title: "",
+  projectId: "",
+  campaignId: "",
+  assignee: "Unassigned",
+  status: "todo",
+  priority: "medium",
+  dueDate: "",
+  estimateHours: "",
+  tags: "",
+}
+
 export function TasksPage() {
   const { user } = useAuth()
   const canWrite = canPerform(user?.role, "write_crm") || canPerform(user?.role, "write_ops")
@@ -61,17 +90,15 @@ export function TasksPage() {
     reload,
   } = useTasks()
   const { data: projects } = useProjects()
+  const { data: campaigns } = useCampaigns()
   const { data: teamMembers } = useTeamMembers()
   const [busyId, setBusyId] = useState<string | null>(null)
   const [deletingId, setDeletingId] = useState<string | null>(null)
-  const [showAdd, setShowAdd] = useState(false)
-  const [form, setForm] = useState({
-    title: "",
-    assignee: "Unassigned",
-    priority: "medium",
-    dueDate: "",
-    projectId: "",
-  })
+  const [taskDialogOpen, setTaskDialogOpen] = useState(false)
+  const [editingTask, setEditingTask] = useState<Task | null>(null)
+  const [taskSaving, setTaskSaving] = useState(false)
+  const [taskForm, setTaskForm] = useState<TaskForm>(emptyTaskForm)
+  const [deleteTarget, setDeleteTarget] = useState<Task | null>(null)
   const [assigneeFilter, setAssigneeFilter] = useState("all")
   const [priorityFilter, setPriorityFilter] = useState("all")
 
@@ -87,12 +114,12 @@ export function TasksPage() {
     return [...new Set([...memberNames, "Unassigned"])]
   }, [teamMembers])
 
-  // Prefer first project when form is empty after projects load
+  // Fill a new task's project once project data is available.
   useEffect(() => {
-    if (!form.projectId && projects[0]?.projectId) {
-      setForm((f) => ({ ...f, projectId: projects[0].projectId }))
+    if (taskDialogOpen && !editingTask && !taskForm.projectId && projects[0]?.projectId) {
+      setTaskForm((form) => ({ ...form, projectId: projects[0].projectId }))
     }
-  }, [projects, form.projectId])
+  }, [projects, taskDialogOpen, editingTask, taskForm.projectId])
 
   const assigneeOptions = useMemo(() => {
     const fromTasks = tasks.map((t) => t.assignee || "Unassigned")
@@ -167,7 +194,7 @@ export function TasksPage() {
   }
 
   async function handleDelete(task: Task) {
-    if (!canWrite || !window.confirm(`Delete task "${task.title}"? This cannot be undone.`)) return
+    if (!canWrite) return
     setDeletingId(task.taskId)
     try {
       await deleteTask(task.taskId)
@@ -177,34 +204,76 @@ export function TasksPage() {
       toast.error(err instanceof ApiError ? err.message : "Delete failed")
     } finally {
       setDeletingId(null)
+      setDeleteTarget(null)
     }
   }
 
-  async function handleCreate() {
-    if (!form.title.trim() || !canWrite) return
-    const selected = projects.find((p) => p.projectId === form.projectId)
+  function openCreateTask() {
+    setEditingTask(null)
+    setTaskForm({ ...emptyTaskForm, projectId: projects[0]?.projectId ?? "" })
+    setTaskDialogOpen(true)
+  }
+
+  function openEditTask(task: Task) {
+    setEditingTask(task)
+    setTaskForm({
+      title: task.title,
+      projectId: task.projectId ?? "",
+      campaignId: task.campaignId ?? "",
+      assignee: task.assignee || "Unassigned",
+      status: task.status,
+      priority: task.priority,
+      dueDate: task.dueDate ?? "",
+      estimateHours: task.estimateHours == null ? "" : String(task.estimateHours),
+      tags: task.tags?.join(", ") ?? "",
+    })
+    setTaskDialogOpen(true)
+  }
+
+  function closeTaskDialog(force = false) {
+    if (taskSaving && !force) return
+    setTaskDialogOpen(false)
+    setEditingTask(null)
+    setTaskForm(emptyTaskForm)
+  }
+
+  async function saveTask() {
+    if (!taskForm.title.trim() || !canWrite) return
+    const estimateHours = taskForm.estimateHours.trim() ? Number(taskForm.estimateHours) : 0
+    if (!Number.isFinite(estimateHours) || estimateHours < 0) {
+      toast.error("Estimate hours must be a non-negative number")
+      return
+    }
+    const selectedProject = projects.find((p) => p.projectId === taskForm.projectId)
+    const projectName = selectedProject?.projectName ??
+      (editingTask?.projectId === taskForm.projectId ? editingTask.projectName ?? null : null)
+    const body = {
+      title: taskForm.title.trim(),
+      projectId: taskForm.projectId || null,
+      projectName,
+      campaignId: taskForm.campaignId || null,
+      assignee: taskForm.assignee || "Unassigned",
+      status: taskForm.status,
+      priority: taskForm.priority,
+      dueDate: taskForm.dueDate || null,
+      estimateHours,
+      tags: taskForm.tags.split(",").map((tag) => tag.trim()).filter(Boolean),
+    }
+    setTaskSaving(true)
     try {
-      await createTask({
-        title: form.title.trim(),
-        status: "todo",
-        priority: form.priority,
-        assignee: form.assignee,
-        dueDate: form.dueDate || null,
-        projectId: selected?.projectId || form.projectId || null,
-        projectName: selected?.projectName || null,
-      })
-      setForm({
-        title: "",
-        assignee: "Unassigned",
-        priority: "medium",
-        dueDate: "",
-        projectId: "",
-      })
-      setShowAdd(false)
+      if (editingTask) {
+        await updateTask(editingTask.taskId, body)
+        toast.success("Task updated")
+      } else {
+        await createTask(body)
+        toast.success("Task created")
+      }
+      closeTaskDialog(true)
       await reload()
-      toast.success("Task created")
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "Create failed")
+      toast.error(err instanceof ApiError ? err.message : "Unable to save task")
+    } finally {
+      setTaskSaving(false)
     }
   }
 
@@ -215,7 +284,7 @@ export function TasksPage() {
         description="Production workboard — move cards, set priority, assign owners."
         actions={
           canWrite ? (
-            <Button size="sm" variant={showAdd ? "default" : "outline"} onClick={() => setShowAdd((v) => !v)}>
+            <Button size="sm" variant="outline" onClick={openCreateTask}>
               <PlusIcon className="size-3.5" />
               Add task
             </Button>
@@ -249,66 +318,6 @@ export function TasksPage() {
           </div>
         </div>
       </div>
-
-      {showAdd && canWrite ? (
-        <Card className="grid gap-2 p-3 sm:grid-cols-2 sm:p-4 lg:grid-cols-5">
-          <Input
-            placeholder="Task title"
-            value={form.title}
-            onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
-            onKeyDown={(e) => e.key === "Enter" && void handleCreate()}
-            className="lg:col-span-2"
-          />
-          <select
-            className="border-input bg-background h-8 rounded-lg border px-2 text-sm"
-            value={form.projectId}
-            onChange={(e) => setForm((f) => ({ ...f, projectId: e.target.value }))}
-          >
-            <option value="">Project…</option>
-            {projects.map((p) => (
-              <option key={p.projectId} value={p.projectId}>
-                {p.projectName}
-              </option>
-            ))}
-          </select>
-          <select
-            className="border-input bg-background h-8 rounded-lg border px-2 text-sm"
-            value={form.assignee}
-            onChange={(e) => setForm((f) => ({ ...f, assignee: e.target.value }))}
-          >
-            {assigneeOptions.map((a) => (
-              <option key={a} value={a}>
-                {a}
-              </option>
-            ))}
-          </select>
-          <div className="flex flex-wrap gap-2 sm:col-span-2 lg:col-span-5">
-            <select
-              className="border-input bg-background h-8 rounded-lg border px-2 text-sm"
-              value={form.priority}
-              onChange={(e) => setForm((f) => ({ ...f, priority: e.target.value }))}
-            >
-              {PRIORITIES.map((p) => (
-                <option key={p} value={p}>
-                  {p}
-                </option>
-              ))}
-            </select>
-            <Input
-              type="date"
-              value={form.dueDate}
-              onChange={(e) => setForm((f) => ({ ...f, dueDate: e.target.value }))}
-              className="w-auto"
-            />
-            <Button size="sm" disabled={!form.title.trim()} onClick={() => void handleCreate()}>
-              Create
-            </Button>
-            <Button size="sm" variant="outline" onClick={() => setShowAdd(false)}>
-              Cancel
-            </Button>
-          </div>
-        </Card>
-      ) : null}
 
       <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
         <select
@@ -387,9 +396,14 @@ export function TasksPage() {
                             <div className="flex min-w-0 items-start gap-1">
                               <h3 className="text-sm font-medium leading-snug">{task.title}</h3>
                               {canWrite ? (
-                                <Button size="icon" variant="ghost" className="size-6 shrink-0 text-destructive" disabled={deletingId === task.taskId} onClick={() => void handleDelete(task)} aria-label={`Delete ${task.title}`}>
-                                  <Trash2Icon className="size-3" />
-                                </Button>
+                                <>
+                                  <Button size="icon" variant="ghost" className="size-6 shrink-0" disabled={Boolean(deletingId) || Boolean(busyId)} onClick={() => openEditTask(task)} aria-label={`Edit ${task.title}`}>
+                                    <PencilIcon className="size-3" />
+                                  </Button>
+                                  <Button size="icon" variant="ghost" className="size-6 shrink-0 text-destructive" disabled={Boolean(deletingId)} onClick={() => setDeleteTarget(task)} aria-label={`Delete ${task.title}`}>
+                                    <Trash2Icon className="size-3" />
+                                  </Button>
+                                </>
                               ) : null}
                             </div>
                           {canWrite ? (
@@ -520,6 +534,130 @@ export function TasksPage() {
           ))}
         </div>
       )}
+
+      <EntityFormDialog
+        open={taskDialogOpen}
+        onOpenChange={(open) => {
+          if (open) setTaskDialogOpen(true)
+          else closeTaskDialog()
+        }}
+        title={editingTask ? "Edit task" : "Create task"}
+        description="Set the task's delivery ownership, timing, and planning details."
+        onSubmit={saveTask}
+        submitLabel={editingTask ? "Save changes" : "Create task"}
+        pending={taskSaving}
+        submitDisabled={!taskForm.title.trim()}
+        maxWidth="max-w-2xl"
+      >
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid gap-1.5 sm:col-span-2">
+            <Label htmlFor="task-form-title">Title</Label>
+            <Input
+              id="task-form-title"
+              value={taskForm.title}
+              onChange={(event) => setTaskForm((form) => ({ ...form, title: event.target.value }))}
+              required
+            />
+          </div>
+          <div className="grid gap-1.5">
+            <Label htmlFor="task-form-project">Project</Label>
+            <Select
+              id="task-form-project"
+              value={taskForm.projectId}
+              onChange={(event) => setTaskForm((form) => ({ ...form, projectId: event.target.value }))}
+            >
+              <option value="">No project</option>
+              {projects.map((project) => <option key={project.projectId} value={project.projectId}>{project.projectName}</option>)}
+              {editingTask?.projectId && !projects.some((project) => project.projectId === editingTask.projectId) ? (
+                <option value={editingTask.projectId}>{editingTask.projectName || editingTask.projectId}</option>
+              ) : null}
+            </Select>
+          </div>
+          <div className="grid gap-1.5">
+            <Label htmlFor="task-form-campaign">Campaign</Label>
+            <Select
+              id="task-form-campaign"
+              value={taskForm.campaignId}
+              onChange={(event) => setTaskForm((form) => ({ ...form, campaignId: event.target.value }))}
+            >
+              <option value="">No campaign</option>
+              {campaigns.map((campaign) => <option key={campaign.campaignId} value={campaign.campaignId}>{campaign.name} ({campaign.campaignId})</option>)}
+              {editingTask?.campaignId && !campaigns.some((campaign) => campaign.campaignId === editingTask.campaignId) ? (
+                <option value={editingTask.campaignId}>{editingTask.campaignId}</option>
+              ) : null}
+            </Select>
+          </div>
+          <div className="grid gap-1.5">
+            <Label htmlFor="task-form-assignee">Assignee</Label>
+            <Select
+              id="task-form-assignee"
+              value={taskForm.assignee}
+              onChange={(event) => setTaskForm((form) => ({ ...form, assignee: event.target.value }))}
+            >
+              {assigneeOptions.map((assignee) => <option key={assignee} value={assignee}>{assignee}</option>)}
+            </Select>
+          </div>
+          <div className="grid gap-1.5">
+            <Label htmlFor="task-form-status">Status</Label>
+            <Select
+              id="task-form-status"
+              value={taskForm.status}
+              onChange={(event) => setTaskForm((form) => ({ ...form, status: event.target.value }))}
+            >
+              {LANES.map((lane) => <option key={lane.id} value={lane.id}>{lane.label}</option>)}
+            </Select>
+          </div>
+          <div className="grid gap-1.5">
+            <Label htmlFor="task-form-priority">Priority</Label>
+            <Select
+              id="task-form-priority"
+              value={taskForm.priority}
+              onChange={(event) => setTaskForm((form) => ({ ...form, priority: event.target.value }))}
+            >
+              {PRIORITIES.map((priority) => <option key={priority} value={priority}>{priority}</option>)}
+            </Select>
+          </div>
+          <div className="grid gap-1.5">
+            <Label htmlFor="task-form-due-date">Due date</Label>
+            <Input
+              id="task-form-due-date"
+              type="date"
+              value={taskForm.dueDate}
+              onChange={(event) => setTaskForm((form) => ({ ...form, dueDate: event.target.value }))}
+            />
+          </div>
+          <div className="grid gap-1.5">
+            <Label htmlFor="task-form-estimate">Estimate hours</Label>
+            <Input
+              id="task-form-estimate"
+              type="number"
+              min="0"
+              step="0.25"
+              value={taskForm.estimateHours}
+              onChange={(event) => setTaskForm((form) => ({ ...form, estimateHours: event.target.value }))}
+            />
+          </div>
+          <div className="grid gap-1.5 sm:col-span-2">
+            <Label htmlFor="task-form-tags">Tags</Label>
+            <Input
+              id="task-form-tags"
+              value={taskForm.tags}
+              onChange={(event) => setTaskForm((form) => ({ ...form, tags: event.target.value }))}
+              placeholder="design, client-review"
+            />
+          </div>
+        </div>
+      </EntityFormDialog>
+      <ConfirmationDialog
+        open={Boolean(deleteTarget)}
+        onOpenChange={(open) => { if (!open && !deletingId) setDeleteTarget(null) }}
+        title="Delete task?"
+        description={deleteTarget ? `This will permanently delete “${deleteTarget.title}”.` : undefined}
+        confirmLabel="Delete"
+        destructive
+        pending={Boolean(deletingId)}
+        onConfirm={() => deleteTarget ? handleDelete(deleteTarget) : undefined}
+      />
     </div>
   )
 }

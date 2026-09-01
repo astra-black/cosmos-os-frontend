@@ -4,12 +4,14 @@ import { toast } from "sonner"
 
 import { EmptyState } from "@/components/shared/empty-state"
 import { ConfirmationDialog } from "@/components/shared/confirmation-dialog"
+import { EntityFormDialog } from "@/components/shared/entity-form-dialog"
 import { PageHeader } from "@/components/shared/page-header"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 import { Skeleton } from "@/components/ui/skeleton"
 import { createCrmContact, deleteCrmContact, listClients, listCrmContacts, updateCrmContact } from "@/lib/api/agency"
 import { ApiError } from "@/lib/api/client"
@@ -30,6 +32,26 @@ const SAMPLE_AVATARS = [
   "https://images.unsplash.com/photo-1607746882042-944635dfe10e?auto=format&fit=crop&w=120&h=120&q=80",
 ]
 
+type ContactForm = {
+  name: string
+  title: string
+  email: string
+  phone: string
+  role: string
+  isPrimary: boolean
+  clientId: string
+}
+
+const emptyContactForm = (): ContactForm => ({
+  name: "",
+  title: "",
+  email: "",
+  phone: "",
+  role: "day_to_day",
+  isPrimary: false,
+  clientId: "",
+})
+
 export function CrmContactsPage() {
   const { user } = useAuth()
   const canWrite = canPerform(user?.role, "write_crm")
@@ -39,10 +61,9 @@ export function CrmContactsPage() {
   const [clientFilter, setClientFilter] = useState("all")
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [showCreate, setShowCreate] = useState(false)
-  const [form, setForm] = useState({ name: "", email: "", clientId: "", title: "" })
+  const [contactFormMode, setContactFormMode] = useState<"create" | "edit" | null>(null)
   const [editingId, setEditingId] = useState<string | null>(null)
-  const [editForm, setEditForm] = useState({ name: "", email: "", title: "" })
+  const [form, setForm] = useState<ContactForm>(emptyContactForm)
   const [pendingId, setPendingId] = useState<string | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<CrmContact | null>(null)
 
@@ -87,21 +108,34 @@ export function CrmContactsPage() {
   }, [contacts, clientFilter, search])
 
   async function handleCreate() {
-    if (!form.name.trim() || !canWrite) return
+    if (!canWrite) return
+    if (!form.name.trim()) {
+      toast.error("Contact name is required")
+      return
+    }
+    if (form.email.trim() && !/^\S+@\S+\.\S+$/.test(form.email.trim())) {
+      toast.error("Enter a valid email address")
+      return
+    }
+    setPendingId("create")
     try {
       await createCrmContact({
         name: form.name.trim(),
-        email: form.email,
-        title: form.title,
+        email: form.email.trim(),
+        title: form.title.trim(),
+        phone: form.phone.trim(),
+        role: form.role.trim(),
+        isPrimary: form.isPrimary,
         clientId: form.clientId || clients[0]?.clientId,
-        role: "day_to_day",
       })
-      setForm({ name: "", email: "", clientId: "", title: "" })
-      setShowCreate(false)
+      setForm(emptyContactForm())
+      setContactFormMode(null)
       await reload()
       toast.success("Contact added")
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : "Create failed")
+    } finally {
+      setPendingId(null)
     }
   }
 
@@ -122,24 +156,42 @@ export function CrmContactsPage() {
 
   function startEdit(contact: CrmContact) {
     setEditingId(contact.contactId)
-    setEditForm({ name: contact.name, email: contact.email ?? "", title: contact.title ?? "" })
+    setForm({
+      name: contact.name,
+      title: contact.title ?? "",
+      email: contact.email ?? "",
+      phone: contact.phone ?? "",
+      role: contact.role ?? "",
+      isPrimary: Boolean(contact.isPrimary),
+      clientId: contact.clientId ?? "",
+    })
+    setContactFormMode("edit")
   }
 
   async function saveEdit() {
     if (!editingId || !canWrite) return
-    if (!editForm.name.trim()) {
+    if (!form.name.trim()) {
       toast.error("Contact name is required")
       return
     }
-    if (editForm.email.trim() && !/^\S+@\S+\.\S+$/.test(editForm.email.trim())) {
+    if (form.email.trim() && !/^\S+@\S+\.\S+$/.test(form.email.trim())) {
       toast.error("Enter a valid email address")
       return
     }
     const contactId = editingId
     setPendingId(`edit:${contactId}`)
     try {
-      await updateCrmContact(contactId, { name: editForm.name.trim(), email: editForm.email.trim(), title: editForm.title.trim() })
+      await updateCrmContact(contactId, {
+        name: form.name.trim(),
+        title: form.title.trim(),
+        email: form.email.trim(),
+        phone: form.phone.trim(),
+        role: form.role.trim(),
+        isPrimary: form.isPrimary,
+        clientId: form.clientId || null,
+      })
       setEditingId(null)
+      setContactFormMode(null)
       await reload()
       toast.success("Contact updated")
     } catch (err) {
@@ -155,7 +207,7 @@ export function CrmContactsPage() {
         title="Contacts"
         description="People at client accounts — decision makers and day-to-day."
         actions={
-          canWrite ? <Button size="sm" onClick={() => setShowCreate((v) => !v)}>
+          canWrite ? <Button size="sm" onClick={() => { setForm(emptyContactForm()); setEditingId(null); setContactFormMode("create") }}>
             <PlusIcon className="size-3.5" />
             Add contact
           </Button> : undefined
@@ -191,46 +243,6 @@ export function CrmContactsPage() {
           ))}
         </select>
       </div>
-
-      {showCreate ? (
-        <Card className="grid gap-2 p-3 sm:grid-cols-2 sm:p-4 lg:grid-cols-5">
-          <Input
-            placeholder="Name"
-            value={form.name}
-            onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-          />
-          <Input
-            placeholder="Title"
-            value={form.title}
-            onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
-          />
-          <Input
-            placeholder="Email"
-            value={form.email}
-            onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
-          />
-          <select
-            className="border-input bg-background h-8 w-full rounded-lg border px-2 text-sm"
-            value={form.clientId}
-            onChange={(e) => setForm((f) => ({ ...f, clientId: e.target.value }))}
-          >
-            <option value="">Account…</option>
-            {clients.map((c) => (
-              <option key={c.clientId} value={c.clientId}>
-                {c.name}
-              </option>
-            ))}
-          </select>
-          <div className="flex gap-2">
-            <Button size="sm" className="flex-1 sm:flex-none" disabled={!form.name.trim()} onClick={handleCreate}>
-              Save
-            </Button>
-            <Button size="sm" variant="outline" className="flex-1 sm:flex-none" onClick={() => setShowCreate(false)}>
-              Cancel
-            </Button>
-          </div>
-        </Card>
-      ) : null}
 
       {loading ? (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -301,15 +313,6 @@ export function CrmContactsPage() {
                   </div>
                 </div>
 
-                {editingId === contact.contactId ? (
-                  <div className="mt-3 grid gap-2">
-                    <Input value={editForm.name} onChange={(e) => setEditForm((f) => ({ ...f, name: e.target.value }))} placeholder="Name" />
-                    <Input value={editForm.title} onChange={(e) => setEditForm((f) => ({ ...f, title: e.target.value }))} placeholder="Title" />
-                    <Input value={editForm.email} onChange={(e) => setEditForm((f) => ({ ...f, email: e.target.value }))} placeholder="Email" type="email" />
-                    <div className="flex gap-2"><Button size="sm" onClick={() => void saveEdit()} disabled={pendingId === `edit:${contact.contactId}` || !editForm.name.trim()}>Save</Button><Button size="sm" variant="outline" onClick={() => setEditingId(null)} disabled={Boolean(pendingId)}>Cancel</Button></div>
-                  </div>
-                ) : null}
-
                 {/* Card Divider Line */}
                 <div className="w-full h-px border-t border-dashed border-border/80 my-4" />
 
@@ -377,6 +380,56 @@ export function CrmContactsPage() {
           })}
         </div>
       )}
+      <EntityFormDialog
+        open={contactFormMode !== null}
+        onOpenChange={(open) => {
+          if (!open && !pendingId) {
+            setContactFormMode(null)
+            setEditingId(null)
+          }
+        }}
+        title={contactFormMode === "edit" ? "Edit contact" : "Add contact"}
+        description="Keep contact details, account ownership, and relationship role current."
+        onSubmit={contactFormMode === "edit" ? saveEdit : handleCreate}
+        submitLabel={contactFormMode === "edit" ? "Save changes" : "Add contact"}
+        pending={Boolean(pendingId)}
+        submitDisabled={!form.name.trim()}
+        maxWidth="max-w-2xl"
+      >
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid gap-1.5">
+            <Label htmlFor="contact-form-name">Name</Label>
+            <Input id="contact-form-name" value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} placeholder="Full name" required />
+          </div>
+          <div className="grid gap-1.5">
+            <Label htmlFor="contact-form-title">Title</Label>
+            <Input id="contact-form-title" value={form.title} onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))} placeholder="Job title" />
+          </div>
+          <div className="grid gap-1.5">
+            <Label htmlFor="contact-form-email">Email</Label>
+            <Input id="contact-form-email" type="email" value={form.email} onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))} placeholder="contact@example.com" />
+          </div>
+          <div className="grid gap-1.5">
+            <Label htmlFor="contact-form-phone">Phone</Label>
+            <Input id="contact-form-phone" type="tel" value={form.phone} onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))} placeholder="Phone number" />
+          </div>
+          <div className="grid gap-1.5">
+            <Label htmlFor="contact-form-role">Role</Label>
+            <Input id="contact-form-role" value={form.role} onChange={(e) => setForm((f) => ({ ...f, role: e.target.value }))} placeholder="e.g. decision maker" />
+          </div>
+          <div className="grid gap-1.5">
+            <Label htmlFor="contact-form-client">Client</Label>
+            <select id="contact-form-client" className="border-input bg-background h-9 w-full rounded-md border px-2 text-sm" value={form.clientId} onChange={(e) => setForm((f) => ({ ...f, clientId: e.target.value }))}>
+              <option value="">Unassigned</option>
+              {clients.map((client) => <option key={client.clientId} value={client.clientId}>{client.name}</option>)}
+            </select>
+          </div>
+        </div>
+        <label className="flex items-center gap-2 text-sm">
+          <input type="checkbox" checked={form.isPrimary} onChange={(e) => setForm((f) => ({ ...f, isPrimary: e.target.checked }))} />
+          Primary contact
+        </label>
+      </EntityFormDialog>
       <ConfirmationDialog
         open={Boolean(deleteTarget)}
         onOpenChange={(open) => { if (!open && !pendingId) setDeleteTarget(null) }}
