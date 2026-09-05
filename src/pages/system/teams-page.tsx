@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
-import { ShieldIcon, UsersIcon } from "lucide-react"
+import { CheckIcon, CopyIcon, Link2Icon, Loader2Icon, ShieldIcon, UserPlusIcon, UsersIcon } from "lucide-react"
 import { toast } from "sonner"
 
 import { EmptyState } from "@/components/shared/empty-state"
@@ -8,8 +8,19 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 import { Skeleton } from "@/components/ui/skeleton"
 import { listTeamMembers, updateTeamMember } from "@/lib/api/agency"
+import { createInvitation } from "@/lib/api/auth"
 import { ApiError } from "@/lib/api/client"
 import type { TeamMember } from "@/types/agency"
 import { cn } from "@/lib/utils"
@@ -25,6 +36,15 @@ export function TeamsPage() {
   const [teamFilter, setTeamFilter] = useState("all")
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+
+  // Invite modal state
+  const [inviteOpen, setInviteOpen] = useState(false)
+  const [inviteEmail, setInviteEmail] = useState("")
+  const [permissionRole, setPermissionRole] = useState<"AGENCY_ADMIN" | "PROJECT_MANAGER" | "TEAM_MEMBER">("TEAM_MEMBER")
+  const [jobFunction, setJobFunction] = useState<"ADMIN" | "PM" | "PRODUCER" | "CREATIVE" | "OPS">("OPS")
+  const [generatedLink, setGeneratedLink] = useState<string | null>(null)
+  const [inviting, setInviting] = useState(false)
+  const [copied, setCopied] = useState(false)
 
   const reload = useCallback(async () => {
     const res = await listTeamMembers()
@@ -68,12 +88,71 @@ export function TeamsPage() {
     }
   }
 
+  const handleGenerateInvite = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setInviting(true)
+    try {
+      const res = await createInvitation({
+        email: inviteEmail.trim() || undefined,
+        permissionRole,
+        jobFunction,
+      })
+
+      const token = res.data?.token
+      if (token) {
+        const link = `${window.location.origin}/invite/${token}`
+        setGeneratedLink(link)
+        toast.success("Invite link generated!")
+      } else {
+        toast.error("Failed to retrieve invite token.")
+      }
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Failed to generate invite.")
+    } finally {
+      setInviting(false)
+    }
+  }
+
+  const copyToClipboard = async () => {
+    if (!generatedLink) return
+    try {
+      await navigator.clipboard.writeText(generatedLink)
+      setCopied(true)
+      toast.success("Invite link copied to clipboard!")
+      setTimeout(() => setCopied(false), 2000)
+    } catch {
+      toast.error("Failed to copy link.")
+    }
+  }
+
+  const resetInviteModal = () => {
+    setInviteEmail("")
+    setPermissionRole("TEAM_MEMBER")
+    setJobFunction("OPS")
+    setGeneratedLink(null)
+    setCopied(false)
+  }
+
   return (
     <div className="flex flex-col gap-5">
-      <PageHeader
-        title="Teams & roles"
-        description="Org roster — teams, roles, and access for the agency OS."
-      />
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <PageHeader
+          title="Teams & roles"
+          description="Org roster — teams, roles, and access for the agency OS."
+        />
+        {canManageTeam && (
+          <Button
+            onClick={() => {
+              resetInviteModal()
+              setInviteOpen(true)
+            }}
+            className="gap-2 shrink-0"
+          >
+            <UserPlusIcon className="size-4" />
+            Invite Member
+          </Button>
+        )}
+      </div>
 
       {error ? (
         <Card className="border-destructive/40 text-destructive px-4 py-3 text-sm">{error}</Card>
@@ -163,14 +242,135 @@ export function TeamsPage() {
                     {member.role}
                   </Badge>
                 </div>
-                {canManageTeam ? <Button size="sm" variant="outline" onClick={() => cycleRole(member)}>
-                  Cycle role
-                </Button> : null}
+                {canManageTeam ? (
+                  <Button size="sm" variant="outline" onClick={() => cycleRole(member)}>
+                    Cycle role
+                  </Button>
+                ) : null}
               </Card>
             )
           })}
         </div>
       )}
+
+      {/* Invite Member Dialog */}
+      <Dialog open={inviteOpen} onOpenChange={setInviteOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <UserPlusIcon className="size-5 text-primary" />
+              Invite Team Member
+            </DialogTitle>
+            <DialogDescription>
+              Generate a shareable invite link for a new colleague to join this agency.
+            </DialogDescription>
+          </DialogHeader>
+
+          {!generatedLink ? (
+            <form onSubmit={handleGenerateInvite} className="space-y-4">
+              <div className="space-y-1.5">
+                <Label htmlFor="inviteEmail">Recipient Email (Optional)</Label>
+                <Input
+                  id="inviteEmail"
+                  type="email"
+                  placeholder="colleague@company.com"
+                  value={inviteEmail}
+                  onChange={(e) => setInviteEmail(e.target.value)}
+                />
+                <p className="text-[11px] text-muted-foreground">
+                  If left blank, anyone with the link can sign up with their email.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label htmlFor="permissionRole">Access Level</Label>
+                  <select
+                    id="permissionRole"
+                    className="w-full rounded-md border bg-background px-3 py-2 text-sm shadow-xs focus:outline-none focus:ring-1 focus:ring-primary"
+                    value={permissionRole}
+                    onChange={(e) => setPermissionRole(e.target.value as any)}
+                  >
+                    <option value="TEAM_MEMBER">Team Member</option>
+                    <option value="PROJECT_MANAGER">Project Manager</option>
+                    <option value="AGENCY_ADMIN">Agency Admin</option>
+                  </select>
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label htmlFor="jobFunction">Job Function</Label>
+                  <select
+                    id="jobFunction"
+                    className="w-full rounded-md border bg-background px-3 py-2 text-sm shadow-xs focus:outline-none focus:ring-1 focus:ring-primary"
+                    value={jobFunction}
+                    onChange={(e) => setJobFunction(e.target.value as any)}
+                  >
+                    <option value="OPS">Operations</option>
+                    <option value="CREATIVE">Creative</option>
+                    <option value="PRODUCER">Producer</option>
+                    <option value="PM">Project Manager</option>
+                    <option value="ADMIN">Admin</option>
+                  </select>
+                </div>
+              </div>
+
+              <DialogFooter className="pt-2">
+                <Button type="button" variant="outline" onClick={() => setInviteOpen(false)}>
+                  Cancel
+                </Button>
+                <Button type="submit" disabled={inviting} className="gap-2">
+                  {inviting ? (
+                    <>
+                      <Loader2Icon className="size-4 animate-spin" />
+                      Generating...
+                    </>
+                  ) : (
+                    <>
+                      <Link2Icon className="size-4" />
+                      Generate Invite Link
+                    </>
+                  )}
+                </Button>
+              </DialogFooter>
+            </form>
+          ) : (
+            <div className="space-y-4 py-2">
+              <div className="rounded-lg bg-primary/10 border border-primary/20 p-3 text-sm text-foreground">
+                <p className="font-medium text-primary mb-1">Invite link ready!</p>
+                <p className="text-xs text-muted-foreground">
+                  Send this link to your teammate. It is valid for 7 days.
+                </p>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label>Shareable URL</Label>
+                <div className="flex gap-2">
+                  <Input readOnly value={generatedLink} className="font-mono text-xs select-all bg-muted/40" />
+                  <Button type="button" variant="secondary" onClick={copyToClipboard} className="shrink-0 gap-1.5">
+                    {copied ? <CheckIcon className="size-4 text-emerald-500" /> : <CopyIcon className="size-4" />}
+                    {copied ? "Copied" : "Copy"}
+                  </Button>
+                </div>
+              </div>
+
+              <DialogFooter className="pt-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    resetInviteModal()
+                  }}
+                >
+                  Create Another
+                </Button>
+                <Button type="button" onClick={() => setInviteOpen(false)}>
+                  Done
+                </Button>
+              </DialogFooter>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

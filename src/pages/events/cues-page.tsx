@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react"
 import { PlusIcon } from "lucide-react"
 import { toast } from "sonner"
 
+import { CreateCueModal } from "@/components/modals"
 import { CueRunSheet } from "@/components/ops/cue-run-sheet"
 import { EventScopeBar } from "@/components/ops/event-scope-bar"
 import { ConfirmationDialog } from "@/components/shared/confirmation-dialog"
@@ -25,7 +26,6 @@ import { useEventScope } from "@/hooks/use-event-scope"
 import {
   advanceCues,
   completeCue,
-  createCue,
   deleteCue,
   listCues,
   resetCue,
@@ -48,6 +48,7 @@ export function CuesPage() {
   const [busyCueId, setBusyCueId] = useState<string | null>(null)
   const [advancing, setAdvancing] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
+  const [createOpen, setCreateOpen] = useState(false)
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [editingCue, setEditingCue] = useState<Cue | null>(null)
   const [pendingCueId, setPendingCueId] = useState<string | null>(null)
@@ -75,10 +76,19 @@ export function CuesPage() {
 
   const [form, setForm] = useState<CueFormData>(emptyForm)
 
+  const defaultScheduledTime = (() => {
+    const last = [...cues].sort(
+      (a, b) =>
+        new Date(a.scheduledTime || 0).getTime() - new Date(b.scheduledTime || 0).getTime(),
+    )[cues.length - 1]
+    const base = last?.scheduledTime
+      ? new Date(last.scheduledTime).getTime() + (last.duration || 10) * 60_000
+      : Date.now()
+    return new Date(base).toISOString()
+  })()
+
   function openCreateDialog() {
-    setEditingCue(null)
-    setForm(emptyForm)
-    setIsDialogOpen(true)
+    setCreateOpen(true)
   }
 
   function openEditDialog(cue: Cue) {
@@ -231,41 +241,21 @@ export function CuesPage() {
   }
 
   async function handleSave() {
-    if (!eventId || !canWrite || !form.name.trim()) return
+    if (!eventId || !canWrite || !form.name.trim() || !editingCue) return
     setIsSaving(true)
     try {
-      if (editingCue) {
-        await updateCue(eventId, editingCue.cueId, {
-          name: form.name.trim(),
-          duration: Number(form.duration) || 10,
-          location: form.location.trim() || undefined,
-          description: form.description.trim() || undefined,
-          priority: form.priority || "medium",
-          departmentName: form.departmentName.trim() || undefined,
-          assignedTo: form.assignedTo.trim() || undefined,
-        })
-        toast.success("Cue updated")
-      } else {
-        const last = [...cues].sort(
-          (a, b) =>
-            new Date(a.scheduledTime || 0).getTime() - new Date(b.scheduledTime || 0).getTime(),
-        )[cues.length - 1]
-        const base = last?.scheduledTime
-          ? new Date(last.scheduledTime).getTime() + (last.duration || 10) * 60_000
-          : Date.now()
-
-        await createCue(eventId, {
-          name: form.name.trim(),
-          duration: Number(form.duration) || 10,
-          location: form.location.trim() || undefined,
-          description: form.description.trim() || undefined,
-          scheduledTime: new Date(base).toISOString(),
-          priority: form.priority || "medium",
-          departmentName: form.departmentName.trim() || undefined,
-        })
-        toast.success("Cue added to run sheet")
-      }
+      await updateCue(eventId, editingCue.cueId, {
+        name: form.name.trim(),
+        duration: Number(form.duration) || 10,
+        location: form.location.trim() || undefined,
+        description: form.description.trim() || undefined,
+        priority: form.priority || "medium",
+        departmentName: form.departmentName.trim() || undefined,
+        assignedTo: form.assignedTo.trim() || undefined,
+      })
+      toast.success("Cue updated")
       setIsDialogOpen(false)
+      setEditingCue(null)
       await reload()
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : "Save failed")
@@ -341,15 +331,30 @@ export function CuesPage() {
             onDelete={pendingCueId ? undefined : (cue) => setDeleteTarget(cue)}
          />
       )}
-      {/* Add / Edit Cue Modal Dialog */}
-      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+      {eventId ? (
+        <CreateCueModal
+          open={createOpen}
+          onOpenChange={setCreateOpen}
+          eventId={eventId}
+          defaultScheduledTime={defaultScheduledTime}
+          onSuccess={async () => {
+            await reload()
+          }}
+        />
+      ) : null}
+      {/* Edit Cue Modal Dialog */}
+      <Dialog
+        open={isDialogOpen}
+        onOpenChange={(open) => {
+          setIsDialogOpen(open)
+          if (!open) setEditingCue(null)
+        }}
+      >
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>{editingCue ? "Edit Cue" : "Add Cue"}</DialogTitle>
+            <DialogTitle>Edit Cue</DialogTitle>
             <DialogDescription>
-              {editingCue
-                ? "Update cue name, timing, location, and assignment."
-                : "Add a new cue to the run sheet. It will be scheduled after the last cue."}
+              Update cue name, timing, location, and assignment.
             </DialogDescription>
           </DialogHeader>
 
@@ -440,7 +445,7 @@ export function CuesPage() {
               Cancel
             </Button>
             <Button onClick={() => void handleSave()} disabled={isSaving || !form.name.trim()}>
-              {isSaving ? "Saving…" : editingCue ? "Save Changes" : "Add Cue"}
+              {isSaving ? "Saving…" : "Save Changes"}
             </Button>
           </DialogFooter>
         </DialogContent>

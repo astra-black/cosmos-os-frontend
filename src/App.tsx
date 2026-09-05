@@ -34,7 +34,8 @@ import {
   TeamsPage,
   VendorsPage,
   getPortalUser,
-  LandingPage
+  LandingPage,
+  AcceptInvitePage
 } from "@/pages"
 
 function AccessDenied() {
@@ -71,6 +72,8 @@ export default function App() {
       <Route path="/" element={<PublicRoute />} />
       <Route path="/landing" element={<LandingPage />} />
       <Route path="/login" element={<LoginPage />} />
+      <Route path="/invite/:token" element={<AcceptInvitePage />} />
+      <Route path="/join/:token" element={<AcceptInvitePage />} />
       <Route path="/portal/login" element={<PortalLoginPage />} />
       <Route path="/portal" element={<PortalRoute />} />
 

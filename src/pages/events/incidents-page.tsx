@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react"
 import { PlusIcon } from "lucide-react"
 import { toast } from "sonner"
 
+import { CreateIncidentModal } from "@/components/modals"
 import { EventScopeBar } from "@/components/ops/event-scope-bar"
 import { IncidentTriage } from "@/components/ops/incident-triage"
 import { ConfirmationDialog } from "@/components/shared/confirmation-dialog"
@@ -16,7 +17,6 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { Textarea } from "@/components/ui/textarea"
 import { useEventScope } from "@/hooks/use-event-scope"
 import {
-  createIncident,
   listDepartments,
   listIncidents,
   updateIncident,
@@ -61,7 +61,8 @@ export function IncidentsPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [busyIncidentId, setBusyIncidentId] = useState<string | null>(null)
-  const [incidentFormMode, setIncidentFormMode] = useState<"create" | "edit" | null>(null)
+  const [incidentFormMode, setIncidentFormMode] = useState<"edit" | null>(null)
+  const [createOpen, setCreateOpen] = useState(false)
   const [editingIncident, setEditingIncident] = useState<Incident | null>(null)
   const [logging, setLogging] = useState(false)
   const [incidentForm, setIncidentForm] = useState<IncidentFormData>(emptyIncidentForm)
@@ -182,9 +183,7 @@ export function IncidentsPage() {
   }
 
   function openCreateDialog() {
-    setEditingIncident(null)
-    setIncidentForm(emptyIncidentForm)
-    setIncidentFormMode("create")
+    setCreateOpen(true)
   }
 
   function openEditDialog(incident: Incident) {
@@ -202,9 +201,9 @@ export function IncidentsPage() {
   }
 
   async function handleSaveIncident() {
-    if (!eventId || !canWrite || !incidentForm.title.trim()) return
+    if (!eventId || !canWrite || !incidentForm.title.trim() || !editingIncident) return
     setLogging(true)
-    const incidentId = editingIncident?.incidentId
+    const incidentId = editingIncident.incidentId
     const payload = {
       title: incidentForm.title.trim(),
       description: incidentForm.description.trim() || undefined,
@@ -215,24 +214,17 @@ export function IncidentsPage() {
       assignedTo: incidentForm.assignedTo.trim() || undefined,
     }
     try {
-      if (incidentId) {
-        await withMutationFeedback(updateIncident(incidentId, payload), {
-          loading: "Updating incident...",
-          success: "Incident updated",
-          error: (err) => err instanceof ApiError ? err.message : "Could not update incident",
-        })
-      } else {
-        const res = await createIncident(eventId, payload)
-        if (res.data) setIncidents((prev) => [res.data, ...prev])
-        else await reload()
-        toast.success("Incident logged")
-      }
+      await withMutationFeedback(updateIncident(incidentId, payload), {
+        loading: "Updating incident...",
+        success: "Incident updated",
+        error: (err) => err instanceof ApiError ? err.message : "Could not update incident",
+      })
       setIncidentForm(emptyIncidentForm)
       setEditingIncident(null)
       setIncidentFormMode(null)
-      if (incidentId) await reload()
+      await reload()
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : incidentId ? "Could not update incident" : "Could not log incident")
+      toast.error(err instanceof ApiError ? err.message : "Could not update incident")
     } finally {
       setLogging(false)
     }
@@ -270,7 +262,7 @@ export function IncidentsPage() {
           canWrite ? (
             <Button
               size="sm"
-              variant={incidentFormMode === "create" ? "default" : "outline"}
+              variant="outline"
               onClick={openCreateDialog}
             >
               <PlusIcon className="size-3.5" />
@@ -313,18 +305,29 @@ export function IncidentsPage() {
           onDelete={pendingMutationId ? undefined : (incident) => setDeleteTarget(incident)}
         />
       )}
+      {eventId ? (
+        <CreateIncidentModal
+          open={createOpen}
+          onOpenChange={setCreateOpen}
+          eventId={eventId}
+          departments={departments}
+          onSuccess={(incident) => {
+            setIncidents((prev) => [incident, ...prev])
+          }}
+        />
+      ) : null}
       <EntityFormDialog
-        open={incidentFormMode !== null}
+        open={incidentFormMode === "edit"}
         onOpenChange={(open) => {
           if (!open && !logging) {
             setIncidentFormMode(null)
             setEditingIncident(null)
           }
         }}
-        title={incidentFormMode === "edit" ? "Edit incident" : "Log incident"}
+        title="Edit incident"
         description="Capture the incident details and route it to the right department or owner."
         onSubmit={handleSaveIncident}
-        submitLabel={incidentFormMode === "edit" ? "Save changes" : "Log incident"}
+        submitLabel="Save changes"
         pending={logging}
         submitDisabled={!incidentForm.title.trim()}
         maxWidth="max-w-2xl"

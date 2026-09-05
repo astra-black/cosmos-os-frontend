@@ -31,19 +31,28 @@ export function useEventScope() {
         const list = res.data ?? []
         setEvents(list)
 
+        const validStored = localStorage.getItem(STORAGE_KEY)
+        const storedExists = validStored && list.some((e) => e.eventId === validStored || e.id === validStored)
+        const paramExists = paramEventId && list.some((e) => e.eventId === paramEventId || e.id === paramEventId)
+
         const preferred =
-          paramEventId ||
-          localStorage.getItem(STORAGE_KEY) ||
+          (paramExists ? paramEventId : null) ||
+          (storedExists ? validStored : null) ||
           list.find((e) => e.status === "live")?.eventId ||
           list.find((e) => e.status === "confirmed")?.eventId ||
           list[0]?.eventId ||
           ""
 
+        setEventIdState(preferred)
         if (preferred) {
-          setEventIdState(preferred)
           localStorage.setItem(STORAGE_KEY, preferred)
-          if (!paramEventId && preferred) {
+          if (!paramEventId) {
             setSearchParams({ eventId: preferred }, { replace: true })
+          }
+        } else {
+          localStorage.removeItem(STORAGE_KEY)
+          if (paramEventId) {
+            setSearchParams({}, { replace: true })
           }
         }
       } catch {

@@ -12,6 +12,7 @@ import {
 } from "lucide-react"
 import { toast } from "sonner"
 
+import { CreateClientModal } from "@/components/modals"
 import { CommentsPanel } from "@/components/shared/comments-panel"
 import { ConfirmationDialog } from "@/components/shared/confirmation-dialog"
 import { EntityFormDialog } from "@/components/shared/entity-form-dialog"
@@ -27,7 +28,6 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { Textarea } from "@/components/ui/textarea"
 import { useClients } from "@/hooks/use-agency-data"
 import {
-  createClient,
   createCrmActivity,
   deleteCrmActivity,
   listCrmActivities,
@@ -183,7 +183,8 @@ export function ClientsPage() {
   const [detailLoading, setDetailLoading] = useState(false)
   const [savingClient, setSavingClient] = useState(false)
   const [deleting, setDeleting] = useState(false)
-  const [clientFormMode, setClientFormMode] = useState<"create" | "edit" | null>(null)
+  const [createClientOpen, setCreateClientOpen] = useState(false)
+  const [clientFormMode, setClientFormMode] = useState<"edit" | null>(null)
   const [clientForm, setClientForm] = useState<ClientForm>(emptyClientForm)
   const [editClientTarget, setEditClientTarget] = useState<AgencyClient | null>(null)
   const [deleteClientTarget, setDeleteClientTarget] = useState<AgencyClient | null>(null)
@@ -263,9 +264,7 @@ export function ClientsPage() {
     .reduce((s, d) => s + (d.value || 0), 0)
 
   function openCreateClient() {
-    setClientForm(emptyClientForm())
-    setEditClientTarget(null)
-    setClientFormMode("create")
+    setCreateClientOpen(true)
   }
 
   function openEditClient(client: AgencyClient) {
@@ -289,7 +288,7 @@ export function ClientsPage() {
   }
 
   async function handleSaveClient() {
-    if (!canWriteCrm) return
+    if (!canWriteCrm || !editClientTarget) return
     const validationError = validateClientForm(clientForm)
     if (validationError) {
       toast.error(validationError)
@@ -298,16 +297,13 @@ export function ClientsPage() {
     setSavingClient(true)
     try {
       const payload = clientPayload(clientForm)
-      const res = clientFormMode === "edit" && editClientTarget
-        ? await updateClient(editClientTarget.clientId, payload)
-        : await createClient(payload)
+      await updateClient(editClientTarget.clientId, payload)
       await reloadClients()
-      if (clientFormMode === "create" && res.data?.clientId) selectClient(res.data.clientId)
       setClientFormMode(null)
       setEditClientTarget(null)
-      toast.success(clientFormMode === "edit" ? "Account updated" : "Account created")
+      toast.success("Account updated")
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : clientFormMode === "edit" ? "Update failed" : "Create failed")
+      toast.error(err instanceof ApiError ? err.message : "Update failed")
     } finally {
       setSavingClient(false)
     }
@@ -742,18 +738,26 @@ export function ClientsPage() {
               </div>
             )}
        </div>
+       <CreateClientModal
+         open={createClientOpen}
+         onOpenChange={setCreateClientOpen}
+         onSuccess={async (client) => {
+           await reloadClients()
+           if (client.clientId) selectClient(client.clientId)
+         }}
+       />
        <EntityFormDialog
-         open={clientFormMode !== null}
+         open={clientFormMode === "edit"}
          onOpenChange={(open) => {
            if (!open && !savingClient) {
              setClientFormMode(null)
              setEditClientTarget(null)
            }
          }}
-         title={clientFormMode === "edit" ? "Edit account" : "Add account"}
+         title="Edit account"
          description="Keep account details, health, and commercial context in one place."
          onSubmit={handleSaveClient}
-         submitLabel={clientFormMode === "edit" ? "Save changes" : "Create account"}
+         submitLabel="Save changes"
          pending={savingClient}
          submitDisabled={!clientForm.name.trim()}
          maxWidth="max-w-2xl"

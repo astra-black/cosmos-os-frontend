@@ -1,6 +1,7 @@
 // Auth
 export { LoginPage } from "./auth/login-page"
 export { PortalLoginPage, getPortalUser, clearPortalUser } from "./auth/portal-login-page"
+export { AcceptInvitePage } from "./auth/accept-invite-page"
 
 // Portal
 export { PortalHomePage } from "./portal/portal-home-page"

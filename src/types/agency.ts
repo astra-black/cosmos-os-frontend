@@ -14,6 +14,9 @@ export type AuthUser = {
   role: string
   photoUrl?: string
   avatarUrl?: string
+  agencyId?: string
+  agencyName?: string
+  agencySlug?: string
   createdAt?: string
 }
 
@@ -247,6 +250,7 @@ export type CrewMember = {
   departmentName?: string
   email?: string
   phone?: string
+  notes?: string
   assignedAt?: string
   confirmedAt?: string
   onSiteAt?: string
@@ -304,6 +308,7 @@ export type Campaign = {
 export type Task = {
   taskId: string
   title: string
+  description?: string
   projectId?: string | null
   projectName?: string | null
   campaignId?: string | null

@@ -11,6 +11,7 @@ import {
 } from "lucide-react"
 import { toast } from "sonner"
 
+import { CreateProjectModal } from "@/components/modals"
 import { PageHeader } from "@/components/shared/page-header"
 import { ConfirmationDialog } from "@/components/shared/confirmation-dialog"
 import { Button } from "@/components/ui/button"
@@ -32,7 +33,7 @@ import { PortfolioSummaryCard } from "@/components/widgets/portfolio-summary-car
 import { ProjectsDatatable } from "@/components/widgets/projects-datatable"
 import { StatisticsCard } from "@/components/widgets/statistics-card"
 import { useClients, useProjects } from "@/hooks/use-agency-data"
-import { createProject, deleteProject, updateProject } from "@/lib/api/agency"
+import { deleteProject, updateProject } from "@/lib/api/agency"
 import { ApiError } from "@/lib/api/client"
 import { useAuth } from "@/lib/auth"
 import { canPerform } from "@/lib/rbac"
@@ -80,15 +81,14 @@ export function ProjectsPage() {
   const { data: clients } = useClients()
   const [isSaving, setIsSaving] = useState(false)
   const [pendingProject, setPendingProject] = useState<string | null>(null)
+  const [createOpen, setCreateOpen] = useState(false)
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [editingProject, setEditingProject] = useState<Project | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null)
   const [form, setForm] = useState<ProjectFormData>(emptyForm)
 
   function openCreateDialog() {
-    setEditingProject(null)
-    setForm(emptyForm)
-    setIsDialogOpen(true)
+    setCreateOpen(true)
   }
 
   function openEditDialog(project: Project) {
@@ -108,7 +108,7 @@ export function ProjectsPage() {
   }
 
   async function handleSave() {
-    if (!form.projectName.trim() || !canWrite) return
+    if (!form.projectName.trim() || !canWrite || !editingProject) return
     const weight = form.weight ? Number(form.weight) : 0
     const budget = form.budget ? Number(form.budget) : 0
     const startDate = form.startDate ? new Date(`${form.startDate}T00:00:00`) : null
@@ -128,37 +128,21 @@ export function ProjectsPage() {
     setIsSaving(true)
     try {
       const client = clients.find((c) => c.clientId === form.clientId)
-      if (editingProject) {
-        await updateProject(editingProject.projectId, {
-          projectName: form.projectName.trim(),
-          clientId: form.clientId || null,
-          clientName: client?.name || null,
-          campaignId: form.campaignId.trim() || null,
-          status: form.status,
-          startDate: form.startDate || null,
-          endDate: form.endDate || null,
-          weight,
-          budget,
-          description: form.description.trim() || "",
-        })
-        toast.success("Project updated")
-      } else {
-        const res = await createProject({
-          projectName: form.projectName.trim(),
-          clientId: form.clientId || null,
-          clientName: client?.name || null,
-          campaignId: form.campaignId.trim() || null,
-          status: form.status,
-          startDate: form.startDate || null,
-          endDate: form.endDate || null,
-          weight,
-          budget,
-          description: form.description.trim() || "",
-        })
-        toast.success("Project created")
-        if (res.data?.projectId) navigate(`/projects/${res.data.projectId}`)
-      }
+      await updateProject(editingProject.projectId, {
+        projectName: form.projectName.trim(),
+        clientId: form.clientId || null,
+        clientName: client?.name || null,
+        campaignId: form.campaignId.trim() || null,
+        status: form.status,
+        startDate: form.startDate || null,
+        endDate: form.endDate || null,
+        weight,
+        budget,
+        description: form.description.trim() || "",
+      })
+      toast.success("Project updated")
       setIsDialogOpen(false)
+      setEditingProject(null)
       await reload()
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : "Save failed")
@@ -367,15 +351,30 @@ export function ProjectsPage() {
         </>
       )}
 
-      {/* Add / Edit Project Modal Dialog */}
-      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+      {/* Create Project Modal */}
+      <CreateProjectModal
+        open={createOpen}
+        onOpenChange={setCreateOpen}
+        clients={clients}
+        onSuccess={async (project) => {
+          await reload()
+          if (project.projectId) navigate(`/projects/${project.projectId}`)
+        }}
+      />
+
+      {/* Edit Project Modal Dialog */}
+      <Dialog
+        open={isDialogOpen}
+        onOpenChange={(open) => {
+          setIsDialogOpen(open)
+          if (!open) setEditingProject(null)
+        }}
+      >
         <DialogContent className="max-w-lg">
           <DialogHeader>
-            <DialogTitle>{editingProject ? "Edit Project" : "Create New Project"}</DialogTitle>
+            <DialogTitle>Edit Project</DialogTitle>
             <DialogDescription>
-              {editingProject
-                ? "Update timeline, budget, client ownership, and milestones."
-                : "Initialize a new project within your agency delivery book."}
+              Update timeline, budget, client ownership, and milestones.
             </DialogDescription>
           </DialogHeader>
 
@@ -484,7 +483,7 @@ export function ProjectsPage() {
               Cancel
             </Button>
             <Button onClick={() => void handleSave()} disabled={isSaving || !form.projectName.trim()}>
-              {isSaving ? "Saving…" : editingProject ? "Save Changes" : "Create Project"}
+              {isSaving ? "Saving…" : "Save Changes"}
             </Button>
           </DialogFooter>
         </DialogContent>

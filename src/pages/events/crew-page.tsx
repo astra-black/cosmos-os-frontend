@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react"
 import { toast } from "sonner"
 
+import { CreateCrewModal } from "@/components/modals"
 import { CrewBoard } from "@/components/ops/crew-board"
 import { EventScopeBar } from "@/components/ops/event-scope-bar"
 import { ConfirmationDialog } from "@/components/shared/confirmation-dialog"
@@ -14,7 +15,7 @@ import { Select } from "@/components/ui/select"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Textarea } from "@/components/ui/textarea"
 import { useEventScope } from "@/hooks/use-event-scope"
-import { createCrew, createDepartment, deleteCrew, deleteDepartment, listCrew, listDepartments, updateCrew, updateCrewStatus, updateDepartment } from "@/lib/api/agency"
+import { createDepartment, deleteCrew, deleteDepartment, listCrew, listDepartments, updateCrew, updateCrewStatus, updateDepartment } from "@/lib/api/agency"
 import { ApiError } from "@/lib/api/client"
 import { useAuth } from "@/lib/auth"
 import { canPerform } from "@/lib/rbac"
@@ -76,7 +77,8 @@ export function CrewPage() {
   const [busyCrewId, setBusyCrewId] = useState<string | null>(null)
   const [departmentFormMode, setDepartmentFormMode] = useState<"create" | "edit" | null>(null)
   const [editingDepartment, setEditingDepartment] = useState<Department | null>(null)
-  const [crewFormMode, setCrewFormMode] = useState<"create" | "edit" | null>(null)
+  const [crewFormMode, setCrewFormMode] = useState<"edit" | null>(null)
+  const [createCrewOpen, setCreateCrewOpen] = useState(false)
   const [editingCrew, setEditingCrew] = useState<CrewMember | null>(null)
   const [departmentForm, setDepartmentForm] = useState<DepartmentFormData>(emptyDepartmentForm)
   const [crewForm, setCrewForm] = useState<CrewFormData>(emptyCrewForm)
@@ -203,9 +205,7 @@ export function CrewPage() {
   }
 
   function openCreateCrew() {
-    setEditingCrew(null)
-    setCrewForm(emptyCrewForm)
-    setCrewFormMode("create")
+    setCreateCrewOpen(true)
   }
 
   function openEditCrew(member: CrewMember) {
@@ -222,13 +222,13 @@ export function CrewPage() {
   }
 
   async function handleSaveCrew() {
-    if (!eventId || !canWrite || !crewForm.name.trim() || !crewForm.role.trim() || !crewForm.departmentId) return
+    if (!eventId || !canWrite || !crewForm.name.trim() || !crewForm.role.trim() || !crewForm.departmentId || !editingCrew) return
     if (!isOptionalEmail(crewForm.email)) {
       toast.error("Enter a valid crew email")
       return
     }
-    const crewId = editingCrew?.crewId
-    setPendingId(crewId ?? "new-crew")
+    const crewId = editingCrew.crewId
+    setPendingId(crewId)
     const payload = {
       name: crewForm.name.trim(),
       role: crewForm.role.trim(),
@@ -238,14 +238,11 @@ export function CrewPage() {
       status: crewForm.status,
     }
     try {
-      await withMutationFeedback(
-        crewId ? updateCrew(crewId, payload) : createCrew(eventId, payload),
-        {
-          loading: crewId ? "Updating crew member..." : "Adding crew member...",
-          success: crewId ? "Crew member updated" : "Crew member added",
-          error: (err) => err instanceof ApiError ? err.message : "Could not save crew member",
-        },
-      )
+      await withMutationFeedback(updateCrew(crewId, payload), {
+        loading: "Updating crew member...",
+        success: "Crew member updated",
+        error: (err) => err instanceof ApiError ? err.message : "Could not save crew member",
+      })
       setCrewForm(emptyCrewForm)
       setEditingCrew(null)
       setCrewFormMode(null)
@@ -330,18 +327,29 @@ export function CrewPage() {
          </div>
          <div className="grid gap-1.5"><Label htmlFor="department-description">Description</Label><Textarea id="department-description" value={departmentForm.description} onChange={(e) => setDepartmentForm((f) => ({ ...f, description: e.target.value }))} placeholder="Department responsibilities" /></div>
        </EntityFormDialog>
+       {eventId ? (
+         <CreateCrewModal
+           open={createCrewOpen}
+           onOpenChange={setCreateCrewOpen}
+           eventId={eventId}
+           departments={departments}
+           onSuccess={async () => {
+             await reload()
+           }}
+         />
+       ) : null}
        <EntityFormDialog
-         open={crewFormMode !== null}
+         open={crewFormMode === "edit"}
          onOpenChange={(open) => {
            if (!open && !pendingId) {
              setCrewFormMode(null)
              setEditingCrew(null)
            }
          }}
-         title={crewFormMode === "edit" ? "Edit crew member" : "Add crew member"}
+         title="Edit crew member"
          description="Assign a crew member to a department and track their show status."
          onSubmit={handleSaveCrew}
-         submitLabel={crewFormMode === "edit" ? "Save changes" : "Add crew member"}
+         submitLabel="Save changes"
          pending={Boolean(pendingId)}
          submitDisabled={!crewForm.name.trim() || !crewForm.role.trim() || !crewForm.departmentId || !isOptionalEmail(crewForm.email)}
          maxWidth="max-w-2xl"

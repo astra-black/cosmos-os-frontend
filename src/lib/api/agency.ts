@@ -248,6 +248,10 @@ export async function createIncident(
     severity?: string
     category?: string
     location?: string
+    departmentId?: string
+    departmentName?: string
+    reportedBy?: string
+    assignedTo?: string
   },
 ) {
   return apiRequest<ApiEnvelope<Incident>>(

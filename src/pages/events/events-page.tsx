@@ -8,6 +8,7 @@ import {
 } from "lucide-react"
 import { toast } from "sonner"
 
+import { CreateEventModal } from "@/components/modals"
 import { PageHeader } from "@/components/shared/page-header"
 import { ConfirmationDialog } from "@/components/shared/confirmation-dialog"
 import { EntityFormDialog } from "@/components/shared/entity-form-dialog"
@@ -23,7 +24,7 @@ import { EventOpsMetricsCard } from "@/components/widgets/event-ops-metrics-card
 import { EventsDatatable } from "@/components/widgets/events-datatable"
 import { PortfolioSummaryCard } from "@/components/widgets/portfolio-summary-card"
 import { StatisticsCard } from "@/components/widgets/statistics-card"
-import { createEvent, deleteEvent, listEvents, updateEvent } from "@/lib/api/agency"
+import { deleteEvent, listEvents, updateEvent } from "@/lib/api/agency"
 import { ApiError } from "@/lib/api/client"
 import { useAuth } from "@/lib/auth"
 import { canPerform } from "@/lib/rbac"
@@ -83,9 +84,9 @@ export function EventsPage() {
   const [events, setEvents] = useState<Event[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [eventFormMode, setEventFormMode] = useState<"create" | "edit" | null>(null)
+  const [eventFormMode, setEventFormMode] = useState<"edit" | null>(null)
   const [editingEvent, setEditingEvent] = useState<Event | null>(null)
-  const [creating, setCreating] = useState(false)
+  const [createOpen, setCreateOpen] = useState(false)
   const [saving, setSaving] = useState(false)
   const [pendingEventId, setPendingEventId] = useState<string | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<Event | null>(null)
@@ -118,9 +119,7 @@ export function EventsPage() {
   }, [])
 
   function openCreateDialog() {
-    setEditingEvent(null)
-    setForm(emptyEventForm)
-    setEventFormMode("create")
+    setCreateOpen(true)
   }
 
   function openEditDialog(event: Event) {
@@ -142,7 +141,7 @@ export function EventsPage() {
   }
 
   async function handleSaveEvent() {
-    if (!canWrite) return
+    if (!canWrite || !editingEvent) return
     if (!form.name.trim() || !form.type || !form.location.trim() || !form.startDate || !form.endDate) {
       toast.error("Name, type, location, start date, and end date are required")
       return
@@ -162,8 +161,7 @@ export function EventsPage() {
       toast.error("Attendees must be a positive whole number and budget must be positive")
       return
     }
-    const pending = eventFormMode === "create" ? setCreating : setSaving
-    pending(true)
+    setSaving(true)
     try {
       const payload = {
         name: form.name.trim(),
@@ -178,24 +176,19 @@ export function EventsPage() {
         startDate: startDate.toISOString(),
         endDate: endDate.toISOString(),
       }
-      await withMutationFeedback(
-        eventFormMode === "edit" && editingEvent
-          ? updateEvent(editingEvent.eventId, payload)
-          : createEvent(payload),
-        {
-          loading: eventFormMode === "edit" ? "Updating event..." : "Creating event...",
-          success: eventFormMode === "edit" ? "Event updated" : "Event created",
-          error: (err) => err instanceof ApiError ? err.message : eventFormMode === "edit" ? "Update failed" : "Create failed",
-        },
-      )
+      await withMutationFeedback(updateEvent(editingEvent.eventId, payload), {
+        loading: "Updating event...",
+        success: "Event updated",
+        error: (err) => err instanceof ApiError ? err.message : "Update failed",
+      })
       setForm(emptyEventForm)
       setEditingEvent(null)
       setEventFormMode(null)
       await reload()
     } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : eventFormMode === "edit" ? "Update failed" : "Create failed")
+      toast.error(err instanceof ApiError ? err.message : "Update failed")
     } finally {
-      pending(false)
+      setSaving(false)
     }
   }
 
@@ -368,19 +361,26 @@ export function EventsPage() {
           )}
         </Card>
       </div>
+      <CreateEventModal
+        open={createOpen}
+        onOpenChange={setCreateOpen}
+        onSuccess={async () => {
+          await reload()
+        }}
+      />
       <EntityFormDialog
-        open={eventFormMode !== null}
+        open={eventFormMode === "edit"}
         onOpenChange={(open) => {
-          if (!open && !creating && !saving) {
+          if (!open && !saving) {
             setEventFormMode(null)
             setEditingEvent(null)
           }
         }}
-        title={eventFormMode === "edit" ? "Edit event" : "New event"}
+        title="Edit event"
         description="Set the event schedule, venue, status, and operating details."
         onSubmit={handleSaveEvent}
-        submitLabel={eventFormMode === "edit" ? "Save changes" : "Create event"}
-        pending={creating || saving}
+        submitLabel="Save changes"
+        pending={saving}
         submitDisabled={!form.name.trim() || !form.type || !form.location.trim() || !form.startDate || !form.endDate}
         maxWidth="max-w-2xl"
       >

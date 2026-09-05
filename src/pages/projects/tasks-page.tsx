@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react"
+import { useMemo, useState } from "react"
 import { Link } from "react-router-dom"
 import {
   ChevronLeftIcon,
@@ -10,6 +10,7 @@ import {
 } from "lucide-react"
 import { toast } from "sonner"
 
+import { CreateTaskModal } from "@/components/modals"
 import { EntityFormDialog } from "@/components/shared/entity-form-dialog"
 import { ConfirmationDialog } from "@/components/shared/confirmation-dialog"
 import { EmptyState } from "@/components/shared/empty-state"
@@ -22,7 +23,7 @@ import { Label } from "@/components/ui/label"
 import { Select } from "@/components/ui/select"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useCampaigns, useProjects, useTasks, useTeamMembers } from "@/hooks/use-agency-data"
-import { createTask, deleteTask, updateTask } from "@/lib/api/agency"
+import { deleteTask, updateTask } from "@/lib/api/agency"
 import { ApiError } from "@/lib/api/client"
 import { useAuth } from "@/lib/auth"
 import { canPerform } from "@/lib/rbac"
@@ -45,15 +46,6 @@ const priorityTone: Record<string, string> = {
   medium: "bg-muted text-muted-foreground",
   low: "bg-muted text-muted-foreground",
 }
-
-const FALLBACK_ASSIGNEES = [
-  "Maya Chen",
-  "Jordan Blake",
-  "Alex Rivera",
-  "Priya Shah",
-  "Chris Patel",
-  "Unassigned",
-]
 
 type TaskForm = {
   title: string
@@ -94,6 +86,7 @@ export function TasksPage() {
   const { data: teamMembers } = useTeamMembers()
   const [busyId, setBusyId] = useState<string | null>(null)
   const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [createOpen, setCreateOpen] = useState(false)
   const [taskDialogOpen, setTaskDialogOpen] = useState(false)
   const [editingTask, setEditingTask] = useState<Task | null>(null)
   const [taskSaving, setTaskSaving] = useState(false)
@@ -110,16 +103,11 @@ export function TasksPage() {
 
   const assignees = useMemo(() => {
     const memberNames = teamMembers.map((m) => m.name).filter(Boolean)
-    if (memberNames.length === 0) return FALLBACK_ASSIGNEES
-    return [...new Set([...memberNames, "Unassigned"])]
-  }, [teamMembers])
-
-  // Fill a new task's project once project data is available.
-  useEffect(() => {
-    if (taskDialogOpen && !editingTask && !taskForm.projectId && projects[0]?.projectId) {
-      setTaskForm((form) => ({ ...form, projectId: projects[0].projectId }))
+    if (memberNames.length === 0) {
+      return user?.name ? [user.name, "Unassigned"] : ["Unassigned"]
     }
-  }, [projects, taskDialogOpen, editingTask, taskForm.projectId])
+    return [...new Set([...memberNames, "Unassigned"])]
+  }, [teamMembers, user?.name])
 
   const assigneeOptions = useMemo(() => {
     const fromTasks = tasks.map((t) => t.assignee || "Unassigned")
@@ -209,9 +197,7 @@ export function TasksPage() {
   }
 
   function openCreateTask() {
-    setEditingTask(null)
-    setTaskForm({ ...emptyTaskForm, projectId: projects[0]?.projectId ?? "" })
-    setTaskDialogOpen(true)
+    setCreateOpen(true)
   }
 
   function openEditTask(task: Task) {
@@ -238,7 +224,7 @@ export function TasksPage() {
   }
 
   async function saveTask() {
-    if (!taskForm.title.trim() || !canWrite) return
+    if (!taskForm.title.trim() || !canWrite || !editingTask) return
     const estimateHours = taskForm.estimateHours.trim() ? Number(taskForm.estimateHours) : 0
     if (!Number.isFinite(estimateHours) || estimateHours < 0) {
       toast.error("Estimate hours must be a non-negative number")
@@ -246,7 +232,7 @@ export function TasksPage() {
     }
     const selectedProject = projects.find((p) => p.projectId === taskForm.projectId)
     const projectName = selectedProject?.projectName ??
-      (editingTask?.projectId === taskForm.projectId ? editingTask.projectName ?? null : null)
+      (editingTask.projectId === taskForm.projectId ? editingTask.projectName ?? null : null)
     const body = {
       title: taskForm.title.trim(),
       projectId: taskForm.projectId || null,
@@ -261,13 +247,8 @@ export function TasksPage() {
     }
     setTaskSaving(true)
     try {
-      if (editingTask) {
-        await updateTask(editingTask.taskId, body)
-        toast.success("Task updated")
-      } else {
-        await createTask(body)
-        toast.success("Task created")
-      }
+      await updateTask(editingTask.taskId, body)
+      toast.success("Task updated")
       closeTaskDialog(true)
       await reload()
     } catch (err) {
@@ -535,16 +516,27 @@ export function TasksPage() {
         </div>
       )}
 
+      <CreateTaskModal
+        open={createOpen}
+        onOpenChange={setCreateOpen}
+        projects={projects}
+        campaigns={campaigns}
+        defaultProjectId={projects[0]?.projectId}
+        onSuccess={async () => {
+          await reload()
+        }}
+      />
+
       <EntityFormDialog
         open={taskDialogOpen}
         onOpenChange={(open) => {
           if (open) setTaskDialogOpen(true)
           else closeTaskDialog()
         }}
-        title={editingTask ? "Edit task" : "Create task"}
+        title="Edit task"
         description="Set the task's delivery ownership, timing, and planning details."
         onSubmit={saveTask}
-        submitLabel={editingTask ? "Save changes" : "Create task"}
+        submitLabel="Save changes"
         pending={taskSaving}
         submitDisabled={!taskForm.title.trim()}
         maxWidth="max-w-2xl"
