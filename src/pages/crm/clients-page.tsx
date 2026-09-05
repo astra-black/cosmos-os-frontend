@@ -29,6 +29,8 @@ import { Textarea } from "@/components/ui/textarea"
 import { useClients } from "@/hooks/use-agency-data"
 import {
   createCrmActivity,
+  createCrmContact,
+  createOpportunity,
   deleteCrmActivity,
   listCrmActivities,
   listCrmContacts,
@@ -50,6 +52,7 @@ import { cn } from "@/lib/utils"
 
 const STAGES = ["prospect", "onboarding", "active", "paused", "churned"] as const
 const HEALTH_OPTIONS = ["strong", "watch", "new", "risk"] as const
+const DEAL_STAGES = ["lead", "qualified", "proposal", "negotiation", "won", "lost"] as const
 type Tab = "overview" | "contacts" | "deals" | "activity" | "comments"
 type ClientForm = {
   name: string
@@ -62,6 +65,44 @@ type ClientForm = {
   tags: string
   notes: string
 }
+type ContactCreateForm = {
+  name: string
+  title: string
+  email: string
+  phone: string
+  role: string
+  isPrimary: boolean
+}
+type DealCreateForm = {
+  name: string
+  stage: string
+  value: string
+  probability: string
+  source: string
+  expectedClose: string
+  nextStep: string
+  notes: string
+}
+
+const emptyContactCreateForm = (): ContactCreateForm => ({
+  name: "",
+  title: "",
+  email: "",
+  phone: "",
+  role: "day_to_day",
+  isPrimary: false,
+})
+
+const emptyDealCreateForm = (): DealCreateForm => ({
+  name: "",
+  stage: "lead",
+  value: "",
+  probability: "15",
+  source: "",
+  expectedClose: "",
+  nextStep: "",
+  notes: "",
+})
 
 const emptyClientForm = (): ClientForm => ({
   name: "",
@@ -193,6 +234,12 @@ export function ClientsPage() {
   const [activityForm, setActivityForm] = useState({ subject: "", body: "" })
   const [pendingActivityId, setPendingActivityId] = useState<string | null>(null)
   const [deleteActivityTarget, setDeleteActivityTarget] = useState<CrmActivity | null>(null)
+  const [contactCreateOpen, setContactCreateOpen] = useState(false)
+  const [contactCreateBusy, setContactCreateBusy] = useState(false)
+  const [contactCreateForm, setContactCreateForm] = useState<ContactCreateForm>(emptyContactCreateForm)
+  const [dealCreateOpen, setDealCreateOpen] = useState(false)
+  const [dealCreateBusy, setDealCreateBusy] = useState(false)
+  const [dealCreateForm, setDealCreateForm] = useState<DealCreateForm>(emptyDealCreateForm)
 
   const selectClient = useCallback(
     (id: string, replace = false) => {
@@ -271,6 +318,108 @@ export function ClientsPage() {
     setClientForm(clientFormFromClient(client))
     setEditClientTarget(client)
     setClientFormMode("edit")
+  }
+
+  function openCreateContact() {
+    if (!selectedId || !canWriteCrm) return
+    setContactCreateForm(emptyContactCreateForm())
+    setContactCreateOpen(true)
+  }
+
+  function openCreateDeal() {
+    if (!selectedId || !canWriteCrm) return
+    setDealCreateForm(emptyDealCreateForm())
+    setDealCreateOpen(true)
+  }
+
+  async function reloadClientDetail() {
+    if (!selectedId) return
+    const [cRes, dRes, aRes] = await Promise.all([
+      listCrmContacts({ clientId: selectedId }),
+      listOpportunities({ clientId: selectedId }),
+      listCrmActivities({ clientId: selectedId }),
+    ])
+    setContacts(cRes.data ?? [])
+    setDeals(dRes.data ?? [])
+    setActivities(aRes.data ?? [])
+  }
+
+  async function handleCreateContact() {
+    if (!selectedId || !canWriteCrm) return
+    if (!contactCreateForm.name.trim()) {
+      toast.error("Contact name is required")
+      return
+    }
+    if (contactCreateForm.email.trim() && !/^\S+@\S+\.\S+$/.test(contactCreateForm.email.trim())) {
+      toast.error("Enter a valid email address")
+      return
+    }
+    setContactCreateBusy(true)
+    try {
+      await createCrmContact({
+        name: contactCreateForm.name.trim(),
+        title: contactCreateForm.title.trim(),
+        email: contactCreateForm.email.trim(),
+        phone: contactCreateForm.phone.trim(),
+        role: contactCreateForm.role.trim(),
+        isPrimary: contactCreateForm.isPrimary,
+        clientId: selectedId,
+      })
+      setContactCreateOpen(false)
+      setContactCreateForm(emptyContactCreateForm())
+      await reloadClientDetail()
+      toast.success("Contact added")
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Could not add contact")
+    } finally {
+      setContactCreateBusy(false)
+    }
+  }
+
+  async function handleCreateDeal() {
+    if (!selectedId || !canWriteCrm) return
+    if (!dealCreateForm.name.trim()) {
+      toast.error("Deal name is required")
+      return
+    }
+    const value = Number(dealCreateForm.value)
+    if (!dealCreateForm.value.trim() || !Number.isFinite(value) || value < 0) {
+      toast.error("Value must be a non-negative number")
+      return
+    }
+    const probability = Number(dealCreateForm.probability)
+    if (
+      !dealCreateForm.probability.trim() ||
+      !Number.isFinite(probability) ||
+      probability < 0 ||
+      probability > 100
+    ) {
+      toast.error("Probability must be between 0 and 100")
+      return
+    }
+    setDealCreateBusy(true)
+    try {
+      await createOpportunity({
+        name: dealCreateForm.name.trim(),
+        clientId: selectedId,
+        stage: dealCreateForm.stage,
+        value,
+        probability,
+        source: dealCreateForm.source.trim(),
+        expectedClose: dealCreateForm.expectedClose || null,
+        nextStep: dealCreateForm.nextStep.trim(),
+        notes: dealCreateForm.notes.trim(),
+        owner: "Unassigned",
+      })
+      setDealCreateOpen(false)
+      setDealCreateForm(emptyDealCreateForm())
+      await reloadClientDetail()
+      toast.success("Deal created")
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Could not create deal")
+    } finally {
+      setDealCreateBusy(false)
+    }
   }
 
   function clientPayload(values: ClientForm): Partial<AgencyClient> {
@@ -645,58 +794,100 @@ export function ClientsPage() {
                     </div>
                   </Card>
                 ) : tab === "contacts" ? (
-                  contacts.length === 0 ? (
-                    <EmptyState title="No contacts on this account" />
-                  ) : (
-                    <div className="grid gap-2 sm:grid-cols-2">
-                      {contacts.map((c) => (
-                        <Card key={c.contactId} className="p-4 text-sm">
-                          <div className="flex items-center justify-between gap-2">
-                            <span className="font-medium">{c.name}</span>
-                            {c.isPrimary ? <Badge className="h-5">Primary</Badge> : null}
-                          </div>
-                          <div className="text-muted-foreground text-xs">{c.title}</div>
-                          <div className="text-muted-foreground mt-2 space-y-0.5 text-xs">
-                            {c.email ? <div>{c.email}</div> : null}
-                            {c.phone ? <div>{c.phone}</div> : null}
-                          </div>
-                          {c.role ? (
-                            <Badge variant="outline" className="mt-2 capitalize">
-                              {c.role.replace("_", " ")}
-                            </Badge>
-                          ) : null}
-                        </Card>
-                      ))}
-                    </div>
-                  )
-                ) : tab === "deals" ? (
-                  deals.length === 0 ? (
-                    <EmptyState title="No opportunities" description="Create deals on the Pipeline page." />
-                  ) : (
-                    <div className="flex flex-col gap-2">
-                      {deals.map((d) => (
-                        <Card
-                          key={d.opportunityId}
-                          className="flex flex-wrap items-center justify-between gap-3 p-4"
-                        >
-                          <div>
-                            <div className="font-medium">{d.name}</div>
-                            <div className="text-muted-foreground text-xs">
-                              {d.owner}
-                              {d.nextStep ? ` · Next: ${d.nextStep}` : ""}
+                  <div className="flex flex-col gap-3">
+                    {canWriteCrm && contacts.length > 0 ? (
+                      <div className="flex justify-end">
+                        <Button size="sm" variant="outline" onClick={openCreateContact}>
+                          <PlusIcon className="size-3.5" />
+                          Add contact
+                        </Button>
+                      </div>
+                    ) : null}
+                    {contacts.length === 0 ? (
+                      <EmptyState
+                        title="No contacts on this account"
+                        description="Add people who work this account day-to-day."
+                        action={
+                          canWriteCrm ? (
+                            <Button size="sm" onClick={openCreateContact}>
+                              <PlusIcon className="size-3.5" />
+                              Add contact
+                            </Button>
+                          ) : undefined
+                        }
+                      />
+                    ) : (
+                      <div className="grid gap-2 sm:grid-cols-2">
+                        {contacts.map((c) => (
+                          <Card key={c.contactId} className="p-4 text-sm">
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="font-medium">{c.name}</span>
+                              {c.isPrimary ? <Badge className="h-5">Primary</Badge> : null}
                             </div>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <span className="font-semibold tabular-nums">{money(d.value)}</span>
-                            <Badge className="capitalize">{d.stage}</Badge>
-                            <span className="text-muted-foreground text-xs tabular-nums">
-                              {d.probability}%
-                            </span>
-                          </div>
-                        </Card>
-                      ))}
-                    </div>
-                  )
+                            <div className="text-muted-foreground text-xs">{c.title}</div>
+                            <div className="text-muted-foreground mt-2 space-y-0.5 text-xs">
+                              {c.email ? <div>{c.email}</div> : null}
+                              {c.phone ? <div>{c.phone}</div> : null}
+                            </div>
+                            {c.role ? (
+                              <Badge variant="outline" className="mt-2 capitalize">
+                                {c.role.replace("_", " ")}
+                              </Badge>
+                            ) : null}
+                          </Card>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ) : tab === "deals" ? (
+                  <div className="flex flex-col gap-3">
+                    {canWriteCrm && deals.length > 0 ? (
+                      <div className="flex justify-end">
+                        <Button size="sm" variant="outline" onClick={openCreateDeal}>
+                          <PlusIcon className="size-3.5" />
+                          Add deal
+                        </Button>
+                      </div>
+                    ) : null}
+                    {deals.length === 0 ? (
+                      <EmptyState
+                        title="No opportunities"
+                        description="Create a deal on this account without leaving CRM."
+                        action={
+                          canWriteCrm ? (
+                            <Button size="sm" onClick={openCreateDeal}>
+                              <PlusIcon className="size-3.5" />
+                              Add deal
+                            </Button>
+                          ) : undefined
+                        }
+                      />
+                    ) : (
+                      <div className="flex flex-col gap-2">
+                        {deals.map((d) => (
+                          <Card
+                            key={d.opportunityId}
+                            className="flex flex-wrap items-center justify-between gap-3 p-4"
+                          >
+                            <div>
+                              <div className="font-medium">{d.name}</div>
+                              <div className="text-muted-foreground text-xs">
+                                {d.owner}
+                                {d.nextStep ? ` · Next: ${d.nextStep}` : ""}
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <span className="font-semibold tabular-nums">{money(d.value)}</span>
+                              <Badge className="capitalize">{d.stage}</Badge>
+                              <span className="text-muted-foreground text-xs tabular-nums">
+                                {d.probability}%
+                              </span>
+                            </div>
+                          </Card>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 ) : tab === "activity" ? (
                   activities.length === 0 ? (
                     <EmptyState title="No CRM activity yet" />
@@ -766,6 +957,180 @@ export function ClientsPage() {
            form={clientForm}
            onChange={(field, value) => setClientForm((current) => ({ ...current, [field]: value }))}
          />
+       </EntityFormDialog>
+       <EntityFormDialog
+         open={contactCreateOpen}
+         onOpenChange={(open) => {
+           if (!open && !contactCreateBusy) setContactCreateOpen(false)
+         }}
+         title="Add contact"
+         description={selected ? `Add a person on ${selected.name}.` : "Add a contact on this account."}
+         onSubmit={handleCreateContact}
+         submitLabel="Add contact"
+         pending={contactCreateBusy}
+         submitDisabled={!contactCreateForm.name.trim()}
+         maxWidth="max-w-2xl"
+       >
+         <div className="grid gap-4 sm:grid-cols-2">
+           <div className="grid gap-1.5">
+             <Label htmlFor="client-contact-name">Name</Label>
+             <Input
+               id="client-contact-name"
+               value={contactCreateForm.name}
+               onChange={(e) => setContactCreateForm((f) => ({ ...f, name: e.target.value }))}
+               placeholder="Full name"
+               required
+             />
+           </div>
+           <div className="grid gap-1.5">
+             <Label htmlFor="client-contact-title">Title</Label>
+             <Input
+               id="client-contact-title"
+               value={contactCreateForm.title}
+               onChange={(e) => setContactCreateForm((f) => ({ ...f, title: e.target.value }))}
+               placeholder="Job title"
+             />
+           </div>
+           <div className="grid gap-1.5">
+             <Label htmlFor="client-contact-email">Email</Label>
+             <Input
+               id="client-contact-email"
+               type="email"
+               value={contactCreateForm.email}
+               onChange={(e) => setContactCreateForm((f) => ({ ...f, email: e.target.value }))}
+               placeholder="contact@example.com"
+             />
+           </div>
+           <div className="grid gap-1.5">
+             <Label htmlFor="client-contact-phone">Phone</Label>
+             <Input
+               id="client-contact-phone"
+               type="tel"
+               value={contactCreateForm.phone}
+               onChange={(e) => setContactCreateForm((f) => ({ ...f, phone: e.target.value }))}
+               placeholder="Phone number"
+             />
+           </div>
+           <div className="grid gap-1.5 sm:col-span-2">
+             <Label htmlFor="client-contact-role">Role</Label>
+             <Input
+               id="client-contact-role"
+               value={contactCreateForm.role}
+               onChange={(e) => setContactCreateForm((f) => ({ ...f, role: e.target.value }))}
+               placeholder="e.g. decision maker"
+             />
+           </div>
+         </div>
+         <label className="flex items-center gap-2 text-sm">
+           <input
+             type="checkbox"
+             checked={contactCreateForm.isPrimary}
+             onChange={(e) => setContactCreateForm((f) => ({ ...f, isPrimary: e.target.checked }))}
+           />
+           Primary contact
+         </label>
+       </EntityFormDialog>
+       <EntityFormDialog
+         open={dealCreateOpen}
+         onOpenChange={(open) => {
+           if (!open && !dealCreateBusy) setDealCreateOpen(false)
+         }}
+         title="Add deal"
+         description={selected ? `Create an opportunity for ${selected.name}.` : "Create an opportunity."}
+         onSubmit={handleCreateDeal}
+         submitLabel="Create deal"
+         pending={dealCreateBusy}
+         submitDisabled={!dealCreateForm.name.trim() || !dealCreateForm.value.trim()}
+         maxWidth="max-w-2xl"
+       >
+         <div className="grid gap-4 sm:grid-cols-2">
+           <div className="grid gap-1.5 sm:col-span-2">
+             <Label htmlFor="client-deal-name">Name</Label>
+             <Input
+               id="client-deal-name"
+               value={dealCreateForm.name}
+               onChange={(e) => setDealCreateForm((f) => ({ ...f, name: e.target.value }))}
+               placeholder="Opportunity name"
+               required
+             />
+           </div>
+           <div className="grid gap-1.5">
+             <Label htmlFor="client-deal-stage">Stage</Label>
+             <Select
+               id="client-deal-stage"
+               value={dealCreateForm.stage}
+               onChange={(e) => setDealCreateForm((f) => ({ ...f, stage: e.target.value }))}
+             >
+               {DEAL_STAGES.map((stage) => (
+                 <option key={stage} value={stage}>
+                   {stage}
+                 </option>
+               ))}
+             </Select>
+           </div>
+           <div className="grid gap-1.5">
+             <Label htmlFor="client-deal-value">Value</Label>
+             <Input
+               id="client-deal-value"
+               type="number"
+               min="0"
+               step="any"
+               value={dealCreateForm.value}
+               onChange={(e) => setDealCreateForm((f) => ({ ...f, value: e.target.value }))}
+               placeholder="0"
+               required
+             />
+           </div>
+           <div className="grid gap-1.5">
+             <Label htmlFor="client-deal-probability">Probability</Label>
+             <Input
+               id="client-deal-probability"
+               type="number"
+               min="0"
+               max="100"
+               step="1"
+               value={dealCreateForm.probability}
+               onChange={(e) => setDealCreateForm((f) => ({ ...f, probability: e.target.value }))}
+               placeholder="0-100"
+             />
+           </div>
+           <div className="grid gap-1.5">
+             <Label htmlFor="client-deal-source">Source</Label>
+             <Input
+               id="client-deal-source"
+               value={dealCreateForm.source}
+               onChange={(e) => setDealCreateForm((f) => ({ ...f, source: e.target.value }))}
+               placeholder="Referral, inbound, ..."
+             />
+           </div>
+           <div className="grid gap-1.5">
+             <Label htmlFor="client-deal-close">Expected close</Label>
+             <Input
+               id="client-deal-close"
+               type="date"
+               value={dealCreateForm.expectedClose}
+               onChange={(e) => setDealCreateForm((f) => ({ ...f, expectedClose: e.target.value }))}
+             />
+           </div>
+           <div className="grid gap-1.5 sm:col-span-2">
+             <Label htmlFor="client-deal-next">Next step</Label>
+             <Input
+               id="client-deal-next"
+               value={dealCreateForm.nextStep}
+               onChange={(e) => setDealCreateForm((f) => ({ ...f, nextStep: e.target.value }))}
+               placeholder="Schedule proposal review"
+             />
+           </div>
+           <div className="grid gap-1.5 sm:col-span-2">
+             <Label htmlFor="client-deal-notes">Notes</Label>
+             <Textarea
+               id="client-deal-notes"
+               value={dealCreateForm.notes}
+               onChange={(e) => setDealCreateForm((f) => ({ ...f, notes: e.target.value }))}
+               placeholder="Opportunity notes"
+             />
+           </div>
+         </div>
        </EntityFormDialog>
        <ConfirmationDialog
          open={Boolean(deleteClientTarget)}

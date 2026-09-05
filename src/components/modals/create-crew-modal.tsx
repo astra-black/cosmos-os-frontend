@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { toast } from "sonner"
 import { LoaderCircleIcon } from "lucide-react"
 
@@ -23,6 +23,7 @@ type CreateCrewModalProps = {
   onOpenChange: (open: boolean) => void
   eventId: string
   departments?: Department[]
+  onNeedDepartment?: () => void
   onSuccess: (crew: CrewMember) => void
 }
 
@@ -31,6 +32,7 @@ export function CreateCrewModal({
   onOpenChange,
   eventId,
   departments = [],
+  onNeedDepartment,
   onSuccess,
 }: CreateCrewModalProps) {
   const [name, setName] = useState("")
@@ -43,10 +45,17 @@ export function CreateCrewModal({
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  useEffect(() => {
+    if (open && departments.length === 1) {
+      const only = departments[0]
+      setDepartmentId(only.departmentId || only.id || "")
+    }
+  }, [open, departments])
+
   function reset() {
     setName("")
     setRole("")
-    setDepartmentId("")
+    setDepartmentId(departments.length === 1 ? (departments[0].departmentId || departments[0].id || "") : "")
     setEmail("")
     setPhone("")
     setStatus("assigned")
@@ -62,6 +71,10 @@ export function CreateCrewModal({
     }
     if (!role.trim()) {
       setError("Role is required.")
+      return
+    }
+    if (departments.length === 0) {
+      setError("Create a department first, then add crew.")
       return
     }
     if (!departmentId) {
@@ -105,7 +118,12 @@ export function CreateCrewModal({
     }
   }
 
-  const canSubmit = Boolean(name.trim()) && Boolean(role.trim()) && Boolean(departmentId) && Boolean(eventId)
+  const canSubmit =
+    Boolean(name.trim()) &&
+    Boolean(role.trim()) &&
+    Boolean(departmentId) &&
+    Boolean(eventId) &&
+    departments.length > 0
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -117,6 +135,28 @@ export function CreateCrewModal({
               Assign staff, technical operators, stage managers, or hospitality leads.
             </DialogDescription>
           </DialogHeader>
+
+          {departments.length === 0 ? (
+            <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-900 dark:text-amber-100">
+              <p>No departments yet. Create one before adding crew.</p>
+              {onNeedDepartment ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="mt-2"
+                  onClick={() => {
+                    onOpenChange(false)
+                    onNeedDepartment()
+                  }}
+                >
+                  New department
+                </Button>
+              ) : (
+                <p className="mt-1">Close this dialog and use <strong>New department</strong> first.</p>
+              )}
+            </div>
+          ) : null}
 
           {error ? (
             <div className="rounded-lg bg-destructive/10 p-3 text-xs text-destructive">
@@ -132,7 +172,7 @@ export function CreateCrewModal({
                 placeholder="e.g. Marcus Vance"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                disabled={busy}
+                disabled={busy || departments.length === 0}
                 required
               />
             </div>
@@ -145,7 +185,7 @@ export function CreateCrewModal({
                   placeholder="e.g. Lighting Lead"
                   value={role}
                   onChange={(e) => setRole(e.target.value)}
-                  disabled={busy}
+                  disabled={busy || departments.length === 0}
                   required
                 />
               </div>
@@ -157,7 +197,7 @@ export function CreateCrewModal({
                   className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
                   value={departmentId}
                   onChange={(e) => setDepartmentId(e.target.value)}
-                  disabled={busy}
+                  disabled={busy || departments.length === 0}
                   required
                 >
                   <option value="">Select department</option>
@@ -179,7 +219,7 @@ export function CreateCrewModal({
                   placeholder="crew@production.com"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  disabled={busy}
+                  disabled={busy || departments.length === 0}
                 />
               </div>
 
@@ -190,7 +230,7 @@ export function CreateCrewModal({
                   placeholder="+1 (555) 019-2834"
                   value={phone}
                   onChange={(e) => setPhone(e.target.value)}
-                  disabled={busy}
+                  disabled={busy || departments.length === 0}
                 />
               </div>
             </div>
@@ -202,7 +242,7 @@ export function CreateCrewModal({
                 className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
                 value={status}
                 onChange={(e) => setStatus(e.target.value as CrewMember["status"])}
-                disabled={busy}
+                disabled={busy || departments.length === 0}
               >
                 <option value="assigned">Assigned</option>
                 <option value="confirmed">Confirmed</option>
@@ -219,7 +259,7 @@ export function CreateCrewModal({
                 rows={2}
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
-                disabled={busy}
+                disabled={busy || departments.length === 0}
               />
             </div>
           </div>

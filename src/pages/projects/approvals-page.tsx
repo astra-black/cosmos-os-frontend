@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
-import { Link } from "react-router-dom"
+import { Link, useSearchParams } from "react-router-dom"
 import { CheckIcon, Loader2Icon, MessageSquareWarningIcon, PlusIcon, XIcon } from "lucide-react"
 import { toast } from "sonner"
 
@@ -27,7 +27,14 @@ type ApprovalDecision = "approved" | "rejected" | "changes_requested"
 
 export function ApprovalsPage() {
   const { user } = useAuth()
+  const [searchParams] = useSearchParams()
+  const scopedProjectId = searchParams.get("projectId") || ""
   const canDecide = canPerform(user?.role, "decide_approval")
+  // Align with Assets: writers can request; only PM/Producer/Admin decide.
+  const canRequest =
+    canPerform(user?.role, "write_crm") ||
+    canPerform(user?.role, "write_ops") ||
+    canDecide
   const [approvals, setApprovals] = useState<Approval[]>([])
   const [filter, setFilter] = useState<"queue" | "all">("queue")
   const [loading, setLoading] = useState(true)
@@ -43,7 +50,7 @@ export function ApprovalsPage() {
     title: "",
     entityType: "asset",
     entityId: "",
-    projectId: "",
+    projectId: scopedProjectId,
     clientId: "",
     requester: user?.name ?? "",
     reviewer: "",
@@ -51,6 +58,12 @@ export function ApprovalsPage() {
     priority: "medium",
     notes: "",
   })
+
+  useEffect(() => {
+    if (!scopedProjectId) return
+    setForm((current) => ({ ...current, projectId: scopedProjectId }))
+    if (canRequest && searchParams.get("create") === "1") setCreateOpen(true)
+  }, [scopedProjectId, canRequest, searchParams])
 
   const reload = useCallback(async () => {
     setError(null)
@@ -121,7 +134,7 @@ export function ApprovalsPage() {
   }
 
   async function create() {
-    if (!canDecide) return
+    if (!canRequest) return
     const title = form.title.trim()
     const entityId = form.entityId.trim()
     if (!title || !entityId || !ENTITY_TYPES.includes(form.entityType as (typeof ENTITY_TYPES)[number])) {
@@ -156,7 +169,7 @@ export function ApprovalsPage() {
         title: "",
         entityType: "asset",
         entityId: "",
-        projectId: "",
+        projectId: scopedProjectId,
         clientId: "",
         requester: user?.name ?? "",
         reviewer: "",
@@ -180,7 +193,7 @@ export function ApprovalsPage() {
         description="Review queue for assets, deliverables, and budget asks."
         actions={
           <div className="flex gap-1">
-            {canDecide ? (
+            {canRequest ? (
               <Button size="sm" className="rounded-full" onClick={() => setCreateOpen((open) => !open)}>
                 <PlusIcon className="size-3.5" />
                 Request approval
@@ -333,7 +346,7 @@ export function ApprovalsPage() {
        </ul>
       )}
       <EntityFormDialog
-        open={createOpen && canDecide}
+        open={createOpen && canRequest}
         onOpenChange={(open) => {
           if (!open && !createBusy) {
             setCreateOpen(false)

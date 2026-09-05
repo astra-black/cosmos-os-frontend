@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react"
-import { Link } from "react-router-dom"
+import { Link, useSearchParams } from "react-router-dom"
 import {
   CheckSquareIcon,
   FileIcon,
@@ -68,6 +68,8 @@ type AssetEditForm = {
 
 export function AssetsPage() {
   const { user } = useAuth()
+  const [searchParams] = useSearchParams()
+  const scopedProjectId = searchParams.get("projectId") || ""
   const canRequest =
     canPerform(user?.role, "write_crm") ||
     canPerform(user?.role, "write_ops") ||
@@ -77,7 +79,7 @@ export function AssetsPage() {
   const { data: projectsList } = useProjects()
   const [search, setSearch] = useState("")
   const [statusFilter, setStatusFilter] = useState<string>("all")
-  const [projectFilter, setProjectFilter] = useState<string>("all")
+  const [projectFilter, setProjectFilter] = useState<string>(scopedProjectId || "all")
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [requestBusy, setRequestBusy] = useState(false)
   const [pendingAssetId, setPendingAssetId] = useState<string | null>(null)
@@ -101,10 +103,15 @@ export function AssetsPage() {
   const fileRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
+    if (scopedProjectId) {
+      setUploadProjectId(scopedProjectId)
+      setProjectFilter(scopedProjectId)
+      return
+    }
     if (!uploadProjectId && projectsList[0]?.projectId) {
       setUploadProjectId(projectsList[0].projectId)
     }
-  }, [projectsList, uploadProjectId])
+  }, [projectsList, uploadProjectId, scopedProjectId])
 
   async function onUploadFile(file: File) {
     if (!canRequest) return

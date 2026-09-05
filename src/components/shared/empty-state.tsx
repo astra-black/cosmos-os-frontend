@@ -6,11 +6,13 @@ export function EmptyState({
   icon,
   title,
   description,
+  action,
   className,
 }: {
   icon?: ReactNode
   title: string
   description?: string
+  action?: ReactNode
   className?: string
 }) {
   return (
@@ -23,6 +25,7 @@ export function EmptyState({
       {icon}
       <p className="text-foreground text-sm font-medium">{title}</p>
       {description ? <p className="max-w-sm text-xs">{description}</p> : null}
+      {action ? <div className="mt-2 flex flex-wrap items-center justify-center gap-2">{action}</div> : null}
     </div>
   )
 }

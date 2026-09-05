@@ -9,9 +9,11 @@ import {
   ListTodoIcon,
   Loader2Icon,
   PencilIcon,
+  PlusIcon,
 } from "lucide-react"
 import { toast } from "sonner"
 
+import { CreateTaskModal } from "@/components/modals"
 import { CommentsPanel } from "@/components/shared/comments-panel"
 import { EmptyState } from "@/components/shared/empty-state"
 import { EntityFormDialog } from "@/components/shared/entity-form-dialog"
@@ -113,6 +115,7 @@ export function ProjectDetailPage() {
   const [projectDialogOpen, setProjectDialogOpen] = useState(false)
   const [projectSaving, setProjectSaving] = useState(false)
   const [projectForm, setProjectForm] = useState<ProjectEditForm>(emptyProjectForm)
+  const [createTaskOpen, setCreateTaskOpen] = useState(false)
 
   const load = useCallback(async () => {
     if (!projectId) return
@@ -321,6 +324,18 @@ export function ProjectDetailPage() {
                   <PencilIcon className="size-3.5" />
                   Edit project
                 </Button>
+                <Button size="sm" variant="outline" onClick={() => setCreateTaskOpen(true)}>
+                  <PlusIcon className="size-3.5" />
+                  Add task
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  render={<Link to={`/assets?projectId=${project.projectId}`} />}
+                >
+                  <ImagesIcon className="size-3.5" />
+                  Upload asset
+                </Button>
                 <Button size="sm" disabled={statusBusy} onClick={advanceStatus}>
                   {statusBusy ? (
                     <Loader2Icon className="size-3.5 animate-spin" />
@@ -484,10 +499,26 @@ export function ProjectDetailPage() {
 
       {tab === "tasks" ? (
         <div className="flex flex-col gap-2">
+          {canWrite && tasks.length > 0 ? (
+            <div className="flex justify-end">
+              <Button size="sm" variant="outline" onClick={() => setCreateTaskOpen(true)}>
+                <PlusIcon className="size-3.5" />
+                Add task
+              </Button>
+            </div>
+          ) : null}
           {tasks.length === 0 ? (
             <EmptyState
               title="No tasks on this project"
-              description="Create tasks from the Tasks board with this project selected."
+              description="Create a task here to keep delivery work in context."
+              action={
+                canWrite ? (
+                  <Button size="sm" onClick={() => setCreateTaskOpen(true)}>
+                    <PlusIcon className="size-3.5" />
+                    Add task
+                  </Button>
+                ) : undefined
+              }
             />
           ) : (
             tasks.map((task) => (
@@ -544,7 +575,15 @@ export function ProjectDetailPage() {
           {assets.length === 0 ? (
             <EmptyState
               title="No assets linked"
-              description="Assets tagged to this project will show up here."
+              description="Upload delivery files tagged to this project."
+              action={
+                canWrite ? (
+                  <Button size="sm" render={<Link to={`/assets?projectId=${project.projectId}`} />}>
+                    <ImagesIcon className="size-3.5" />
+                    Upload asset
+                  </Button>
+                ) : undefined
+              }
             />
           ) : (
             assets.map((asset) => (
@@ -568,9 +607,16 @@ export function ProjectDetailPage() {
               </Card>
             ))
           )}
-          <Button size="sm" variant="outline" className="w-fit" render={<Link to="/assets" />}>
-            Open assets library
-          </Button>
+          {assets.length > 0 ? (
+            <Button
+              size="sm"
+              variant="outline"
+              className="w-fit"
+              render={<Link to={`/assets?projectId=${project.projectId}`} />}
+            >
+              Open assets library
+            </Button>
+          ) : null}
         </div>
       ) : null}
 
@@ -579,7 +625,12 @@ export function ProjectDetailPage() {
           {approvals.length === 0 ? (
             <EmptyState
               title="No approvals for this project"
-              description="Pending reviews tied to this project or its assets will appear here."
+              description="Request a review from the approvals queue with this project prefilled."
+              action={
+                <Button size="sm" variant="outline" render={<Link to={`/approvals?projectId=${project.projectId}&create=1`} />}>
+                  Request approval
+                </Button>
+              }
             />
           ) : (
             approvals.map((a) => (
@@ -598,9 +649,16 @@ export function ProjectDetailPage() {
               </Card>
             ))
           )}
-          <Button size="sm" variant="outline" className="w-fit" render={<Link to="/approvals" />}>
-            Open approvals queue
-          </Button>
+          {approvals.length > 0 ? (
+            <Button
+              size="sm"
+              variant="outline"
+              className="w-fit"
+              render={<Link to={`/approvals?projectId=${project.projectId}`} />}
+            >
+              Open approvals queue
+            </Button>
+          ) : null}
         </div>
       ) : null}
 
@@ -726,6 +784,18 @@ export function ProjectDetailPage() {
           </div>
         </div>
       </EntityFormDialog>
+      {project ? (
+        <CreateTaskModal
+          open={createTaskOpen}
+          onOpenChange={setCreateTaskOpen}
+          projects={[project]}
+          campaigns={campaigns}
+          defaultProjectId={project.projectId}
+          onSuccess={async () => {
+            await load()
+          }}
+        />
+      ) : null}
     </div>
   )
 }

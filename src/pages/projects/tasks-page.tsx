@@ -1,5 +1,5 @@
-import { useMemo, useState } from "react"
-import { Link } from "react-router-dom"
+import { useEffect, useMemo, useState } from "react"
+import { Link, useSearchParams } from "react-router-dom"
 import {
   ChevronLeftIcon,
   ChevronRightIcon,
@@ -73,6 +73,8 @@ const emptyTaskForm: TaskForm = {
 
 export function TasksPage() {
   const { user } = useAuth()
+  const [searchParams] = useSearchParams()
+  const scopedProjectId = searchParams.get("projectId") || ""
   const canWrite = canPerform(user?.role, "write_crm") || canPerform(user?.role, "write_ops")
   const {
     data: tasks,
@@ -94,6 +96,12 @@ export function TasksPage() {
   const [deleteTarget, setDeleteTarget] = useState<Task | null>(null)
   const [assigneeFilter, setAssigneeFilter] = useState("all")
   const [priorityFilter, setPriorityFilter] = useState("all")
+
+  useEffect(() => {
+    if (scopedProjectId && searchParams.get("create") === "1") {
+      setCreateOpen(true)
+    }
+  }, [scopedProjectId, searchParams])
 
   function patchLocal(updated: Task) {
     setTasks((prev) =>
@@ -521,7 +529,7 @@ export function TasksPage() {
         onOpenChange={setCreateOpen}
         projects={projects}
         campaigns={campaigns}
-        defaultProjectId={projects[0]?.projectId}
+        defaultProjectId={scopedProjectId || projects[0]?.projectId}
         onSuccess={async () => {
           await reload()
         }}

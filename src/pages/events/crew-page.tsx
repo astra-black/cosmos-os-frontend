@@ -4,6 +4,7 @@ import { toast } from "sonner"
 import { CreateCrewModal } from "@/components/modals"
 import { CrewBoard } from "@/components/ops/crew-board"
 import { EventScopeBar } from "@/components/ops/event-scope-bar"
+import { EmptyState } from "@/components/shared/empty-state"
 import { ConfirmationDialog } from "@/components/shared/confirmation-dialog"
 import { EntityFormDialog } from "@/components/shared/entity-form-dialog"
 import { withMutationFeedback } from "@/components/shared/mutation-feedback"
@@ -153,6 +154,17 @@ export function CrewPage() {
     setDepartmentFormMode("create")
   }
 
+  function openCreateCrew() {
+    if (departments.length === 0) {
+      toast.info("Create a department first", {
+        description: "Crew must belong to a department for this event.",
+      })
+      openCreateDepartment()
+      return
+    }
+    setCreateCrewOpen(true)
+  }
+
   function openEditDepartment(dept: Department) {
     setEditingDepartment(dept)
     setDepartmentForm({
@@ -202,10 +214,6 @@ export function CrewPage() {
     } finally {
       setPendingId(null)
     }
-  }
-
-  function openCreateCrew() {
-    setCreateCrewOpen(true)
   }
 
   function openEditCrew(member: CrewMember) {
@@ -288,6 +296,18 @@ export function CrewPage() {
             <Skeleton className="h-72 rounded-xl" />
           </div>
         </div>
+      ) : departments.length === 0 ? (
+        <EmptyState
+          title="No departments yet"
+          description="Create a department before assigning crew for this event."
+          action={
+            canWrite ? (
+              <Button size="sm" onClick={openCreateDepartment}>
+                New department
+              </Button>
+            ) : undefined
+          }
+        />
       ) : (
         <CrewBoard
           crew={crew}
@@ -333,6 +353,7 @@ export function CrewPage() {
            onOpenChange={setCreateCrewOpen}
            eventId={eventId}
            departments={departments}
+           onNeedDepartment={openCreateDepartment}
            onSuccess={async () => {
              await reload()
            }}
