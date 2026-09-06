@@ -306,7 +306,7 @@ export function SettingsPage() {
   const photoUrl = photoPreview ?? user?.photoUrl ?? user?.avatarUrl
   const initials = (user?.name || user?.email || "?").slice(0, 1).toUpperCase()
   const isAdmin = user?.role === "admin" || user?.role === "agency_admin"
-  const apiBase = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.replace(/\/$/, "") || "(Vite Proxy → /api/v1)"
+  const apiBase = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.replace(/\/$/, "") || "Connected through workspace proxy"
 
   const navItems: { id: TabType; label: string; icon: typeof UserIcon }[] = [
     { id: "account", label: "Account Profile", icon: UserIcon },
@@ -724,7 +724,7 @@ export function SettingsPage() {
             <ServerIcon className="size-5 text-primary" />
             <div>
               <h2 className="font-semibold text-base">System Connectivity & Health</h2>
-              <p className="text-muted-foreground text-xs">Middleware service status and connected backend metadata.</p>
+              <p className="text-muted-foreground text-xs">Service status and workspace connection details.</p>
             </div>
           </div>
 
@@ -739,7 +739,7 @@ export function SettingsPage() {
                   <XCircleIcon className="size-5 text-destructive" />
                 )}
                 <div>
-                  <div className="text-xs font-semibold">Core Middleware API</div>
+                  <div className="text-xs font-semibold">Core service</div>
                   <div className="text-muted-foreground text-[10px]">{apiBase}</div>
                 </div>
               </div>
@@ -752,8 +752,8 @@ export function SettingsPage() {
               <div className="flex items-center gap-2.5">
                 <CheckCircle2Icon className="size-5 text-emerald-500" />
                 <div>
-                  <div className="text-xs font-semibold">PostgreSQL Multi-Tenancy</div>
-                  <div className="text-muted-foreground text-[10px]">Prisma Engine Active</div>
+                  <div className="text-xs font-semibold">Workspace data isolation</div>
+                  <div className="text-muted-foreground text-[10px]">Active</div>
                 </div>
               </div>
               <Badge variant="default" className="text-[10px] uppercase">

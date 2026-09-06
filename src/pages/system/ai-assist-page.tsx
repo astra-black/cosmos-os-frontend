@@ -5,6 +5,7 @@ import {
   CheckIcon,
   ClipboardIcon,
   Loader2Icon,
+  PanelLeftIcon,
   RadioIcon,
   RotateCcwIcon,
   WalletIcon,
@@ -248,51 +249,113 @@ export function AiAssistPage() {
   const showEmptyHints = messages.length <= 1 && !pending
 
   return (
-    <div className="mx-auto flex h-[calc(100dvh-8.5rem)] w-full max-w-3xl flex-col gap-0 sm:h-[calc(100dvh-9.5rem)]">
-      {/* Header */}
-      <div className="mb-3 flex flex-col gap-3 sm:mb-4 sm:flex-row sm:items-start sm:justify-between">
-        <div className="flex items-start gap-3">
-          <div className="bg-primary/10 text-primary flex size-10 shrink-0 items-center justify-center rounded-xl ring-1 ring-white/10">
+    <div className="mx-auto grid h-[calc(100dvh-8rem)] w-full max-w-7xl gap-4 lg:grid-cols-[280px_minmax(0,1fr)]">
+      <Card className="hidden min-h-0 flex-col gap-4 p-4 lg:flex">
+        <div className="flex items-center gap-3">
+          <div className="bg-primary text-primary-foreground flex size-10 shrink-0 items-center justify-center rounded-xl">
             <SparkOrbit className="size-5" />
           </div>
           <div className="min-w-0">
-            <h1 className="text-xl font-semibold tracking-tight sm:text-2xl">Cosmos AI</h1>
-            <p className="text-muted-foreground text-sm">
-              Agency-aware assist · scoped mode shapes answers
-            </p>
+            <h1 className="truncate text-lg font-semibold tracking-tight">Cosmos AI</h1>
+            <p className="text-muted-foreground text-xs">Agency intelligence hub</p>
           </div>
         </div>
-        <Button size="sm" variant="outline" className="w-fit" onClick={clearChat}>
-          <RotateCcwIcon className="size-3.5" />
-          Clear
-        </Button>
-      </div>
 
-      {/* Mode rail */}
-      <div className="-mx-1 mb-3 flex gap-1.5 overflow-x-auto px-1 pb-0.5 sm:mb-4 sm:flex-wrap sm:overflow-visible">
-        {MODES.map((m) => {
-          const Icon = m.icon
-          const active = mode === m.id
-          return (
-            <button
-              key={m.id}
-              type="button"
-              onClick={() => switchMode(m.id)}
-              className={cn(
-                "flex shrink-0 items-center gap-2 rounded-full border px-3 py-1.5 text-left text-xs transition-colors",
-                active
-                  ? "border-primary bg-primary text-primary-foreground"
-                  : "border-border bg-card text-muted-foreground hover:bg-muted/60 hover:text-foreground",
-              )}
-            >
-              <Icon className="size-3.5 shrink-0" />
-              <span className="font-medium">{m.label}</span>
-            </button>
-          )
-        })}
-      </div>
+        <div className="grid gap-2">
+          {MODES.map((m) => {
+            const Icon = m.icon
+            const active = mode === m.id
+            return (
+              <button
+                key={m.id}
+                type="button"
+                onClick={() => switchMode(m.id)}
+                className={cn(
+                  "flex items-center gap-3 rounded-xl border px-3 py-3 text-left transition-colors",
+                  active
+                    ? "border-primary bg-primary text-primary-foreground"
+                    : "border-border bg-background hover:bg-muted/60",
+                )}
+              >
+                <Icon className="size-4 shrink-0" />
+                <span className="min-w-0">
+                  <span className="block truncate text-sm font-medium">{m.label}</span>
+                  <span className={cn("block truncate text-xs", active ? "text-primary-foreground/75" : "text-muted-foreground")}>
+                    {m.hint}
+                  </span>
+                </span>
+              </button>
+            )
+          })}
+        </div>
 
-      {/* Chat shell */}
+        <div className="mt-auto rounded-xl border bg-muted/30 p-3">
+          <div className="mb-2 flex items-center gap-2 text-xs font-semibold">
+            <PanelLeftIcon className="size-3.5" />
+            Prompt library
+          </div>
+          <div className="grid gap-1.5">
+            {suggestions.map((s) => (
+              <button
+                key={s}
+                type="button"
+                disabled={pending}
+                onClick={() => void send(s)}
+                className="hover:bg-background rounded-lg px-2.5 py-2 text-left text-xs leading-snug transition-colors"
+              >
+                {s}
+              </button>
+            ))}
+          </div>
+        </div>
+      </Card>
+
+      <div className="flex min-h-0 flex-col gap-3">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div className="flex items-start gap-3 lg:hidden">
+            <div className="bg-primary/10 text-primary flex size-10 shrink-0 items-center justify-center rounded-xl ring-1 ring-white/10">
+              <SparkOrbit className="size-5" />
+            </div>
+            <div className="min-w-0">
+              <h1 className="text-xl font-semibold tracking-tight sm:text-2xl">Cosmos AI</h1>
+              <p className="text-muted-foreground text-sm">Agency intelligence hub</p>
+            </div>
+          </div>
+          <div className="hidden min-w-0 lg:block">
+            <h1 className="text-2xl font-semibold tracking-tight">AI command center</h1>
+            <p className="text-muted-foreground text-sm">
+              Ask across live ops, CRM, delivery, and finance without leaving the workspace.
+            </p>
+          </div>
+          <Button size="sm" variant="outline" className="w-fit" onClick={clearChat}>
+            <RotateCcwIcon className="size-3.5" />
+            Clear
+          </Button>
+        </div>
+
+        <div className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-0.5 lg:hidden">
+          {MODES.map((m) => {
+            const Icon = m.icon
+            const active = mode === m.id
+            return (
+              <button
+                key={m.id}
+                type="button"
+                onClick={() => switchMode(m.id)}
+                className={cn(
+                  "flex shrink-0 items-center gap-2 rounded-full border px-3 py-1.5 text-left text-xs transition-colors",
+                  active
+                    ? "border-primary bg-primary text-primary-foreground"
+                    : "border-border bg-card text-muted-foreground hover:bg-muted/60 hover:text-foreground",
+                )}
+              >
+                <Icon className="size-3.5 shrink-0" />
+                <span className="font-medium">{m.label}</span>
+              </button>
+            )
+          })}
+        </div>
+
       <Card className="border-border/80 flex min-h-0 flex-1 flex-col overflow-hidden p-0 shadow-sm">
         <div
           ref={scrollerRef}
@@ -461,13 +524,14 @@ export function AiAssistPage() {
             </Button>
           </div>
           <p className="text-muted-foreground mt-2 text-center text-[10px]">
-            Enter to send · Shift+Enter for newline · Mode:{" "}
+            Mode:{" "}
             <span className="text-foreground/80 font-medium">
               {MODES.find((m) => m.id === mode)?.label}
             </span>
           </p>
         </div>
       </Card>
+      </div>
     </div>
   )
 }

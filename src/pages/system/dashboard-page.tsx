@@ -6,13 +6,29 @@ import {
   CheckSquareIcon,
   FolderKanbanIcon,
   GitBranchIcon,
+  LineChartIcon,
   ListTodoIcon,
 } from "lucide-react"
+import {
+  Area,
+  AreaChart,
+  Bar,
+  BarChart,
+  CartesianGrid,
+  XAxis,
+  YAxis,
+} from "recharts"
 
 import { PageHeader } from "@/components/shared/page-header"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
+import {
+  type ChartConfig,
+  ChartContainer,
+  ChartTooltip,
+  ChartTooltipContent,
+} from "@/components/ui/chart"
 import { Skeleton } from "@/components/ui/skeleton"
 import { StatisticsCard } from "@/components/widgets/statistics-card"
 import {
@@ -25,6 +41,7 @@ import {
   normalizeProjects,
 } from "@/lib/api/agency"
 import { ApiError } from "@/lib/api/client"
+import { listBudgets, type BudgetRow } from "@/lib/api/platform"
 import type {
   ActivityItem,
   AgencyClient,
@@ -44,6 +61,18 @@ function money(n?: number) {
 
 const OPEN_TASK = new Set(["todo", "in_progress", "review", "blocked"])
 const PENDING_APPR = new Set(["pending", "changes_requested"])
+const STATUS_LABELS: Record<string, string> = {
+  todo: "To do",
+  in_progress: "In progress",
+  review: "Review",
+  blocked: "Blocked",
+  done: "Done",
+  NotStarted: "Not started",
+  InProgress: "In progress",
+  Review: "Review",
+  Approved: "Approved",
+  Complete: "Complete",
+}
 
 function startOfToday() {
   return new Date(new Date().toDateString())
@@ -57,11 +86,24 @@ function isOverdueTask(t: Task) {
   )
 }
 
+function countBy<T>(items: T[], getKey: (item: T) => string | undefined | null) {
+  return items.reduce<Record<string, number>>((acc, item) => {
+    const key = getKey(item) || "unknown"
+    acc[key] = (acc[key] ?? 0) + 1
+    return acc
+  }, {})
+}
+
+function prettyStatus(status: string) {
+  return STATUS_LABELS[status] ?? status.replace(/_/g, " ")
+}
+
 export function DashboardPage() {
   const [tasks, setTasks] = useState<Task[]>([])
   const [approvals, setApprovals] = useState<Approval[]>([])
   const [clients, setClients] = useState<AgencyClient[]>([])
   const [projects, setProjects] = useState<Project[]>([])
+  const [budgets, setBudgets] = useState<BudgetRow[]>([])
   const [crm, setCrm] = useState<CrmSummary | null>(null)
   const [activity, setActivity] = useState<ActivityItem[]>([])
   const [loading, setLoading] = useState(true)
@@ -73,7 +115,7 @@ export function DashboardPage() {
       setLoading(true)
       setError(null)
       try {
-        const [tasksRes, apprRes, clientsRes, projectsRes, crmRes, actRes] =
+        const [tasksRes, apprRes, clientsRes, projectsRes, crmRes, actRes, budgetsRes] =
           await Promise.all([
             listTasks(),
             listApprovals(),
@@ -81,6 +123,7 @@ export function DashboardPage() {
             listProjects(),
             getCrmSummary(),
             listActivity(12),
+            listBudgets().catch(() => ({ data: [] })),
           ])
         if (cancelled) return
         setTasks(tasksRes.data ?? [])
@@ -89,6 +132,7 @@ export function DashboardPage() {
         setProjects(normalizeProjects(projectsRes))
         setCrm(crmRes.data ?? null)
         setActivity(actRes.data ?? [])
+        setBudgets(budgetsRes.data ?? [])
       } catch (err) {
         if (!cancelled) {
           setError(err instanceof ApiError ? err.message : "Failed to load dashboard")
@@ -157,12 +201,59 @@ export function DashboardPage() {
       ),
     [clients],
   )
+  const budgetRisks = useMemo(
+    () => budgets.filter((budget) => budget.penaltyRisk || (budget.minimumShortfall ?? 0) > 0),
+    [budgets],
+  )
   const needsAttentionCount = useMemo(() => {
     const taskIds = new Set<string>()
     for (const t of overdueTasks) taskIds.add(t.taskId)
     for (const t of blockedTasks) taskIds.add(t.taskId)
-    return taskIds.size + stuckApprovals.length + attentionClients.length
-  }, [overdueTasks, blockedTasks, stuckApprovals, attentionClients])
+    return taskIds.size + stuckApprovals.length + attentionClients.length + budgetRisks.length
+  }, [overdueTasks, blockedTasks, stuckApprovals, attentionClients, budgetRisks])
+
+  const workloadChartData = useMemo(() => {
+    const taskCounts = countBy(tasks, (task) => task.status)
+    return ["todo", "in_progress", "review", "blocked", "done"].map((status) => ({
+      status: prettyStatus(status),
+      tasks: taskCounts[status] ?? 0,
+    }))
+  }, [tasks])
+
+  const projectStatusData = useMemo(() => {
+    const projectCounts = countBy(projects, (project) => project.status)
+    return Object.entries(projectCounts)
+      .map(([status, value]) => ({
+        status: prettyStatus(status),
+        projects: value,
+      }))
+      .sort((a, b) => b.projects - a.projects)
+  }, [projects])
+
+  const pipelineTrendData = useMemo(() => {
+    const pipeline = crm?.pipelineValue ?? 0
+    const weighted = crm?.weightedPipeline ?? 0
+    const won = crm?.wonValue ?? 0
+    const open = crm?.openDeals ?? 0
+    return [
+      { label: "Won", value: won },
+      { label: "Weighted", value: weighted },
+      { label: "Pipeline", value: pipeline },
+      { label: "Open deals", value: open ? pipeline + open * 2500 : pipeline },
+    ]
+  }, [crm])
+
+  const workloadConfig = {
+    tasks: { label: "Tasks", color: "var(--chart-3)" },
+  } satisfies ChartConfig
+
+  const projectConfig = {
+    projects: { label: "Projects", color: "var(--chart-2)" },
+  } satisfies ChartConfig
+
+  const pipelineConfig = {
+    value: { label: "Value", color: "var(--chart-1)" },
+  } satisfies ChartConfig
 
   if (loading) {
     return (
@@ -202,87 +293,135 @@ export function DashboardPage() {
         <Card className="border-destructive/40 text-destructive px-4 py-3 text-sm">{error}</Card>
       ) : null}
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <StatisticsCard
-          title="Open tasks"
-          value={String(openTasks.length)}
-          changePercentage={`${blockedOrCritical.length} high / blocked`}
-          icon={<ListTodoIcon className="size-4" />}
-        />
-        <StatisticsCard
-          title="Approvals queue"
-          value={String(pendingApprovals.length)}
-          changePercentage="pending review"
-          icon={<CheckSquareIcon className="size-4" />}
-        />
-        <StatisticsCard
-          title="Pipeline"
-          value={money(crm?.pipelineValue)}
-          changePercentage={`${crm?.openDeals ?? 0} open deals`}
-          icon={<GitBranchIcon className="size-4" />}
-        />
-        <StatisticsCard
-          title="Active projects"
-          value={String(activeProjects.length)}
-          changePercentage={`${atRiskClients.length} accounts need care`}
-          icon={<FolderKanbanIcon className="size-4" />}
-        />
-      </div>
-
-      <Card
-        className={cn(
-          "flex flex-col gap-3 p-4",
-          needsAttentionCount > 0 && "border-destructive/25 bg-destructive/[0.03]",
-        )}
-      >
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <h2 className="flex items-center gap-2 text-sm font-semibold">
-            <AlertTriangleIcon
-              className={cn(
-                "size-4",
-                needsAttentionCount > 0 ? "text-destructive" : "text-muted-foreground",
-              )}
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(340px,420px)]">
+        <div className="flex min-w-0 flex-col gap-4">
+          <div className="grid gap-3 sm:grid-cols-2 2xl:grid-cols-4">
+            <StatisticsCard
+              title="Open tasks"
+              value={String(openTasks.length)}
+              changePercentage={`${blockedOrCritical.length} high / blocked`}
+              icon={<ListTodoIcon className="size-4" />}
             />
-            Needs attention
-            {needsAttentionCount > 0 ? (
-              <span className="text-muted-foreground font-normal">
-                ({needsAttentionCount})
-              </span>
-            ) : null}
-          </h2>
-          {needsAttentionCount > 0 ? (
-            <div className="text-muted-foreground flex flex-wrap gap-1.5 text-xs">
-              {overdueTasks.length > 0 ? (
-                <Badge variant="secondary" className="font-normal">
-                  {overdueTasks.length} overdue
-                </Badge>
-              ) : null}
-              {blockedTasks.length > 0 ? (
-                <Badge
-                  variant="secondary"
-                  className="bg-destructive/15 text-destructive font-normal"
-                >
-                  {blockedTasks.length} blocked
-                </Badge>
-              ) : null}
-              {stuckApprovals.length > 0 ? (
-                <Badge variant="outline" className="font-normal">
-                  {stuckApprovals.length} approvals
-                </Badge>
-              ) : null}
-              {attentionClients.length > 0 ? (
-                <Badge variant="outline" className="font-normal capitalize">
-                  {attentionClients.length} accounts
-                </Badge>
-              ) : null}
+            <StatisticsCard
+              title="Approvals queue"
+              value={String(pendingApprovals.length)}
+              changePercentage="pending review"
+              icon={<CheckSquareIcon className="size-4" />}
+            />
+            <StatisticsCard
+              title="Pipeline"
+              value={money(crm?.pipelineValue)}
+              changePercentage={`${crm?.openDeals ?? 0} open deals`}
+              icon={<GitBranchIcon className="size-4" />}
+            />
+            <StatisticsCard
+              title="Active projects"
+              value={String(activeProjects.length)}
+              changePercentage={`${atRiskClients.length} accounts need care`}
+              icon={<FolderKanbanIcon className="size-4" />}
+            />
+          </div>
+
+          <Card className="flex min-h-80 flex-col gap-4 p-4">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h2 className="flex items-center gap-2 text-sm font-semibold">
+                <GitBranchIcon className="size-4" />
+                Pipeline visualization
+              </h2>
+              <div className="text-muted-foreground text-xs">
+                Weighted {money(crm?.weightedPipeline)} · Won {money(crm?.wonValue)}
+              </div>
             </div>
-          ) : null}
+            <ChartContainer config={pipelineConfig} className="h-64 w-full">
+              <AreaChart accessibilityLayer data={pipelineTrendData} margin={{ left: 8, right: 8 }}>
+                <CartesianGrid vertical={false} />
+                <XAxis dataKey="label" tickLine={false} axisLine={false} tickMargin={8} />
+                <YAxis
+                  tickFormatter={(value) => money(Number(value))}
+                  tickLine={false}
+                  axisLine={false}
+                  width={52}
+                />
+                <ChartTooltip
+                  content={
+                    <ChartTooltipContent
+                      hideLabel
+                      formatter={(value) => money(Number(value))}
+                    />
+                  }
+                />
+                <Area
+                  dataKey="value"
+                  type="monotone"
+                  fill="var(--color-value)"
+                  fillOpacity={0.18}
+                  stroke="var(--color-value)"
+                  strokeWidth={2}
+                />
+              </AreaChart>
+            </ChartContainer>
+          </Card>
         </div>
 
-        {needsAttentionCount === 0 ? (
-          <p className="text-muted-foreground text-sm">All clear for now</p>
-        ) : (
-          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <Card
+          className={cn(
+            "flex flex-col gap-3 p-4",
+            needsAttentionCount > 0 && "border-destructive/25 bg-destructive/[0.03]",
+          )}
+        >
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h2 className="flex items-center gap-2 text-sm font-semibold">
+              <AlertTriangleIcon
+                className={cn(
+                  "size-4",
+                  needsAttentionCount > 0 ? "text-destructive" : "text-muted-foreground",
+                )}
+              />
+              Needs attention
+              {needsAttentionCount > 0 ? (
+                <span className="text-muted-foreground font-normal">
+                  ({needsAttentionCount})
+                </span>
+              ) : null}
+            </h2>
+            {needsAttentionCount > 0 ? (
+              <div className="text-muted-foreground flex flex-wrap gap-1.5 text-xs">
+                {overdueTasks.length > 0 ? (
+                  <Badge variant="secondary" className="font-normal">
+                    {overdueTasks.length} overdue
+                  </Badge>
+                ) : null}
+                {blockedTasks.length > 0 ? (
+                  <Badge
+                    variant="secondary"
+                    className="bg-destructive/15 text-destructive font-normal"
+                  >
+                    {blockedTasks.length} blocked
+                  </Badge>
+                ) : null}
+                {stuckApprovals.length > 0 ? (
+                  <Badge variant="outline" className="font-normal">
+                    {stuckApprovals.length} approvals
+                  </Badge>
+                ) : null}
+                {attentionClients.length > 0 ? (
+                  <Badge variant="outline" className="font-normal capitalize">
+                    {attentionClients.length} accounts
+                  </Badge>
+                ) : null}
+                {budgetRisks.length > 0 ? (
+                  <Badge variant="outline" className="font-normal">
+                    {budgetRisks.length} finance
+                  </Badge>
+                ) : null}
+              </div>
+            ) : null}
+          </div>
+
+          {needsAttentionCount === 0 ? (
+            <p className="text-muted-foreground text-sm">All clear for now</p>
+          ) : (
+            <div className="grid gap-4">
             {overdueTasks.length > 0 ? (
               <div className="flex flex-col gap-2">
                 <div className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
@@ -446,12 +585,108 @@ export function DashboardPage() {
                 ) : null}
               </div>
             ) : null}
-          </div>
-        )}
-      </Card>
+            {budgetRisks.length > 0 ? (
+              <div className="flex flex-col gap-2">
+                <div className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
+                  Contract risk ({budgetRisks.length})
+                </div>
+                <ul className="flex flex-col gap-2">
+                  {budgetRisks.slice(0, 5).map((budget) => (
+                    <li key={budget.budgetId}>
+                      <Link
+                        to="/finance"
+                        className="hover:bg-muted/50 flex items-center justify-between gap-2 rounded-lg border px-3 py-2 text-sm transition-colors"
+                      >
+                        <div className="min-w-0">
+                          <div className="truncate font-medium">{budget.projectName}</div>
+                          <div className="text-muted-foreground truncate text-xs">
+                            Minimum {money(budget.contractedMinimum)} · spent {money(budget.spent)}
+                          </div>
+                        </div>
+                        <Badge variant="secondary" className="bg-destructive/15 text-destructive shrink-0">
+                          {money(budget.minimumShortfall ?? 0)}
+                        </Badge>
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+                {budgetRisks.length > 5 ? (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-7 self-start text-xs"
+                    render={<Link to="/finance" />}
+                  >
+                    +{budgetRisks.length - 5} in finance
+                  </Button>
+                ) : null}
+              </div>
+            ) : null}
+            </div>
+          )}
+        </Card>
+      </div>
 
-      <div className="grid gap-4 lg:grid-cols-3">
-        <Card className="flex flex-col gap-3 p-4 lg:col-span-1">
+      <div className="grid gap-4">
+        <Card className="flex flex-col gap-4 p-4">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h2 className="flex items-center gap-2 text-sm font-semibold">
+              <LineChartIcon className="size-4" />
+              Delivery analytics
+            </h2>
+            <Badge variant="outline" className="font-normal">
+              {tasks.length} tasks · {projects.length} projects
+            </Badge>
+          </div>
+          <div className="grid gap-4 lg:grid-cols-2">
+            <div className="min-w-0">
+              <div className="mb-2 flex items-center justify-between text-xs">
+                <span className="text-muted-foreground">Task workload</span>
+                <span className="font-medium">{openTasks.length} open</span>
+              </div>
+              <ChartContainer config={workloadConfig} className="h-56 w-full">
+                <BarChart accessibilityLayer data={workloadChartData}>
+                  <CartesianGrid vertical={false} />
+                  <XAxis
+                    dataKey="status"
+                    tickLine={false}
+                    axisLine={false}
+                    tickMargin={8}
+                  />
+                  <YAxis allowDecimals={false} tickLine={false} axisLine={false} width={28} />
+                  <ChartTooltip content={<ChartTooltipContent hideLabel />} />
+                  <Bar dataKey="tasks" fill="var(--color-tasks)" radius={4} />
+                </BarChart>
+              </ChartContainer>
+            </div>
+
+            <div className="min-w-0">
+              <div className="mb-2 flex items-center justify-between text-xs">
+                <span className="text-muted-foreground">Project flow</span>
+                <span className="font-medium">{activeProjects.length} active</span>
+              </div>
+              <ChartContainer config={projectConfig} className="h-56 w-full">
+                <BarChart accessibilityLayer data={projectStatusData} layout="vertical">
+                  <CartesianGrid horizontal={false} />
+                  <XAxis type="number" allowDecimals={false} tickLine={false} axisLine={false} />
+                  <YAxis
+                    dataKey="status"
+                    type="category"
+                    tickLine={false}
+                    axisLine={false}
+                    width={84}
+                  />
+                  <ChartTooltip content={<ChartTooltipContent hideLabel />} />
+                  <Bar dataKey="projects" fill="var(--color-projects)" radius={4} />
+                </BarChart>
+              </ChartContainer>
+            </div>
+          </div>
+        </Card>
+      </div>
+
+      <div className="grid gap-4 xl:grid-cols-4">
+        <Card className="flex flex-col gap-3 p-4 xl:col-span-2">
           <div className="flex items-center justify-between">
             <h2 className="flex items-center gap-2 text-sm font-semibold">
               <ListTodoIcon className="size-4" />
@@ -495,7 +730,7 @@ export function DashboardPage() {
           )}
         </Card>
 
-        <Card className="flex flex-col gap-3 p-4 lg:col-span-1">
+        <Card className="flex flex-col gap-3 p-4">
           <div className="flex items-center justify-between">
             <h2 className="flex items-center gap-2 text-sm font-semibold">
               <CheckSquareIcon className="size-4" />
@@ -531,7 +766,7 @@ export function DashboardPage() {
           )}
         </Card>
 
-        <Card className="flex flex-col gap-3 p-4 lg:col-span-1">
+        <Card className="flex flex-col gap-3 p-4">
           <div className="flex items-center justify-between">
             <h2 className="flex items-center gap-2 text-sm font-semibold">
               <AlertTriangleIcon className="size-4" />

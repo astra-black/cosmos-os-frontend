@@ -4,37 +4,31 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 
 const domainHints: Record<
   string,
-  { title: string; endpoint: string; notes: string }
+  { title: string; notes: string }
 > = {
   portfolio: {
     title: "Portfolio",
-    endpoint: "GET /api/v1/agency/portfolio/:clientId",
-    notes: "Requires JWT + x-cosmos-api-key. Live JS controller is still a stub.",
+    notes: "Review client work, delivery totals, and account context in one place.",
   },
   cues: {
     title: "Cues & Timeline",
-    endpoint: "GET /api/v1/agency/cues/events/:eventId/cues",
-    notes: "Pick an event first, then load cue timeline + execution actions.",
+    notes: "Pick an event first, then manage cue timing and execution actions.",
   },
   crew: {
     title: "Crew & Departments",
-    endpoint: "GET /api/v1/agency/departments/events/:eventId/crew",
     notes: "Departments and crew are scoped per event.",
   },
   incidents: {
     title: "Incidents",
-    endpoint: "GET /api/v1/agency/incidents/events/:eventId/incidents",
-    notes: "Stats endpoint already powers the dashboard open-incident count.",
+    notes: "Track reported issues, ownership, escalation, and resolution status.",
   },
   analytics: {
     title: "Analytics",
-    endpoint: "GET /api/v1/agency/analytics/events/:eventId/analytics",
-    notes: "Health score and cue completion feed the dashboard Event health card.",
+    notes: "Review event performance, readiness, completion, and activity trends.",
   },
   settings: {
     title: "Settings",
-    endpoint: "Auth + API key configuration",
-    notes: "Tokens live in localStorage; API base URL and cosmos API key come from Vite env.",
+    notes: "Manage workspace preferences, access, and connected service settings.",
   },
 }
 
@@ -45,12 +39,12 @@ export function DomainPlaceholderPage({ domain }: { domain: keyof typeof domainH
     <div className="flex flex-col gap-6">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">{meta.title}</h1>
-        <p className="text-muted-foreground text-sm">Domain placeholder — wire a full screen when ready</p>
+        <p className="text-muted-foreground text-sm">This workspace area is ready for the next screen.</p>
       </div>
       <Card>
         <CardHeader>
-          <CardTitle>Backend alignment</CardTitle>
-          <CardDescription>{meta.endpoint}</CardDescription>
+          <CardTitle>{meta.title}</CardTitle>
+          <CardDescription>Planned workspace view</CardDescription>
         </CardHeader>
         <CardContent className="text-muted-foreground flex flex-col gap-3 text-sm">
           <p>{meta.notes}</p>

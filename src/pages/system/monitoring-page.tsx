@@ -41,9 +41,7 @@ export function MonitoringPage() {
     <div className="flex flex-col gap-6">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Monitoring</h1>
-        <p className="text-muted-foreground text-sm">
-          Middleware health and ownership integrity alerts
-        </p>
+        <p className="text-muted-foreground text-sm">Service status, alert volume, and operational risk signals.</p>
       </div>
       {error ? <p className="text-destructive text-sm">{error}</p> : null}
       {loading ? (
@@ -53,7 +51,7 @@ export function MonitoringPage() {
           <Card>
             <CardHeader>
               <CardTitle>API health</CardTitle>
-              <CardDescription>`GET /health`</CardDescription>
+              <CardDescription>Current service availability</CardDescription>
             </CardHeader>
             <CardContent className="text-2xl font-semibold capitalize">
               {healthStatus ?? "unknown"}
@@ -62,7 +60,7 @@ export function MonitoringPage() {
           <Card>
             <CardHeader>
               <CardTitle>Active alerts</CardTitle>
-              <CardDescription>`GET /api/v1/agency/monitoring/stats`</CardDescription>
+              <CardDescription>Open issues needing review</CardDescription>
             </CardHeader>
             <CardContent className="text-2xl font-semibold">
               {stats?.activeAlerts ?? "—"}

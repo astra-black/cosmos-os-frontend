@@ -9,9 +9,15 @@ export type ApiEnvelope<T> = {
 
 export type AuthUser = {
   id: string
+  userId?: string
   email: string
   name: string
   role: string
+  title?: string | null
+  phone?: string | null
+  jobFunction?: string | null
+  permissionRole?: string | null
+  onboardingCompletedAt?: string | null
   photoUrl?: string
   avatarUrl?: string
   agencyId?: string

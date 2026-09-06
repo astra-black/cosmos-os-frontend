@@ -37,8 +37,12 @@ export type BudgetRow = {
   projectName: string
   planned: number
   spent: number
+  contractedMinimum?: number
   remaining: number
   utilization: number
+  minimumShortfall?: number
+  penaltyRisk?: boolean
+  penaltyRiskLevel?: "none" | "watch" | "high"
   currency: string
 }
 
@@ -46,6 +50,7 @@ export type CreateBudgetInput = {
   projectId: string
   projectName?: string
   planned: number
+  contractedMinimum?: number
   currency?: string
 }
 
@@ -138,7 +143,7 @@ export async function createBudget(body: CreateBudgetInput) {
   })
 }
 
-export async function updateBudget(budgetId: string, body: Partial<Pick<BudgetRow, "planned" | "currency">>) {
+export async function updateBudget(budgetId: string, body: Partial<Pick<BudgetRow, "planned" | "contractedMinimum" | "currency">>) {
   return apiRequest<ApiEnvelope<BudgetRow>>(`/api/v1/agency/finance/budgets/${budgetId}`, {
     method: "PATCH",
     body: JSON.stringify(body),

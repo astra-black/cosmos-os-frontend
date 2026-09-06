@@ -31,7 +31,10 @@ interface SignInPageProps {
   onGoogleSignIn?: () => void
   onResetPassword?: () => void
   error?: string | null
+  successMessage?: string | null
   pending?: boolean
+  isSignUp?: boolean
+  onModeChange?: (isSignUp: boolean) => void
 }
 
 const GlassInputWrapper = ({ children }: { children: React.ReactNode }) => (
@@ -61,9 +64,18 @@ export const SignInPage: React.FC<SignInPageProps> = ({
   onGoogleSignIn,
   onResetPassword,
   error,
+  successMessage,
   pending,
+  isSignUp: controlledIsSignUp,
+  onModeChange,
 }) => {
-  const [isSignUp, setIsSignUp] = useState(false)
+  const [internalIsSignUp, setInternalIsSignUp] = useState(false)
+  const isSignUp = controlledIsSignUp !== undefined ? controlledIsSignUp : internalIsSignUp
+  const setIsSignUp = (val: boolean) => {
+    setInternalIsSignUp(val)
+    onModeChange?.(val)
+  }
+
   const [showPassword, setShowPassword] = useState(false)
   const canSignUp = !!onSignUp
 
@@ -99,13 +111,6 @@ export const SignInPage: React.FC<SignInPageProps> = ({
                 </div>
 
                 <form className="space-y-4" onSubmit={onSignUp}>
-                  <div>
-                    <label className="text-sm font-medium text-muted-foreground">Full Name</label>
-                    <GlassInputWrapper>
-                      <input name="name" type="text" placeholder="Enter your full name" className="w-full bg-transparent text-sm p-4 rounded-2xl focus:outline-none" required />
-                    </GlassInputWrapper>
-                  </div>
-
                   <div>
                     <label className="text-sm font-medium text-muted-foreground">Email Address</label>
                     <GlassInputWrapper>
@@ -206,6 +211,13 @@ export const SignInPage: React.FC<SignInPageProps> = ({
                   </label>
                   <button type="button" onClick={onResetPassword} className="hover:underline text-violet-400 transition-colors">Reset password</button>
                 </div>
+
+                {!isSignUp && successMessage && (
+                  <div className="text-sm text-emerald-400 border border-emerald-500/20 bg-emerald-500/10 px-4 py-3 rounded-2xl flex items-center gap-2">
+                    <span className="font-semibold">✓</span>
+                    <span>{successMessage}</span>
+                  </div>
+                )}
 
                 {!isSignUp && error && (
                   <div className="text-sm text-destructive border border-destructive/20 bg-destructive/5 px-4 py-3 rounded-2xl">{error}</div>

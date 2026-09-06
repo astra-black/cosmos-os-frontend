@@ -30,7 +30,9 @@ export function LoginPage() {
   const { login, isAuthenticated } = useAuth()
   const navigate = useNavigate()
   const [error, setError] = useState<string | null>(null)
+  const [successMessage, setSuccessMessage] = useState<string | null>(null)
   const [pending, setPending] = useState(false)
+  const [isSignUp, setIsSignUp] = useState(false)
 
   if (isAuthenticated) return <Navigate to="/dashboard" replace />
 
@@ -39,7 +41,7 @@ export function LoginPage() {
     setPending(true)
     setError(null)
     const formData = new FormData(event.currentTarget)
-    const email = formData.get("email") as string
+    const email = (formData.get("email") as string)?.trim()
     const password = formData.get("password") as string
 
     try {
@@ -56,20 +58,21 @@ export function LoginPage() {
     event.preventDefault()
     setPending(true)
     setError(null)
+    setSuccessMessage(null)
     const formData = new FormData(event.currentTarget)
-    const name = (formData.get("name") as string)?.trim()
-    const email = formData.get("email") as string
+    const email = (formData.get("email") as string)?.trim()
     const password = formData.get("password") as string
 
-    if (!name) {
-      setError("Please enter your name")
+    if (!email || !password) {
+      setError("Please enter your email and password")
       setPending(false)
       return
     }
 
     try {
-      await signup(name, email, password)
-      navigate("/dashboard", { replace: true })
+      await signup(email, password)
+      setSuccessMessage("Account created successfully! Please sign in with your email and password.")
+      setIsSignUp(false)
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Unable to create account")
     } finally {
@@ -86,7 +89,13 @@ export function LoginPage() {
       onGoogleSignIn={() => {}}
       onResetPassword={() => {}}
       error={error}
+      successMessage={successMessage}
       pending={pending}
+      isSignUp={isSignUp}
+      onModeChange={(signUp) => {
+        setIsSignUp(signUp)
+        setError(null)
+      }}
     />
   )
 }

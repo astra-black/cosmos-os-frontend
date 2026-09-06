@@ -346,9 +346,7 @@ export function EventsPage() {
         <Card className="col-span-full w-full py-4">
           <div className="mb-4 px-4">
             <h2 className="text-lg font-semibold">Event register</h2>
-            <p className="text-muted-foreground text-sm">
-              `GET /api/v1/agency/events` · click a name for ops detail
-            </p>
+            <p className="text-muted-foreground text-sm">Open an event to review cues, crew, incidents, and run details.</p>
           </div>
           {loading ? (
             <div className="px-4">

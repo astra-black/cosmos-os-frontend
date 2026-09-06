@@ -44,7 +44,21 @@ export async function login(email: string, password: string) {
   })
 }
 
-export async function signup(name: string, email: string, password: string) {
+export async function signup(
+  emailOrName: string,
+  passwordOrEmail: string,
+  maybePassword?: string,
+) {
+  let email = emailOrName
+  let password = passwordOrEmail
+  let name: string | undefined
+
+  if (maybePassword !== undefined) {
+    name = emailOrName
+    email = passwordOrEmail
+    password = maybePassword
+  }
+
   return apiRequest<
     ApiEnvelope<{
       user: AuthUser
@@ -55,6 +69,31 @@ export async function signup(name: string, email: string, password: string) {
     method: "POST",
     auth: false,
     body: JSON.stringify({ name, email, password }),
+  })
+}
+
+export async function completeOnboarding(data: {
+  fullName: string
+  jobTitle?: string
+  agencyName?: string
+  phone?: string
+  primaryRoleFocus: string
+}) {
+  return apiRequest<
+    ApiEnvelope<{
+      teamMember?: unknown
+      agency?: unknown
+      user?: AuthUser
+    }>
+  >("/api/v1/profile/onboarding", {
+    method: "PATCH",
+    body: JSON.stringify(data),
+  })
+}
+
+export async function dismissOnboarding() {
+  return apiRequest<ApiEnvelope<unknown>>("/api/v1/profile/onboarding/dismiss", {
+    method: "POST",
   })
 }
 

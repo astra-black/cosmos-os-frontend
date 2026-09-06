@@ -32,6 +32,7 @@ import {
 import { ApiError } from "@/lib/api/client"
 import { useAuth } from "@/lib/auth"
 import { canPerform } from "@/lib/rbac"
+import { cn } from "@/lib/utils"
 import type { Project } from "@/types/agency"
 
 function money(n: number) {
@@ -67,9 +68,11 @@ export function FinancePage() {
   const [showBudgetForm, setShowBudgetForm] = useState(false)
   const [budgetProjectId, setBudgetProjectId] = useState("")
   const [budgetPlanned, setBudgetPlanned] = useState("")
+  const [budgetContractedMinimum, setBudgetContractedMinimum] = useState("")
   const [budgetCurrency, setBudgetCurrency] = useState("USD")
   const [editingBudgetId, setEditingBudgetId] = useState<string | null>(null)
   const [editingPlanned, setEditingPlanned] = useState("")
+  const [editingContractedMinimum, setEditingContractedMinimum] = useState("")
   const [editingCurrency, setEditingCurrency] = useState("USD")
   const [editingEntryId, setEditingEntryId] = useState<string | null>(null)
   const [editingHours, setEditingHours] = useState("")
@@ -164,14 +167,16 @@ export function FinancePage() {
     if (!canWrite) return
     const project = projects.find((item) => item.projectId === budgetProjectId)
     const planned = Number(budgetPlanned)
-    if (!project || !Number.isFinite(planned) || planned < 0) {
-      toast.error("Select a project and enter a valid budget")
+    const contractedMinimum = budgetContractedMinimum.trim() ? Number(budgetContractedMinimum) : 0
+    if (!project || !Number.isFinite(planned) || planned < 0 || !Number.isFinite(contractedMinimum) || contractedMinimum < 0) {
+      toast.error("Select a project and enter valid budget amounts")
       return
     }
     setSaving(true)
     try {
-      await createBudget({ projectId: project.projectId, projectName: project.projectName, planned, currency: budgetCurrency })
+      await createBudget({ projectId: project.projectId, projectName: project.projectName, planned, contractedMinimum, currency: budgetCurrency })
       setBudgetPlanned("")
+      setBudgetContractedMinimum("")
       setShowBudgetForm(false)
       await reload()
       toast.success("Budget created")
@@ -185,13 +190,14 @@ export function FinancePage() {
   async function saveBudgetEdit() {
     if (!editingBudgetId || !canWrite) return
     const planned = Number(editingPlanned)
-    if (!Number.isFinite(planned) || planned < 0 || editingCurrency.trim().length !== 3) {
-      toast.error("Enter a valid amount and 3-letter currency")
+    const contractedMinimum = editingContractedMinimum.trim() ? Number(editingContractedMinimum) : 0
+    if (!Number.isFinite(planned) || planned < 0 || !Number.isFinite(contractedMinimum) || contractedMinimum < 0 || editingCurrency.trim().length !== 3) {
+      toast.error("Enter valid amounts and a 3-letter currency")
       return
     }
     setPendingItem(`budget-edit:${editingBudgetId}`)
     try {
-      await updateBudget(editingBudgetId, { planned, currency: editingCurrency.toUpperCase() })
+      await updateBudget(editingBudgetId, { planned, contractedMinimum, currency: editingCurrency.toUpperCase() })
       setEditingBudgetId(null)
       await reload()
       toast.success("Budget updated")
@@ -344,12 +350,18 @@ export function FinancePage() {
             />
           ) : (
              budgets.map((b) => (
-               <div key={b.budgetId} className="space-y-1.5">
+               <div
+                 key={b.budgetId}
+                 className={cn(
+                   "space-y-1.5 rounded-xl border p-3",
+                   b.penaltyRisk && "border-destructive/30 bg-destructive/[0.03]",
+                 )}
+               >
                  <div className="flex justify-between text-sm">
                     <span className="font-medium">{b.projectName}</span>
                     <span className="text-muted-foreground flex items-center gap-2 tabular-nums">
                       {money(b.spent)} / {money(b.planned)} {canWrite ? <span className="flex items-center gap-1">
-                        <Button size="icon-xs" variant="ghost" aria-label={`Edit ${b.projectName} budget`} onClick={() => { setEditingBudgetId(b.budgetId); setEditingPlanned(String(b.planned)); setEditingCurrency(b.currency) }} disabled={pendingItem === `budget-delete:${b.budgetId}`}><PencilIcon className="size-3" /></Button>
+                        <Button size="icon-xs" variant="ghost" aria-label={`Edit ${b.projectName} budget`} onClick={() => { setEditingBudgetId(b.budgetId); setEditingPlanned(String(b.planned)); setEditingContractedMinimum(String(b.contractedMinimum ?? 0)); setEditingCurrency(b.currency) }} disabled={pendingItem === `budget-delete:${b.budgetId}`}><PencilIcon className="size-3" /></Button>
                         <Button size="icon-xs" variant="ghost" aria-label={`Delete ${b.projectName} budget`} onClick={() => setDeleteTarget({ type: "budget", id: b.budgetId, label: `${b.projectName} budget` })} disabled={pendingItem === `budget-delete:${b.budgetId}`}><Trash2Icon className="text-destructive size-3" /></Button>
                       </span> : null}
                    </span>
@@ -361,6 +373,22 @@ export function FinancePage() {
                     {money(b.remaining)} left
                   </span>
                 </div>
+                {(b.contractedMinimum ?? 0) > 0 ? (
+                  <div className={cn(
+                    "flex flex-wrap items-center justify-between gap-2 rounded-lg px-2.5 py-2 text-xs",
+                    b.penaltyRisk ? "bg-destructive/10 text-destructive" : "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
+                  )}>
+                    <span className="flex items-center gap-1.5 font-medium">
+                      <AlertTriangleIcon className="size-3.5" />
+                      Contract minimum {money(b.contractedMinimum ?? 0)}
+                    </span>
+                    <span className="tabular-nums">
+                      {b.penaltyRisk
+                        ? `${money(b.minimumShortfall ?? 0)} exposure`
+                        : "minimum covered"}
+                    </span>
+                  </div>
+                ) : null}
               </div>
             ))
           )}
@@ -417,7 +445,7 @@ export function FinancePage() {
           }
         }}
         title={editingBudgetId ? "Edit budget" : "New budget"}
-        description="Set the planned project budget. Spent, utilization, and remaining are calculated from finance data."
+        description="Set the planned budget and any contracted minimum. Risk warnings update from spend automatically."
         onSubmit={editingBudgetId ? saveBudgetEdit : saveBudget}
         submitLabel={editingBudgetId ? "Save changes" : "Create budget"}
         pending={saving || (editingBudgetId !== null && pendingItem === `budget-edit:${editingBudgetId}`)}
@@ -439,7 +467,7 @@ export function FinancePage() {
             </Select>
           </div>
         )}
-        <div className="grid gap-1.5 sm:grid-cols-2">
+        <div className="grid gap-1.5 sm:grid-cols-3">
           <div className="grid gap-1.5">
             <Label htmlFor="budget-planned">Planned amount</Label>
             <Input
@@ -448,6 +476,16 @@ export function FinancePage() {
               min="0"
               value={editingBudgetId ? editingPlanned : budgetPlanned}
               onChange={(event) => editingBudgetId ? setEditingPlanned(event.target.value) : setBudgetPlanned(event.target.value)}
+            />
+          </div>
+          <div className="grid gap-1.5">
+            <Label htmlFor="budget-minimum">Contract minimum</Label>
+            <Input
+              id="budget-minimum"
+              type="number"
+              min="0"
+              value={editingBudgetId ? editingContractedMinimum : budgetContractedMinimum}
+              onChange={(event) => editingBudgetId ? setEditingContractedMinimum(event.target.value) : setBudgetContractedMinimum(event.target.value)}
             />
           </div>
           <div className="grid gap-1.5">

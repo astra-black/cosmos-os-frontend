@@ -25,6 +25,7 @@ import { AppSidebar } from "@/components/layout/app-sidebar"
 import { GlobalSearch } from "@/components/layout/global-search"
 import { NotificationsBell } from "@/components/layout/notifications-bell"
 import { ThemeToggle } from "@/components/theme-toggle"
+import { OnboardingProfileModal } from "@/components/shared/onboarding-profile-modal"
 import { useAuth } from "@/lib/auth"
 import { roleLabel } from "@/lib/rbac"
 import { cn } from "@/lib/utils"
@@ -144,6 +145,7 @@ export function AppShell({ incidentCount }: { incidentCount?: number }) {
           </ShellMain>
           <AppDock />
         </div>
+        <OnboardingProfileModal />
       </SidebarProvider>
     </div>
   )
