@@ -253,12 +253,25 @@ export const SignInPage: React.FC<SignInPageProps> = ({
           "hidden md:block absolute top-0 bottom-0 w-1/2 z-20 transition-all duration-700 ease-in-out p-3",
           canSignUp && isSignUp ? "left-1/2" : "left-0"
         )}>
-          <div className="relative h-full w-full rounded-3xl overflow-hidden">
-            <img src={heroImageSrc} className="absolute inset-0 w-full h-full object-cover" alt="" />
-            <div className="absolute inset-0 bg-linear-to-t from-black/60 via-transparent to-black/20" />
+          <div className="relative h-full w-full rounded-3xl overflow-hidden bg-zinc-950/90 border border-white/10 flex items-center justify-center shadow-2xl">
+            {/* Soft ambient background glow to fill edges seamlessly */}
+            <img
+              src={heroImageSrc}
+              className="absolute inset-0 w-full h-full object-cover blur-2xl opacity-30 scale-110 pointer-events-none select-none"
+              alt=""
+              aria-hidden="true"
+            />
+            {/* Main hero image rendered with crisp object-cover centering */}
+            <img
+              src={heroImageSrc}
+              className="relative z-10 w-full h-full object-cover object-center select-none"
+              alt="Hero graphic"
+              loading="eager"
+            />
+            <div className="absolute inset-0 z-20 bg-gradient-to-t from-black/75 via-transparent to-black/25 pointer-events-none" />
 
             {testimonials.length > 0 && (
-              <div className="absolute bottom-8 left-1/2 -translate-x-1/2 flex gap-4 px-6 w-full justify-center">
+              <div className="absolute bottom-8 left-1/2 -translate-x-1/2 flex gap-4 px-6 w-full justify-center z-30">
                 <TestimonialCard testimonial={testimonials[0]} delay="animate-delay-1000" />
                 {testimonials[1] && <div className="hidden xl:flex"><TestimonialCard testimonial={testimonials[1]} delay="animate-delay-1200" /></div>}
                 {testimonials[2] && <div className="hidden 2xl:flex"><TestimonialCard testimonial={testimonials[2]} delay="animate-delay-1400" /></div>}
