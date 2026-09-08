@@ -96,7 +96,7 @@ export function AcceptInvitePage() {
       if (res.data?.accessToken && res.data?.user) {
         setSession({
           accessToken: res.data.accessToken,
-          refreshToken: res.data.accessToken,
+          refreshToken: res.data.refreshToken || res.data.token || res.data.accessToken,
           user: res.data.user,
         })
       }

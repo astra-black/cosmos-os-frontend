@@ -57,7 +57,7 @@ export async function acceptInvitation(payload: {
   password: string
   email?: string
 }) {
-  return apiRequest<ApiEnvelope<{ token: string; accessToken: string; user: AuthUser }>>(
+  return apiRequest<ApiEnvelope<{ token: string; accessToken: string; refreshToken?: string; user: AuthUser }>>(
     `/invitations/${encodeURIComponent(payload.token)}/accept`,
     {
       method: "POST",

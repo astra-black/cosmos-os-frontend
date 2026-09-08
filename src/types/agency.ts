@@ -369,6 +369,7 @@ export type Approval = {
   title: string
   entityType: string
   entityId: string
+  assetId?: string
   projectId?: string
   clientId?: string
   requester?: string

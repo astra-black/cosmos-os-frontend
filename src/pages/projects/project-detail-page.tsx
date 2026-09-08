@@ -135,7 +135,7 @@ export function ProjectDetailPage() {
         (a) =>
           a.projectId === projectId ||
           a.entityId === projectId ||
-          (projRes.data?.assets || []).includes(a.entityId),
+          Boolean(a.assetId && (projRes.data?.assets || []).includes(a.assetId)),
       ),
     )
   }, [projectId])
