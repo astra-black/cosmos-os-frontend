@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { useAuth } from "@/lib/auth"
 import { completeOnboarding, dismissOnboarding } from "@/lib/api/agency"
+import { ApiError } from "@/lib/api/client"
 
 const JOB_FUNCTIONS = [
   { value: "ADMIN", label: "Agency Admin & Operations" },
@@ -90,8 +91,9 @@ export function OnboardingProfileModal() {
 
       toast.success("Profile setup complete! Welcome to Cosmos OS.")
       setOpen(false)
-    } catch {
-      toast.error("Failed to update profile")
+    } catch (err) {
+      const msg = err instanceof ApiError ? err.message : (err as Error)?.message || "Failed to update profile"
+      toast.error(msg)
     } finally {
       setSaving(false)
     }
