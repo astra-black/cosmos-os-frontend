@@ -475,8 +475,32 @@ export async function updateTask(taskId: string, body: Partial<Task>) {
   })
 }
 
+export async function assignTask(taskId: string, memberId: string | null) {
+  return apiRequest<ApiEnvelope<Task>>(`/api/v1/agency/tasks/${taskId}/assignment`, {
+    method: "PATCH",
+    body: JSON.stringify({ memberId }),
+  })
+}
+
 export async function createTask(body: Partial<Task>) {
   return apiRequest<ApiEnvelope<Task>>("/api/v1/agency/tasks", {
+    method: "POST",
+    body: JSON.stringify(body),
+  })
+}
+
+export async function createRecurringTasks(body: Partial<Task> & {
+  recurrence: {
+    frequency: "daily" | "weekly" | "monthly"
+    interval?: number
+    startDate: string
+    endDate?: string | null
+    byWeekday?: number
+    dayOfMonth?: number
+    maxOccurrences?: number
+  }
+}) {
+  return apiRequest<ApiEnvelope<Task[]>>("/api/v1/agency/tasks/recurring", {
     method: "POST",
     body: JSON.stringify(body),
   })
@@ -486,6 +510,24 @@ export async function deleteTask(taskId: string) {
   return apiRequest<ApiEnvelope<Task>>(`/api/v1/agency/tasks/${taskId}`, {
     method: "DELETE",
   })
+}
+
+export async function listTaskDependencies(taskId: string) {
+  return apiRequest<ApiEnvelope<string[]>>(`/api/v1/agency/tasks/${taskId}/dependencies`)
+}
+
+export async function addTaskDependency(taskId: string, predecessorId: string) {
+  return apiRequest<ApiEnvelope<string[]>>(`/api/v1/agency/tasks/${taskId}/dependencies`, {
+    method: "POST",
+    body: JSON.stringify({ predecessorId }),
+  })
+}
+
+export async function removeTaskDependency(taskId: string, predecessorId: string) {
+  return apiRequest<ApiEnvelope<string[]>>(
+    `/api/v1/agency/tasks/${taskId}/dependencies/${predecessorId}`,
+    { method: "DELETE" },
+  )
 }
 
 export async function listMilestones(params: { status?: Milestone["status"] } = {}) {

@@ -26,7 +26,7 @@ import { Label } from "@/components/ui/label"
 import { Select } from "@/components/ui/select"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Textarea } from "@/components/ui/textarea"
-import { useCampaigns, useClients } from "@/hooks/use-agency-data"
+import { useCampaigns, useClients, useTeamMembers } from "@/hooks/use-agency-data"
 import {
   getProject,
   listApprovals,
@@ -100,6 +100,7 @@ export function ProjectDetailPage() {
   const { user } = useAuth()
   const { data: clients } = useClients()
   const { data: campaigns } = useCampaigns()
+  const { data: teamMembers } = useTeamMembers()
   const canWrite =
     canPerform(user?.role, "write_crm") || canPerform(user?.role, "write_ops")
 
@@ -790,6 +791,7 @@ export function ProjectDetailPage() {
           onOpenChange={setCreateTaskOpen}
           projects={[project]}
           campaigns={campaigns}
+          teamMembers={teamMembers}
           defaultProjectId={project.projectId}
           onSuccess={async () => {
             await load()

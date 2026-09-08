@@ -319,11 +319,22 @@ export type Task = {
   projectName?: string | null
   campaignId?: string | null
   assignee?: string
+  assigneeMemberId?: string | null
   status: string
   priority: string
   dueDate?: string | null
   estimateHours?: number
   tags?: string[]
+  dependencyIds?: string[]
+  recurrence?: {
+    frequency: "daily" | "weekly" | "monthly"
+    interval: number
+    startDate: string
+    endDate?: string | null
+    byWeekday?: number
+    dayOfMonth?: number
+    maxOccurrences?: number
+  } | null
 }
 
 export type MilestoneStatus = "upcoming" | "done" | "missed"

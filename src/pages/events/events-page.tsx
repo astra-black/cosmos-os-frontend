@@ -30,7 +30,7 @@ import { useAuth } from "@/lib/auth"
 import { canPerform } from "@/lib/rbac"
 import type { Event, EventStatus } from "@/types/agency"
 
-const EVENT_TYPES = ["festival", "concert", "conference", "corporate", "tour", "private", "Product"] as const
+const EVENT_TYPES = ["festival", "concert", "conference", "corporate", "tour", "private", "product"] as const
 const EVENT_STATUSES = ["draft", "planning", "confirmed", "live", "completed", "cancelled"] as const
 
 type EventFormData = {

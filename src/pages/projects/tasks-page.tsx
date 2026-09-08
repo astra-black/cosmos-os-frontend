@@ -23,19 +23,24 @@ import { Label } from "@/components/ui/label"
 import { Select } from "@/components/ui/select"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useCampaigns, useProjects, useTasks, useTeamMembers } from "@/hooks/use-agency-data"
-import { deleteTask, updateTask } from "@/lib/api/agency"
+import { assignTask, deleteTask, updateTask } from "@/lib/api/agency"
 import { ApiError } from "@/lib/api/client"
 import { useAuth } from "@/lib/auth"
 import { canPerform } from "@/lib/rbac"
 import type { Task } from "@/types/agency"
 import { cn } from "@/lib/utils"
+import {
+  isTaskStatusTransitionAllowed,
+  TASK_STATUS_LABELS,
+  type TaskStatus,
+} from "@/lib/tasks/task-status"
 
 const LANES = [
-  { id: "todo", label: "To do", next: "in_progress", prev: null },
-  { id: "in_progress", label: "In progress", next: "review", prev: "todo" },
-  { id: "review", label: "Review", next: "done", prev: "in_progress" },
-  { id: "blocked", label: "Blocked", next: "in_progress", prev: "todo" },
-  { id: "done", label: "Done", next: null, prev: "review" },
+  { id: "todo", label: TASK_STATUS_LABELS.todo, next: "in_progress", prev: null },
+  { id: "in_progress", label: TASK_STATUS_LABELS.in_progress, next: "review", prev: "todo" },
+  { id: "review", label: TASK_STATUS_LABELS.review, next: "done", prev: "in_progress" },
+  { id: "blocked", label: TASK_STATUS_LABELS.blocked, next: "in_progress", prev: "todo" },
+  { id: "done", label: TASK_STATUS_LABELS.done, next: null, prev: "review" },
 ] as const
 
 const PRIORITIES = ["low", "medium", "high", "critical"] as const
@@ -57,18 +62,20 @@ type TaskForm = {
   dueDate: string
   estimateHours: string
   tags: string
+  dependencyIds: string[]
 }
 
 const emptyTaskForm: TaskForm = {
   title: "",
   projectId: "",
   campaignId: "",
-  assignee: "Unassigned",
+  assignee: "",
   status: "todo",
   priority: "medium",
   dueDate: "",
   estimateHours: "",
   tags: "",
+  dependencyIds: [],
 }
 
 export function TasksPage() {
@@ -121,6 +128,10 @@ export function TasksPage() {
     const fromTasks = tasks.map((t) => t.assignee || "Unassigned")
     return [...new Set([...assignees, ...fromTasks])]
   }, [assignees, tasks])
+  const memberOptions = useMemo(
+    () => teamMembers.filter((member) => member.status === "active"),
+    [teamMembers],
+  )
 
   const filtered = useMemo(() => {
     return tasks.filter((t) => {
@@ -157,6 +168,10 @@ export function TasksPage() {
 
   async function moveTask(task: Task, next: string) {
     if (!canWrite) return
+    if (!isTaskStatusTransitionAllowed(task.status, next)) {
+      toast.error(`Cannot move ${TASK_STATUS_LABELS[task.status as TaskStatus] || task.status} to ${TASK_STATUS_LABELS[next as TaskStatus] || next}`)
+      return
+    }
     setBusyId(task.taskId)
     patchLocal({ ...task, status: next })
     try {
@@ -214,12 +229,13 @@ export function TasksPage() {
       title: task.title,
       projectId: task.projectId ?? "",
       campaignId: task.campaignId ?? "",
-      assignee: task.assignee || "Unassigned",
+      assignee: task.assigneeMemberId || "",
       status: task.status,
       priority: task.priority,
       dueDate: task.dueDate ?? "",
       estimateHours: task.estimateHours == null ? "" : String(task.estimateHours),
       tags: task.tags?.join(", ") ?? "",
+      dependencyIds: task.dependencyIds ?? [],
     })
     setTaskDialogOpen(true)
   }
@@ -233,6 +249,15 @@ export function TasksPage() {
 
   async function saveTask() {
     if (!taskForm.title.trim() || !canWrite || !editingTask) return
+    if (
+      taskForm.status !== editingTask.status &&
+      !isTaskStatusTransitionAllowed(editingTask.status, taskForm.status)
+    ) {
+      toast.error(
+        `Cannot move ${TASK_STATUS_LABELS[editingTask.status as TaskStatus] || editingTask.status} to ${TASK_STATUS_LABELS[taskForm.status as TaskStatus] || taskForm.status}`,
+      )
+      return
+    }
     const estimateHours = taskForm.estimateHours.trim() ? Number(taskForm.estimateHours) : 0
     if (!Number.isFinite(estimateHours) || estimateHours < 0) {
       toast.error("Estimate hours must be a non-negative number")
@@ -246,16 +271,19 @@ export function TasksPage() {
       projectId: taskForm.projectId || null,
       projectName,
       campaignId: taskForm.campaignId || null,
-      assignee: taskForm.assignee || "Unassigned",
       status: taskForm.status,
       priority: taskForm.priority,
       dueDate: taskForm.dueDate || null,
       estimateHours,
       tags: taskForm.tags.split(",").map((tag) => tag.trim()).filter(Boolean),
+      dependencyIds: taskForm.dependencyIds,
     }
     setTaskSaving(true)
     try {
       await updateTask(editingTask.taskId, body)
+      if (taskForm.assignee !== (editingTask.assigneeMemberId || "")) {
+        await assignTask(editingTask.taskId, taskForm.assignee || null)
+      }
       toast.success("Task updated")
       closeTaskDialog(true)
       await reload()
@@ -445,19 +473,29 @@ export function TasksPage() {
                           {canWrite ? (
                             <select
                               className="bg-transparent max-w-[8rem] truncate text-[11px] outline-none"
-                              value={task.assignee || "Unassigned"}
+                              value={task.assigneeMemberId || ""}
                               disabled={busyId === task.taskId}
                               onChange={(e) =>
-                                void patchTask(
-                                  task,
-                                  { assignee: e.target.value },
-                                  `Assigned to ${e.target.value}`,
-                                )
+                                void (async () => {
+                                try {
+                                  const res = await assignTask(task.taskId, e.target.value || null)
+                                  if (res.data) patchLocal(res.data)
+                                  toast.success(
+                                    e.target.value
+                                      ? `Assigned to ${res.data?.assignee || "team member"}`
+                                      : "Task unassigned",
+                                  )
+                                  await reload()
+                                } catch (err) {
+                                  toast.error(err instanceof ApiError ? err.message : "Assignment failed")
+                                }
+                                })()
                               }
                             >
-                              {assigneeOptions.map((a) => (
-                                <option key={a} value={a}>
-                                  {a}
+                              <option value="">Unassigned</option>
+                              {memberOptions.map((member) => (
+                                <option key={member.memberId} value={member.memberId}>
+                                {member.name}
                                 </option>
                               ))}
                             </select>
@@ -529,6 +567,7 @@ export function TasksPage() {
         onOpenChange={setCreateOpen}
         projects={projects}
         campaigns={campaigns}
+        teamMembers={teamMembers}
         defaultProjectId={scopedProjectId || projects[0]?.projectId}
         onSuccess={async () => {
           await reload()
@@ -594,7 +633,10 @@ export function TasksPage() {
               value={taskForm.assignee}
               onChange={(event) => setTaskForm((form) => ({ ...form, assignee: event.target.value }))}
             >
-              {assigneeOptions.map((assignee) => <option key={assignee} value={assignee}>{assignee}</option>)}
+              <option value="">Unassigned</option>
+              {memberOptions.map((member) => (
+                <option key={member.memberId} value={member.memberId}>{member.name}</option>
+              ))}
             </Select>
           </div>
           <div className="grid gap-1.5">
@@ -625,6 +667,9 @@ export function TasksPage() {
               value={taskForm.dueDate}
               onChange={(event) => setTaskForm((form) => ({ ...form, dueDate: event.target.value }))}
             />
+            <p className="text-muted-foreground text-xs">
+              The assignee receives an in-app reminder on the due date.
+            </p>
           </div>
           <div className="grid gap-1.5">
             <Label htmlFor="task-form-estimate">Estimate hours</Label>
@@ -645,6 +690,35 @@ export function TasksPage() {
               onChange={(event) => setTaskForm((form) => ({ ...form, tags: event.target.value }))}
               placeholder="design, client-review"
             />
+          </div>
+          <div className="grid gap-1.5 sm:col-span-2">
+            <Label htmlFor="task-form-dependencies">Blocked by</Label>
+            <Select
+              id="task-form-dependencies"
+              multiple
+              value={taskForm.dependencyIds}
+              onChange={(event) =>
+                setTaskForm((form) => ({
+                  ...form,
+                  dependencyIds: Array.from(event.target.selectedOptions, (option) => option.value),
+                }))
+              }
+              className="min-h-24"
+            >
+              {tasks
+                .filter((candidate) =>
+                  candidate.taskId !== editingTask?.taskId &&
+                  candidate.projectId === taskForm.projectId,
+                )
+                .map((candidate) => (
+                  <option key={candidate.taskId} value={candidate.taskId}>
+                    {candidate.title}
+                  </option>
+                ))}
+            </Select>
+            <p className="text-muted-foreground text-xs">
+              Select tasks that must be completed first. Dependencies must stay within the same project.
+            </p>
           </div>
         </div>
       </EntityFormDialog>
