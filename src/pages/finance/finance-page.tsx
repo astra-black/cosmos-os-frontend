@@ -22,11 +22,13 @@ import {
   deleteBudget,
   deleteTimeEntry,
   getFinanceSummary,
+  getProjectProfitability,
   listBudgets,
   listTimeEntries,
   updateBudget,
   updateTimeEntry,
   type BudgetRow,
+  type ProjectProfitability,
   type TimeEntry,
 } from "@/lib/api/platform"
 import { ApiError } from "@/lib/api/client"
@@ -54,6 +56,7 @@ export function FinancePage() {
   } | null>(null)
   const [budgets, setBudgets] = useState<BudgetRow[]>([])
   const [entries, setEntries] = useState<TimeEntry[]>([])
+  const [profitability, setProfitability] = useState<ProjectProfitability[]>([])
   const [projects, setProjects] = useState<Project[]>([])
   const [projectId, setProjectId] = useState("")
   const [loading, setLoading] = useState(true)
@@ -86,15 +89,17 @@ export function FinancePage() {
 
   async function reload() {
     setError(null)
-    const [s, b, t, p] = await Promise.all([
+    const [s, b, t, p, profitabilityResponse] = await Promise.all([
       getFinanceSummary(),
       listBudgets(),
       listTimeEntries(),
       listProjects(),
+      getProjectProfitability().catch(() => ({ data: [] as ProjectProfitability[] })),
     ])
     setSummary(s.data ?? null)
     setBudgets(b.data ?? [])
     setEntries(t.data ?? [])
+    setProfitability(profitabilityResponse.data ?? [])
     const nextProjects = normalizeProjects(p)
     setProjects(nextProjects)
     setProjectId((current) => {
@@ -332,6 +337,53 @@ export function FinancePage() {
           </div>
         </Card>
       </div>
+
+      <Card className="flex min-w-0 flex-col gap-3 p-4">
+        <div>
+          <h2 className="font-semibold">Project profitability</h2>
+          <p className="text-muted-foreground text-xs">Planned budget compared with logged time cost and projected finish cost.</p>
+        </div>
+        {profitability.length === 0 ? (
+          <EmptyState
+            className="py-8"
+            title="No profitability data yet"
+            description="Add a project budget or log time to see margin and forecast metrics."
+          />
+        ) : (
+          <div className="space-y-2">
+            {profitability.map((project) => (
+              <div key={project.projectId} className="grid gap-2 rounded-xl border p-3 text-sm sm:grid-cols-[1.4fr_repeat(4,minmax(0,1fr))] sm:items-center">
+                <div>
+                  <div className="font-medium">{project.projectName}</div>
+                  <div className="text-muted-foreground text-xs">
+                    {project.actualHours.toFixed(1)}h logged{project.costAvailable ? "" : " · rate unavailable"}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-muted-foreground text-xs">Planned</div>
+                  <div className="tabular-nums">{money(project.planned)}</div>
+                </div>
+                <div>
+                  <div className="text-muted-foreground text-xs">Time cost</div>
+                  <div className="tabular-nums">{project.costAvailable ? money(project.actualTimeCost) : "—"}</div>
+                </div>
+                <div>
+                  <div className="text-muted-foreground text-xs">Margin</div>
+                  <div className={cn("tabular-nums", project.margin < 0 && "text-destructive")}>
+                    {project.costAvailable ? `${money(project.margin)}${project.marginPercent != null ? ` (${Math.round(project.marginPercent)}%)` : ""}` : "—"}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-muted-foreground text-xs">Forecast margin</div>
+                  <div className={cn("tabular-nums", project.forecastMargin < 0 && "text-destructive")}>
+                    {project.costAvailable ? `${money(project.forecastMargin)}${project.forecastMarginPercent != null ? ` (${Math.round(project.forecastMarginPercent)}%)` : ""}` : "—"}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </Card>
 
       <div className="grid gap-4 lg:grid-cols-2">
         <Card className="flex min-w-0 flex-col gap-3 p-4">

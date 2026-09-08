@@ -74,6 +74,10 @@ export function CreateTaskModal({
       setError("Task title is required.")
       return
     }
+    if (!projectId) {
+      setError("Select a project before creating a task.")
+      return
+    }
     const hours = estimateHours.trim() ? Number(estimateHours) : 0
     if (!Number.isFinite(hours) || hours < 0) {
       setError("Estimate hours must be a non-negative number.")
@@ -143,7 +147,7 @@ export function CreateTaskModal({
 
             <div className="grid grid-cols-2 gap-3">
               <div className="grid gap-1.5">
-                <Label htmlFor="task-project">Linked Project</Label>
+                <Label htmlFor="task-project">Linked Project *</Label>
                 <select
                   id="task-project"
                   className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
@@ -151,7 +155,7 @@ export function CreateTaskModal({
                   onChange={(e) => setProjectId(e.target.value)}
                   disabled={busy}
                 >
-                  <option value="">Select project (optional)</option>
+                  <option value="">Select project</option>
                   {projects.map((p) => (
                     <option key={p.projectId} value={p.projectId}>
                       {p.projectName}

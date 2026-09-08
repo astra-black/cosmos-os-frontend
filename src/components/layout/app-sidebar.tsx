@@ -70,7 +70,7 @@ type NavFolder = {
 type NavNode = NavLeaf | NavFolder
 
 const navTree: NavNode[] = [
-  { kind: "leaf", to: "/", label: "Dashboard", icon: LayoutDashboardIcon },
+  { kind: "leaf", to: "/dashboard", label: "Dashboard", icon: LayoutDashboardIcon },
   { kind: "leaf", to: "/events", label: "Events", icon: CalendarDaysIcon },
   { kind: "leaf", to: "/activity", label: "Activity", icon: ActivityIcon },
   { kind: "leaf", to: "/ai", label: "AI Chat", icon: SparklesIcon },

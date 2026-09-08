@@ -64,6 +64,10 @@ export function CreateProjectModal({
       setError("Project name is required.")
       return
     }
+    if (!clientId) {
+      setError("Select a client account before creating a project.")
+      return
+    }
 
     const weightNum = weight ? Number(weight) : 0
     const budgetNum = budget ? Number(budget) : 0
@@ -138,7 +142,7 @@ export function CreateProjectModal({
 
             <div className="grid grid-cols-2 gap-3">
               <div className="grid gap-1.5">
-                <Label htmlFor="project-client">Client Account</Label>
+                <Label htmlFor="project-client">Client Account *</Label>
                 <select
                   id="project-client"
                   className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
@@ -146,7 +150,7 @@ export function CreateProjectModal({
                   onChange={(e) => setClientId(e.target.value)}
                   disabled={busy}
                 >
-                  <option value="">Select client (optional)</option>
+                  <option value="">Select client</option>
                   {clients.map((c) => (
                     <option key={c.clientId} value={c.clientId}>
                       {c.name}

@@ -53,7 +53,7 @@ function PortalRoute() {
 function ProtectedRoute() {
   const { isAuthenticated, user } = useAuth()
   const location = useLocation()
-  if (!isAuthenticated) return <Navigate to="/login" replace />
+  if (!isAuthenticated) return <Navigate to="/" replace state={{ from: location.pathname }} />
   if (!canAccessRoute(user?.role, location.pathname)) {
     return user?.role === "client" ? <Navigate to="/portal/login" replace /> : <AccessDenied />
   }

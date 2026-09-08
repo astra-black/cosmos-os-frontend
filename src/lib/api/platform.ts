@@ -46,6 +46,21 @@ export type BudgetRow = {
   currency: string
 }
 
+export type ProjectProfitability = {
+  projectId: string
+  projectName: string
+  currency: string
+  costAvailable: boolean
+  planned: number
+  actualTimeCost: number
+  actualHours: number
+  margin: number
+  marginPercent: number | null
+  forecastCost: number
+  forecastMargin: number
+  forecastMarginPercent: number | null
+}
+
 export type CreateBudgetInput = {
   projectId: string
   projectName?: string
@@ -105,6 +120,10 @@ export async function getFinanceSummary() {
       revenue: number
     }>
   >("/api/v1/agency/finance/summary")
+}
+
+export async function getProjectProfitability() {
+  return apiRequest<ApiEnvelope<ProjectProfitability[]>>("/api/v1/agency/finance/profitability")
 }
 
 export async function listTimeEntries() {

@@ -79,7 +79,10 @@ export function LandingPage() {
     setWaitlistError(null)
     try {
       const response = await joinWaitlist(name.trim(), email)
-      setQueueNumber(response.success && response.data?.queuePosition ? response.data.queuePosition : Math.floor(Math.random() * 200) + 312)
+      if (!response.success || !response.data?.queuePosition) {
+        throw new ApiError(response.error || "Failed to join waitlist", 500)
+      }
+      setQueueNumber(response.data.queuePosition)
       setSubmitted(true)
     } catch (err) {
       setWaitlistError(err instanceof ApiError ? err.message : "Failed to join waitlist")
