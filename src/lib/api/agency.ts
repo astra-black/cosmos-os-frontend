@@ -85,14 +85,14 @@ export async function completeOnboarding(data: {
       agency?: unknown
       user?: AuthUser
     }>
-  >("/api/v1/profile/onboarding", {
+  >("/api/v1/auth/profile/onboarding", {
     method: "PATCH",
     body: JSON.stringify(data),
   })
 }
 
 export async function dismissOnboarding() {
-  return apiRequest<ApiEnvelope<unknown>>("/api/v1/profile/onboarding/dismiss", {
+  return apiRequest<ApiEnvelope<unknown>>("/api/v1/auth/profile/onboarding/dismiss", {
     method: "POST",
   })
 }
