@@ -33,6 +33,8 @@ type CreateCueModalProps = {
   departments?: Department[]
   /** Prefill from last cue + duration (page-derived). */
   defaultScheduledTime?: string
+  /** Event start date fallback when no cues exist */
+  eventStartDate?: string
   onSuccess: (cue: Cue) => void
 }
 
@@ -42,6 +44,7 @@ export function CreateCueModal({
   eventId,
   departments = [],
   defaultScheduledTime,
+  eventStartDate,
   onSuccess,
 }: CreateCueModalProps) {
   const [name, setName] = useState("")
@@ -57,15 +60,15 @@ export function CreateCueModal({
 
   useEffect(() => {
     if (open) {
-      setScheduledTime(toDateTimeLocal(defaultScheduledTime) || "")
+      setScheduledTime(toDateTimeLocal(defaultScheduledTime || eventStartDate) || "")
     }
-  }, [open, defaultScheduledTime])
+  }, [open, defaultScheduledTime, eventStartDate])
 
   function reset() {
     setName("")
     setDepartmentId("")
     setDepartmentName("")
-    setScheduledTime(toDateTimeLocal(defaultScheduledTime) || "")
+    setScheduledTime(toDateTimeLocal(defaultScheduledTime || eventStartDate) || "")
     setDuration("10")
     setPriority("medium")
     setLocation("")

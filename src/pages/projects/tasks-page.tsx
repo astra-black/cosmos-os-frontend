@@ -16,7 +16,7 @@ import { ConfirmationDialog } from "@/components/shared/confirmation-dialog"
 import { EmptyState } from "@/components/shared/empty-state"
 import { PageHeader } from "@/components/shared/page-header"
 import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
+import { Button, buttonVariants } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -308,6 +308,23 @@ export function TasksPage() {
           ) : undefined
         }
       />
+
+      {projects.length === 0 && !loading ? (
+        <Card className="border-amber-500/30 bg-amber-500/10 p-4">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+            <div>
+              <p className="text-sm font-medium text-foreground">No projects found</p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Tasks belong to projects. Create a project first to organize deliverables and assign work items.
+              </p>
+            </div>
+            <Link to="/projects?create=1" className={buttonVariants({ size: "sm" })}>
+              <PlusIcon className="size-3.5 mr-1" />
+              Create Project
+            </Link>
+          </div>
+        </Card>
+      ) : null}
 
       {/* KPI */}
       <div className="bg-card grid grid-cols-2 gap-3 rounded-xl border p-3 sm:grid-cols-4 sm:p-4">

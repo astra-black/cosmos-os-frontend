@@ -1,8 +1,10 @@
 import { useEffect, useState } from "react"
+import { Link } from "react-router-dom"
 import { toast } from "sonner"
 import { LoaderCircleIcon } from "lucide-react"
 
-import { Button } from "@/components/ui/button"
+import { Button, buttonVariants } from "@/components/ui/button"
+import { cn } from "@/lib/utils"
 import {
   Dialog,
   DialogContent,
@@ -63,6 +65,18 @@ export function CreateTaskModal({
       setProjectId(defaultProjectId)
     }
   }, [open, defaultProjectId, projectId])
+
+  // Auto-populate task due date from linked project if dueDate is empty
+  useEffect(() => {
+    if (projectId && !dueDate) {
+      const selectedProj = projects.find((p) => p.projectId === projectId)
+      const rawDate = selectedProj?.endDate || selectedProj?.startDate
+      if (rawDate) {
+        const formatted = rawDate.includes("T") ? rawDate.split("T")[0] : rawDate
+        setDueDate(formatted)
+      }
+    }
+  }, [projectId, projects, dueDate])
 
   function reset() {
     setTitle("")
@@ -175,6 +189,19 @@ export function CreateTaskModal({
           {error ? (
             <div className="rounded-lg bg-destructive/10 p-3 text-xs text-destructive">
               {error}
+            </div>
+          ) : null}
+
+          {projects.length === 0 ? (
+            <div className="rounded-lg bg-amber-500/10 border border-amber-500/30 p-3 text-xs text-amber-700 dark:text-amber-300 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+              <span>No projects available. Tasks must be linked to a project.</span>
+              <Link
+                to="/projects?create=1"
+                onClick={() => onOpenChange(false)}
+                className={cn(buttonVariants({ variant: "outline", size: "sm" }), "h-7 text-xs shrink-0")}
+              >
+                Create Project
+              </Link>
             </div>
           ) : null}
 

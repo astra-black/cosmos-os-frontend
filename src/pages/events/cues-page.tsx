@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react"
+import { Link } from "react-router-dom"
 import { PlusIcon } from "lucide-react"
 import { toast } from "sonner"
 
@@ -7,7 +8,7 @@ import { CueRunSheet } from "@/components/ops/cue-run-sheet"
 import { EventScopeBar } from "@/components/ops/event-scope-bar"
 import { ConfirmationDialog } from "@/components/shared/confirmation-dialog"
 import { withMutationFeedback } from "@/components/shared/mutation-feedback"
-import { Button } from "@/components/ui/button"
+import { Button, buttonVariants } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import {
   Dialog,
@@ -81,15 +82,21 @@ export function CuesPage() {
       (a, b) =>
         new Date(a.scheduledTime || 0).getTime() - new Date(b.scheduledTime || 0).getTime(),
     )[cues.length - 1]
-    const base = last?.scheduledTime
-      ? new Date(last.scheduledTime).getTime() + (last.duration || 10) * 60_000
-      : Date.now()
-    return new Date(base).toISOString()
+    if (last?.scheduledTime) {
+      const base = new Date(last.scheduledTime).getTime() + (last.duration || 10) * 60_000
+      return new Date(base).toISOString()
+    }
+    return selectedEvent?.startDate || new Date().toISOString()
   })()
 
   function openCreateDialog() {
+    if (!eventId) {
+      toast.error("Please select or create an event before adding cues.")
+      return
+    }
     setCreateOpen(true)
   }
+
 
   function openEditDialog(cue: Cue) {
     setEditingCue(cue)
@@ -292,6 +299,7 @@ export function CuesPage() {
             <Button
               size="sm"
               onClick={openCreateDialog}
+              disabled={events.length === 0}
             >
               <PlusIcon className="size-3.5" />
               Add cue
@@ -299,6 +307,23 @@ export function CuesPage() {
           ) : undefined
         }
       />
+
+      {events.length === 0 && !loadingEvents ? (
+        <Card className="border-amber-500/30 bg-amber-500/10 p-4">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+            <div>
+              <p className="text-sm font-medium text-foreground">No events found</p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Cues sequence live Run-of-Show moments within an event. Create an event first to start sequencing stage cues.
+              </p>
+            </div>
+            <Link to="/events" className={buttonVariants({ size: "sm" })}>
+              <PlusIcon className="size-3.5 mr-1" />
+              Create Event
+            </Link>
+          </div>
+        </Card>
+      ) : null}
 
       {!canWrite ? (
         <p className="text-muted-foreground text-xs">
@@ -336,12 +361,14 @@ export function CuesPage() {
           open={createOpen}
           onOpenChange={setCreateOpen}
           eventId={eventId}
+          eventStartDate={selectedEvent?.startDate}
           defaultScheduledTime={defaultScheduledTime}
           onSuccess={async () => {
             await reload()
           }}
         />
       ) : null}
+
       {/* Edit Cue Modal Dialog */}
       <Dialog
         open={isDialogOpen}
