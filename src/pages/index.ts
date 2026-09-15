@@ -12,6 +12,7 @@ export { EventDetailPage } from "./events/event-detail-page"
 export { CuesPage } from "./events/cues-page"
 export { CrewPage } from "./events/crew-page"
 export { IncidentsPage } from "./events/incidents-page"
+export { StageDisplayPage } from "./events/stage-display-page"
 
 // Projects
 export { ProjectsPage } from "./projects/projects-page"

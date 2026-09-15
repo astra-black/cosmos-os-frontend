@@ -35,7 +35,8 @@ import {
   VendorsPage,
   getPortalUser,
   LandingPage,
-  AcceptInvitePage
+  AcceptInvitePage,
+  StageDisplayPage
 } from "@/pages"
 
 function AccessDenied() {
@@ -53,7 +54,7 @@ function PortalRoute() {
 function ProtectedRoute() {
   const { isAuthenticated, user } = useAuth()
   const location = useLocation()
-  if (!isAuthenticated) return <Navigate to="/login" replace />
+  if (!isAuthenticated) return <Navigate to="/login" state={{ from: location }} replace />
   if (!canAccessRoute(user?.role, location.pathname)) {
     return user?.role === "client" ? <Navigate to="/portal/login" replace /> : <AccessDenied />
   }
@@ -78,11 +79,14 @@ export default function App() {
       <Route path="/portal" element={<PortalRoute />} />
 
       <Route element={<ProtectedRoute />}>
+        <Route path="events/:eventId/stage" element={<StageDisplayPage />} />
+        <Route path="events/:eventId/display" element={<StageDisplayPage />} />
         <Route element={<AppShell />}>
           <Route index element={<Navigate to="/dashboard" replace />} />
           <Route path="dashboard" element={<DashboardPage />} />
           <Route path="events" element={<EventsPage />} />
           <Route path="events/:eventId" element={<EventDetailPage />} />
+          <Route path="events/:eventId/finance" element={<EventDetailPage defaultTab="finance" />} />
           <Route path="activity" element={<ActivityPage />} />
           <Route path="crm" element={<CrmPipelinePage />} />
           <Route path="clients" element={<ClientsPage />} />

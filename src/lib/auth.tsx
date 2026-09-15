@@ -29,19 +29,18 @@ type AuthContextValue = {
 const AuthContext = createContext<AuthContextValue | null>(null)
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<AuthUser | null>(null)
-  const [token, setToken] = useState<string | null>(null)
-  const [hydrated, setHydrated] = useState(false)
+  const [user, setUser] = useState<AuthUser | null>(() => getStoredUser<AuthUser>())
+  const [token, setToken] = useState<string | null>(() => getAccessToken())
+  const [hydrated, setHydrated] = useState(true)
 
   useEffect(() => {
     const storedToken = getAccessToken()
     const storedUser = getStoredUser<AuthUser>()
-    if (storedToken && storedUser) {
-      setToken(storedToken)
+    if (storedToken !== token) setToken(storedToken)
+    if (storedUser && JSON.stringify(storedUser) !== JSON.stringify(user)) {
       setUser(storedUser)
     }
-    setHydrated(true)
-  }, [])
+  }, [token, user])
 
   const login = useCallback(async (email: string, password: string) => {
     const response = await loginRequest(email, password)

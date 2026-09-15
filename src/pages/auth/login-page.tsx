@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { Navigate, useNavigate } from "react-router-dom"
+import { Navigate, useLocation, useNavigate } from "react-router-dom"
 import { SignInPage, Testimonial } from "@/components/ui/sign-in"
 import { ApiError } from "@/lib/api/client"
 import { useAuth } from "@/lib/auth"
@@ -29,12 +29,14 @@ const testimonials: Testimonial[] = [
 export function LoginPage() {
   const { login, isAuthenticated } = useAuth()
   const navigate = useNavigate()
+  const location = useLocation()
+  const from = (location.state as { from?: { pathname?: string } })?.from?.pathname || "/dashboard"
   const [error, setError] = useState<string | null>(null)
   const [successMessage, setSuccessMessage] = useState<string | null>(null)
   const [pending, setPending] = useState(false)
   const [isSignUp, setIsSignUp] = useState(false)
 
-  if (isAuthenticated) return <Navigate to="/dashboard" replace />
+  if (isAuthenticated) return <Navigate to={from} replace />
 
   const handleSignIn = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -46,7 +48,7 @@ export function LoginPage() {
 
     try {
       await login(email, password)
-      navigate("/dashboard", { replace: true })
+      navigate(from, { replace: true })
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Unable to sign in")
     } finally {

@@ -8,6 +8,7 @@ import {
   GitBranchIcon,
   LineChartIcon,
   ListTodoIcon,
+  ShieldAlertIcon,
 } from "lucide-react"
 import {
   Area,
@@ -34,6 +35,7 @@ import { StatisticsCard } from "@/components/widgets/statistics-card"
 import {
   getCrmSummary,
   listActivity,
+  listAllIncidents,
   listApprovals,
   listClients,
   listProjects,
@@ -47,6 +49,7 @@ import type {
   AgencyClient,
   Approval,
   CrmSummary,
+  Incident,
   Project,
   Task,
 } from "@/types/agency"
@@ -104,6 +107,7 @@ export function DashboardPage() {
   const [clients, setClients] = useState<AgencyClient[]>([])
   const [projects, setProjects] = useState<Project[]>([])
   const [budgets, setBudgets] = useState<BudgetRow[]>([])
+  const [incidents, setIncidents] = useState<Incident[]>([])
   const [crm, setCrm] = useState<CrmSummary | null>(null)
   const [activity, setActivity] = useState<ActivityItem[]>([])
   const [loading, setLoading] = useState(true)
@@ -115,7 +119,7 @@ export function DashboardPage() {
       setLoading(true)
       setError(null)
       try {
-        const [tasksRes, apprRes, clientsRes, projectsRes, crmRes, actRes, budgetsRes] =
+        const [tasksRes, apprRes, clientsRes, projectsRes, crmRes, actRes, budgetsRes, incidentsRes] =
           await Promise.all([
             listTasks(),
             listApprovals(),
@@ -124,6 +128,7 @@ export function DashboardPage() {
             getCrmSummary(),
             listActivity(12),
             listBudgets().catch(() => ({ data: [] })),
+            listAllIncidents().catch(() => ({ data: [] })),
           ])
         if (cancelled) return
         setTasks(tasksRes.data ?? [])
@@ -133,6 +138,7 @@ export function DashboardPage() {
         setCrm(crmRes.data ?? null)
         setActivity(actRes.data ?? [])
         setBudgets(budgetsRes.data ?? [])
+        setIncidents(incidentsRes.data ?? [])
       } catch (err) {
         if (!cancelled) {
           setError(err instanceof ApiError ? err.message : "Failed to load dashboard")
@@ -180,6 +186,20 @@ export function DashboardPage() {
       ),
     [projects],
   )
+  const openIncidents = useMemo(
+    () =>
+      incidents.filter((i) =>
+        ["open", "in_progress", "escalated"].includes(String(i.status || "").toLowerCase()),
+      ),
+    [incidents],
+  )
+  const criticalIncidents = useMemo(
+    () =>
+      openIncidents.filter(
+        (i) => String(i.severity || "").toLowerCase() === "critical",
+      ),
+    [openIncidents],
+  )
 
   /** Actionable queues for the Needs attention strip (product filters) */
   const overdueTasks = useMemo(
@@ -205,12 +225,37 @@ export function DashboardPage() {
     () => budgets.filter((budget) => budget.penaltyRisk || (budget.minimumShortfall ?? 0) > 0),
     [budgets],
   )
+  const shortfallPenaltyRisks = useMemo(
+    () =>
+      budgets.filter(
+        (b) => Number(b.contractedMinimum || 0) > 0 && (b.minimumShortfall ?? 0) > 0,
+      ),
+    [budgets],
+  )
+  const urgent14DayShortfalls = useMemo(
+    () =>
+      shortfallPenaltyRisks.filter(
+        (b) =>
+          b.is14DayAlert ||
+          (b.daysUntilKickoff !== null &&
+            b.daysUntilKickoff !== undefined &&
+            b.daysUntilKickoff <= 14 &&
+            b.daysUntilKickoff >= 0),
+      ),
+    [shortfallPenaltyRisks],
+  )
   const needsAttentionCount = useMemo(() => {
     const taskIds = new Set<string>()
     for (const t of overdueTasks) taskIds.add(t.taskId)
     for (const t of blockedTasks) taskIds.add(t.taskId)
-    return taskIds.size + stuckApprovals.length + attentionClients.length + budgetRisks.length
-  }, [overdueTasks, blockedTasks, stuckApprovals, attentionClients, budgetRisks])
+    return (
+      taskIds.size +
+      stuckApprovals.length +
+      attentionClients.length +
+      shortfallPenaltyRisks.length +
+      openIncidents.length
+    )
+  }, [overdueTasks, blockedTasks, stuckApprovals, attentionClients, shortfallPenaltyRisks, openIncidents])
 
   const workloadChartData = useMemo(() => {
     const taskCounts = countBy(tasks, (task) => task.status)
@@ -295,7 +340,7 @@ export function DashboardPage() {
 
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(340px,420px)]">
         <div className="flex min-w-0 flex-col gap-4">
-          <div className="grid gap-3 sm:grid-cols-2 2xl:grid-cols-4">
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
             <StatisticsCard
               title="Open tasks"
               value={String(openTasks.length)}
@@ -307,6 +352,18 @@ export function DashboardPage() {
               value={String(pendingApprovals.length)}
               changePercentage="pending review"
               icon={<CheckSquareIcon className="size-4" />}
+            />
+            <StatisticsCard
+              title="Open incidents"
+              value={String(openIncidents.length)}
+              changePercentage={
+                criticalIncidents.length > 0
+                  ? `${criticalIncidents.length} critical`
+                  : openIncidents.length > 0
+                    ? `${openIncidents.length} in queue`
+                    : "Queue clear"
+              }
+              icon={<ShieldAlertIcon className={cn("size-4", criticalIncidents.length > 0 ? "text-destructive" : "text-amber-500")} />}
             />
             <StatisticsCard
               title="Pipeline"
@@ -409,9 +466,30 @@ export function DashboardPage() {
                     {attentionClients.length} accounts
                   </Badge>
                 ) : null}
-                {budgetRisks.length > 0 ? (
-                  <Badge variant="outline" className="font-normal">
-                    {budgetRisks.length} finance
+                {shortfallPenaltyRisks.length > 0 ? (
+                  <Badge
+                    variant="secondary"
+                    className={cn(
+                      "font-normal",
+                      urgent14DayShortfalls.length > 0
+                        ? "bg-destructive/15 text-destructive"
+                        : "bg-amber-500/15 text-amber-600 dark:text-amber-400",
+                    )}
+                  >
+                    {shortfallPenaltyRisks.length} {shortfallPenaltyRisks.length === 1 ? "penalty risk" : "penalty risks"}
+                  </Badge>
+                ) : null}
+                {openIncidents.length > 0 ? (
+                  <Badge
+                    variant="secondary"
+                    className={cn(
+                      "font-normal",
+                      criticalIncidents.length > 0
+                        ? "bg-destructive/15 text-destructive"
+                        : "bg-amber-500/15 text-amber-600 dark:text-amber-400",
+                    )}
+                  >
+                    {openIncidents.length} incidents
                   </Badge>
                 ) : null}
               </div>
@@ -422,6 +500,55 @@ export function DashboardPage() {
             <p className="text-muted-foreground text-sm">All clear for now</p>
           ) : (
             <div className="grid gap-4">
+            {openIncidents.length > 0 ? (
+              <div className="flex flex-col gap-2">
+                <div className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
+                  Open incidents ({openIncidents.length})
+                </div>
+                <ul className="flex flex-col gap-2">
+                  {openIncidents.slice(0, 5).map((inc) => (
+                    <li key={inc.id || inc.incidentId}>
+                      <Link
+                        to="/live-operations"
+                        className="hover:bg-muted/50 flex items-start justify-between gap-2 rounded-lg border px-3 py-2 text-sm transition-colors"
+                      >
+                        <div className="min-w-0">
+                          <div className="truncate font-medium">{inc.title}</div>
+                          <div className="text-muted-foreground truncate text-xs">
+                            {inc.departmentName || inc.departmentId || "Operations"}
+                            {inc.location ? ` · ${inc.location}` : ""}
+                            {inc.reportedAt
+                              ? ` · ${new Date(inc.reportedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`
+                              : ""}
+                          </div>
+                        </div>
+                        <Badge
+                          variant="secondary"
+                          className={cn(
+                            "shrink-0 capitalize",
+                            String(inc.severity || "").toLowerCase() === "critical"
+                              ? "bg-destructive/15 text-destructive"
+                              : "bg-amber-500/15 text-amber-600 dark:text-amber-400",
+                          )}
+                        >
+                          {inc.severity || inc.status}
+                        </Badge>
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+                {openIncidents.length > 5 ? (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-7 self-start text-xs"
+                    render={<Link to="/live-operations" />}
+                  >
+                    +{openIncidents.length - 5} in live queue
+                  </Button>
+                ) : null}
+              </div>
+            ) : null}
             {overdueTasks.length > 0 ? (
               <div className="flex flex-col gap-2">
                 <div className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
@@ -585,39 +712,90 @@ export function DashboardPage() {
                 ) : null}
               </div>
             ) : null}
-            {budgetRisks.length > 0 ? (
+            {shortfallPenaltyRisks.length > 0 ? (
               <div className="flex flex-col gap-2">
-                <div className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
-                  Contract risk ({budgetRisks.length})
+                <div className="flex items-center justify-between">
+                  <div className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
+                    Minimum spend penalties ({shortfallPenaltyRisks.length})
+                  </div>
+                  {urgent14DayShortfalls.length > 0 ? (
+                    <Badge variant="destructive" className="text-[10px] h-4 px-1.5 font-medium">
+                      {urgent14DayShortfalls.length} $\le 14$ days out
+                    </Badge>
+                  ) : null}
                 </div>
                 <ul className="flex flex-col gap-2">
-                  {budgetRisks.slice(0, 5).map((budget) => (
-                    <li key={budget.budgetId}>
-                      <Link
-                        to="/finance"
-                        className="hover:bg-muted/50 flex items-center justify-between gap-2 rounded-lg border px-3 py-2 text-sm transition-colors"
-                      >
-                        <div className="min-w-0">
-                          <div className="truncate font-medium">{budget.projectName}</div>
-                          <div className="text-muted-foreground truncate text-xs">
-                            Minimum {money(budget.contractedMinimum)} · spent {money(budget.spent)}
+                  {shortfallPenaltyRisks.slice(0, 5).map((budget) => {
+                    const isUrgent =
+                      budget.is14DayAlert ||
+                      (budget.daysUntilKickoff !== null &&
+                        budget.daysUntilKickoff !== undefined &&
+                        budget.daysUntilKickoff <= 14 &&
+                        budget.daysUntilKickoff >= 0)
+                    return (
+                      <li key={budget.budgetId}>
+                        <Link
+                          to="/finance"
+                          className={cn(
+                            "hover:bg-muted/50 flex items-center justify-between gap-2 rounded-lg border px-3 py-2 text-sm transition-colors",
+                            isUrgent && "border-destructive/40 bg-destructive/[0.04]",
+                          )}
+                        >
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-1.5">
+                              <span className="truncate font-medium">{budget.projectName}</span>
+                              {budget.clientName ? (
+                                <span className="text-muted-foreground text-xs truncate">
+                                  ({budget.clientName})
+                                </span>
+                              ) : null}
+                            </div>
+                            <div className="text-muted-foreground flex flex-wrap items-center gap-1.5 text-xs">
+                              <span>Min {money(budget.contractedMinimum)}</span>
+                              <span>·</span>
+                              <span>Spent {money(budget.spent)}</span>
+                              {budget.daysUntilKickoff !== null && budget.daysUntilKickoff !== undefined ? (
+                                <>
+                                  <span>·</span>
+                                  <span className={cn(
+                                    "font-medium",
+                                    isUrgent ? "text-destructive font-semibold" : "text-amber-600 dark:text-amber-400",
+                                  )}>
+                                    {budget.daysUntilKickoff <= 0
+                                      ? "Kickoff today"
+                                      : `${budget.daysUntilKickoff}d to kickoff`}
+                                  </span>
+                                </>
+                              ) : null}
+                            </div>
                           </div>
-                        </div>
-                        <Badge variant="secondary" className="bg-destructive/15 text-destructive shrink-0">
-                          {money(budget.minimumShortfall ?? 0)}
-                        </Badge>
-                      </Link>
-                    </li>
-                  ))}
+                          <div className="flex flex-col items-end shrink-0 gap-0.5">
+                            <Badge
+                              variant="secondary"
+                              className={cn(
+                                "shrink-0 font-semibold",
+                                isUrgent
+                                  ? "bg-destructive/15 text-destructive"
+                                  : "bg-amber-500/15 text-amber-600 dark:text-amber-400",
+                              )}
+                            >
+                              -{money(budget.minimumShortfall ?? 0)}
+                            </Badge>
+                            <span className="text-[10px] text-muted-foreground">shortfall</span>
+                          </div>
+                        </Link>
+                      </li>
+                    )
+                  })}
                 </ul>
-                {budgetRisks.length > 5 ? (
+                {shortfallPenaltyRisks.length > 5 ? (
                   <Button
                     size="sm"
                     variant="ghost"
                     className="h-7 self-start text-xs"
                     render={<Link to="/finance" />}
                   >
-                    +{budgetRisks.length - 5} in finance
+                    +{shortfallPenaltyRisks.length - 5} in finance
                   </Button>
                 ) : null}
               </div>
@@ -803,7 +981,7 @@ export function DashboardPage() {
         </Card>
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="grid gap-4 xl:grid-cols-3">
         <Card className="p-4">
           <div className="mb-3 flex items-center justify-between">
             <h2 className="flex items-center gap-2 text-sm font-semibold">
@@ -833,6 +1011,59 @@ export function DashboardPage() {
             ))}
             {activeProjects.length === 0 ? (
               <p className="text-muted-foreground text-sm">No active projects yet.</p>
+            ) : null}
+          </ul>
+        </Card>
+
+        <Card className="p-4">
+          <div className="mb-3 flex items-center justify-between">
+            <h2 className="flex items-center gap-2 text-sm font-semibold">
+              <ShieldAlertIcon className="size-4 text-amber-500" />
+              Incident logs & queue
+            </h2>
+            <Button size="sm" variant="ghost" className="h-7 text-xs" render={<Link to="/live-operations" />}>
+              Live Ops
+            </Button>
+          </div>
+          <ul className="flex flex-col gap-2">
+            {incidents.slice(0, 6).map((inc) => (
+              <li key={inc.id || inc.incidentId}>
+                <Link
+                  to="/live-operations"
+                  className="hover:bg-muted/50 flex items-start justify-between gap-2 rounded-lg border px-3 py-2 text-sm transition-colors"
+                >
+                  <div className="min-w-0">
+                    <div className="truncate font-medium">{inc.title}</div>
+                    <div className="text-muted-foreground truncate text-xs">
+                      {inc.departmentName || inc.departmentId || "Operations"}
+                      {inc.reportedAt
+                        ? ` · ${new Date(inc.reportedAt).toLocaleDateString()}`
+                        : ""}
+                    </div>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-1">
+                    <Badge
+                      variant="secondary"
+                      className={cn(
+                        "capitalize text-[11px]",
+                        String(inc.severity || "").toLowerCase() === "critical"
+                          ? "bg-destructive/15 text-destructive"
+                          : String(inc.severity || "").toLowerCase() === "warning"
+                            ? "bg-amber-500/15 text-amber-600 dark:text-amber-400"
+                            : "bg-muted text-muted-foreground",
+                      )}
+                    >
+                      {inc.severity || "info"}
+                    </Badge>
+                    <Badge variant="outline" className="capitalize text-[11px]">
+                      {inc.status}
+                    </Badge>
+                  </div>
+                </Link>
+              </li>
+            ))}
+            {incidents.length === 0 ? (
+              <p className="text-muted-foreground text-sm">No incidents reported.</p>
             ) : null}
           </ul>
         </Card>

@@ -245,6 +245,25 @@ export async function listIncidents(eventId: string) {
   )
 }
 
+export async function listAllIncidents(params?: {
+  status?: string
+  severity?: string
+  departmentId?: string
+  category?: string
+  eventId?: string
+}) {
+  const query = new URLSearchParams()
+  if (params?.status) query.set("status", params.status)
+  if (params?.severity) query.set("severity", params.severity)
+  if (params?.departmentId) query.set("departmentId", params.departmentId)
+  if (params?.category) query.set("category", params.category)
+  if (params?.eventId) query.set("eventId", params.eventId)
+  const qs = query.toString() ? `?${query.toString()}` : ""
+  return apiRequest<ApiEnvelope<Incident[]>>(
+    `/api/v1/agency/incidents/incidents${qs}`,
+  )
+}
+
 export async function resolveIncident(
   incidentId: string,
   resolution: string,

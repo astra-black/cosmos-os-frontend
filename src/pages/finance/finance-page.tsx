@@ -1,5 +1,15 @@
-import { useEffect, useState } from "react"
-import { AlertTriangleIcon, PencilIcon, PlusIcon, RefreshCwIcon, Trash2Icon } from "lucide-react"
+import { useEffect, useMemo, useState } from "react"
+import {
+  AlertCircleIcon,
+  AlertTriangleIcon,
+  CheckCircle2Icon,
+  PencilIcon,
+  PlusIcon,
+  RefreshCwIcon,
+  ShieldAlertIcon,
+  Trash2Icon,
+  TrendingDownIcon,
+} from "lucide-react"
 import { toast } from "sonner"
 import { Link } from "react-router-dom"
 
@@ -86,6 +96,37 @@ export function FinancePage() {
   const [showTimeForm, setShowTimeForm] = useState(false)
   const [pendingItem, setPendingItem] = useState<string | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<{ type: "budget" | "time"; id: string; label: string } | null>(null)
+
+  const contractMinimumBudgets = useMemo(
+    () => budgets.filter((b) => Number(b.contractedMinimum || 0) > 0),
+    [budgets],
+  )
+  const totalContractCommitments = useMemo(
+    () => contractMinimumBudgets.reduce((sum, b) => sum + Number(b.contractedMinimum || 0), 0),
+    [contractMinimumBudgets],
+  )
+  const totalContractSpent = useMemo(
+    () =>
+      contractMinimumBudgets.reduce(
+        (sum, b) => sum + Math.min(Number(b.spent || 0), Number(b.contractedMinimum || 0)),
+        0,
+      ),
+    [contractMinimumBudgets],
+  )
+  const totalShortfallExposure = useMemo(
+    () => contractMinimumBudgets.reduce((sum, b) => sum + Number(b.minimumShortfall || 0), 0),
+    [contractMinimumBudgets],
+  )
+  const highRiskContractsCount = useMemo(
+    () =>
+      contractMinimumBudgets.filter(
+        (b) =>
+          b.penaltyRisk &&
+          Number(b.contractedMinimum || 0) > 0 &&
+          Number(b.spent || 0) / Number(b.contractedMinimum || 0) < 0.65,
+      ).length,
+    [contractMinimumBudgets],
+  )
 
   async function reload() {
     setError(null)
@@ -337,6 +378,204 @@ export function FinancePage() {
           </div>
         </Card>
       </div>
+
+      {/* Contract Minimums & Attrition Monitor */}
+      <Card className="flex min-w-0 flex-col gap-4 p-4 sm:p-5 border-amber-500/30 bg-gradient-to-br from-card via-card to-amber-500/[0.02] shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <div className="flex items-center gap-2">
+              <h2 className="text-base sm:text-lg font-semibold tracking-tight">Contract Minimums & Attrition Monitor</h2>
+              {highRiskContractsCount > 0 ? (
+                <Badge variant="destructive" className="gap-1 font-semibold text-xs">
+                  <ShieldAlertIcon className="size-3" />
+                  {highRiskContractsCount} Attrition Risk
+                </Badge>
+              ) : contractMinimumBudgets.length > 0 ? (
+                <Badge variant="secondary" className="gap-1 border-emerald-500/30 text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 text-xs">
+                  <CheckCircle2Icon className="size-3" />
+                  Commitments Tracked
+                </Badge>
+              ) : null}
+            </div>
+            <p className="text-muted-foreground text-xs mt-0.5">
+              Live tracking of hotel, venue, and production vendor minimum commitments, unfulfilled spend exposure, and attrition penalties.
+            </p>
+          </div>
+          {canWrite ? (
+            <Button size="sm" onClick={() => setShowBudgetForm(true)} className="gap-1.5">
+              <PlusIcon className="size-3.5" />
+              Add Commitment
+            </Button>
+          ) : null}
+        </div>
+
+        {/* Aggregate KPI Strip */}
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          <div className="rounded-xl border bg-muted/30 p-3">
+            <div className="text-muted-foreground text-[11px] font-medium">Total Commitments</div>
+            <div className="mt-1 text-lg sm:text-xl font-bold tabular-nums">
+              {money(totalContractCommitments)}
+            </div>
+            <div className="text-muted-foreground text-[10px] mt-0.5">
+              {contractMinimumBudgets.length} active contract{contractMinimumBudgets.length === 1 ? "" : "s"}
+            </div>
+          </div>
+          <div className="rounded-xl border bg-muted/30 p-3">
+            <div className="text-muted-foreground text-[11px] font-medium">Credited Spend</div>
+            <div className="mt-1 text-lg sm:text-xl font-bold tabular-nums text-emerald-600 dark:text-emerald-400">
+              {money(totalContractSpent)}
+            </div>
+            <div className="text-muted-foreground text-[10px] mt-0.5">
+              {totalContractCommitments > 0
+                ? `${Math.round((totalContractSpent / totalContractCommitments) * 100)}% covered`
+                : "0%"}
+            </div>
+          </div>
+          <div className="rounded-xl border bg-muted/30 p-3">
+            <div className="text-muted-foreground text-[11px] font-medium">Shortfall Exposure</div>
+            <div className={cn(
+              "mt-1 text-lg sm:text-xl font-bold tabular-nums",
+              totalShortfallExposure > 0 ? "text-destructive" : "text-emerald-600 dark:text-emerald-400",
+            )}>
+              {totalShortfallExposure > 0 ? money(totalShortfallExposure) : "$0 (Covered)"}
+            </div>
+            <div className="text-muted-foreground text-[10px] mt-0.5">
+              {totalShortfallExposure > 0 ? "Unfulfilled penalty risk" : "Zero penalty exposure"}
+            </div>
+          </div>
+          <div className="rounded-xl border bg-muted/30 p-3">
+            <div className="text-muted-foreground text-[11px] font-medium">Fulfillment Status</div>
+            <div className="mt-1 text-lg sm:text-xl font-bold tabular-nums">
+              {highRiskContractsCount > 0 ? `${highRiskContractsCount} Critical` : "Healthy"}
+            </div>
+            <div className="text-muted-foreground text-[10px] mt-0.5">
+              {highRiskContractsCount > 0 ? "Requires mitigation" : "All commitments pacing well"}
+            </div>
+          </div>
+        </div>
+
+        {/* Contract Minimums Breakdown List */}
+        {contractMinimumBudgets.length === 0 ? (
+          <div className="rounded-xl border border-dashed p-6 text-center">
+            <p className="text-sm font-medium text-foreground">No contracted minimums configured</p>
+            <p className="text-xs text-muted-foreground mt-1">
+              Add a contracted minimum to any project or event budget to monitor attrition risks and unspent commitment shortfalls.
+            </p>
+          </div>
+        ) : (
+          <div className="grid gap-3 sm:grid-cols-2">
+            {contractMinimumBudgets.map((b) => {
+              const minVal = Number(b.contractedMinimum || 0)
+              const spentVal = Number(b.spent || 0)
+              const shortfallVal = Number(b.minimumShortfall || 0)
+              const coveredPct = minVal > 0 ? Math.min(100, Math.round((spentVal / minVal) * 100)) : 0
+              const isHighRisk = b.penaltyRisk && minVal > 0 && spentVal / minVal < 0.65
+              const isWatch = b.penaltyRisk && !isHighRisk
+
+              return (
+                <div
+                  key={b.budgetId}
+                  className={cn(
+                    "flex flex-col justify-between gap-3 rounded-xl border p-4 transition-all bg-card/60",
+                    isHighRisk
+                      ? "border-destructive/40 bg-destructive/[0.03] shadow-xs ring-1 ring-destructive/20"
+                      : isWatch
+                        ? "border-amber-500/40 bg-amber-500/[0.02]"
+                        : "border-border/80",
+                  )}
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className="font-semibold text-sm truncate">{b.projectName}</div>
+                      <div className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1.5">
+                        <span className="font-mono text-[11px] font-medium">{b.currency}</span>
+                        <span>·</span>
+                        <span>Total Planned: {money(b.planned)}</span>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      {isHighRisk ? (
+                        <Badge variant="destructive" className="text-[10px] uppercase font-bold px-2 py-0.5 gap-1">
+                          <AlertCircleIcon className="size-3" />
+                          High Risk ({coveredPct}%)
+                        </Badge>
+                      ) : isWatch ? (
+                        <Badge variant="secondary" className="border-amber-500/40 text-amber-600 dark:text-amber-400 bg-amber-500/10 text-[10px] uppercase font-bold px-2 py-0.5">
+                          Watch ({coveredPct}%)
+                        </Badge>
+                      ) : (
+                        <Badge variant="secondary" className="border-emerald-500/30 text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 text-[10px] uppercase font-bold px-2 py-0.5 gap-1">
+                          <CheckCircle2Icon className="size-3" />
+                          Covered (100%)
+                        </Badge>
+                      )}
+
+                      {canWrite && (
+                        <Button
+                          size="icon-xs"
+                          variant="ghost"
+                          onClick={() => {
+                            setEditingBudgetId(b.budgetId)
+                            setEditingPlanned(String(b.planned))
+                            setEditingContractedMinimum(String(b.contractedMinimum ?? 0))
+                            setEditingCurrency(b.currency)
+                          }}
+                          title="Edit Contract Minimum"
+                        >
+                          <PencilIcon className="size-3" />
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Dual-Tone Commitment Progress Track */}
+                  <div className="space-y-1.5">
+                    <div className="flex justify-between text-xs font-mono">
+                      <span className="text-muted-foreground">Fulfillment</span>
+                      <span className="font-bold tabular-nums">{coveredPct}% of {money(minVal)}</span>
+                    </div>
+                    <div className="relative h-2.5 w-full rounded-full bg-muted overflow-hidden">
+                      <div
+                        className={cn(
+                          "h-full rounded-full transition-all duration-500",
+                          isHighRisk
+                            ? "bg-destructive"
+                            : isWatch
+                              ? "bg-amber-500"
+                              : "bg-emerald-500",
+                        )}
+                        style={{ width: `${coveredPct}%` }}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Financial Breakdown Strip */}
+                  <div className="grid grid-cols-3 gap-2 rounded-lg bg-muted/40 p-2 text-center text-xs font-mono">
+                    <div>
+                      <div className="text-[10px] text-muted-foreground uppercase font-sans">Spent</div>
+                      <div className="font-semibold tabular-nums mt-0.5">{money(spentVal)}</div>
+                    </div>
+                    <div>
+                      <div className="text-[10px] text-muted-foreground uppercase font-sans">Minimum</div>
+                      <div className="font-semibold tabular-nums mt-0.5">{money(minVal)}</div>
+                    </div>
+                    <div>
+                      <div className="text-[10px] text-muted-foreground uppercase font-sans">Shortfall</div>
+                      <div className={cn(
+                        "font-bold tabular-nums mt-0.5",
+                        shortfallVal > 0 ? "text-destructive" : "text-emerald-600 dark:text-emerald-400",
+                      )}>
+                        {shortfallVal > 0 ? `-${money(shortfallVal)}` : "Covered"}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </Card>
 
       <Card className="flex min-w-0 flex-col gap-3 p-4">
         <div>

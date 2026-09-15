@@ -35,12 +35,16 @@ export type BudgetRow = {
   budgetId: string
   projectId: string
   projectName: string
+  clientName?: string | null
   planned: number
   spent: number
   contractedMinimum?: number
   remaining: number
   utilization: number
   minimumShortfall?: number
+  pacingPct?: number
+  daysUntilKickoff?: number | null
+  is14DayAlert?: boolean
   penaltyRisk?: boolean
   penaltyRiskLevel?: "none" | "watch" | "high"
   currency: string

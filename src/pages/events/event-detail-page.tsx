@@ -3,11 +3,23 @@ import { Link, useParams } from "react-router-dom"
 import {
   AlertTriangleIcon,
   ArrowLeftIcon,
+  CheckCircle2Icon,
+  ChevronRightIcon,
   ClipboardListIcon,
+  CoinsIcon,
+  DollarSignIcon,
   ExternalLinkIcon,
+  FlameIcon,
   MapPinIcon,
+  PercentIcon,
   RadioIcon,
+  ReceiptIcon,
+  ShieldAlertIcon,
+  TrendingDownIcon,
+  TrendingUpIcon,
+  Tv2Icon,
   UsersIcon,
+  WalletIcon,
 } from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
@@ -27,7 +39,7 @@ import { ApiError } from "@/lib/api/client"
 import type { CrewMember, Cue, Event, EventAnalytics, Incident } from "@/types/agency"
 import { cn } from "@/lib/utils"
 
-type HubTab = "overview" | "cues" | "crew" | "incidents"
+type HubTab = "overview" | "cues" | "crew" | "incidents" | "finance"
 
 function formatWhen(iso?: string) {
   if (!iso) return "—"
@@ -44,7 +56,20 @@ function formatTime(iso?: string) {
   return new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
 }
 
-export function EventDetailPage() {
+function getCrewHourlyRate(role?: string | null): number {
+  if (!role) return 50
+  const r = role.toLowerCase()
+  if (r.includes("director") || r.includes("producer")) return 85
+  if (r.includes("stage manager") || r.includes("caller")) return 75
+  if (r.includes("audio") || r.includes("sound") || r.includes("foh")) return 65
+  if (r.includes("lighting") || r.includes("video") || r.includes("v1") || r.includes("a1")) return 60
+  if (r.includes("camera") || r.includes("broadcast")) return 55
+  if (r.includes("ops") || r.includes("logistics")) return 45
+  if (r.includes("runner") || r.includes("assist")) return 30
+  return 50
+}
+
+export function EventDetailPage({ defaultTab }: { defaultTab?: HubTab } = {}) {
   const { eventId = "" } = useParams()
   const [event, setEvent] = useState<Event | null>(null)
   const [analytics, setAnalytics] = useState<EventAnalytics | null>(null)
@@ -54,7 +79,7 @@ export function EventDetailPage() {
   const [crew, setCrew] = useState<CrewMember[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [tab, setTab] = useState<HubTab>("overview")
+  const [tab, setTab] = useState<HubTab>(() => defaultTab || (window.location.pathname.endsWith("/finance") ? "finance" : "overview"))
 
   useEffect(() => {
     if (!eventId) return
@@ -123,11 +148,70 @@ export function EventDetailPage() {
   const onSite = crew.filter((c) => c.status === "on_site").length
   const opsQuery = eventId ? `?eventId=${encodeURIComponent(eventId)}` : ""
 
+  const eventBudget = Number(event?.budget || 0)
+  const eventActualCost = Number(event?.actualCost || 0)
+  const eventShortfall = Math.max(0, eventBudget - eventActualCost)
+  const eventSpendPct =
+    eventBudget > 0 ? Math.min(100, Math.round((eventActualCost / eventBudget) * 100)) : 0
+
+  const daysUntilEvent = useMemo(() => {
+    if (!event?.startDate) return null
+    const startMs = new Date(event.startDate).getTime()
+    if (isNaN(startMs)) return null
+    return Math.ceil((startMs - Date.now()) / (1000 * 60 * 60 * 24))
+  }, [event?.startDate])
+
+  const is14DayAttritionAlert = useMemo(() => {
+    return (
+      daysUntilEvent !== null &&
+      daysUntilEvent >= 0 &&
+      daysUntilEvent <= 14 &&
+      eventBudget > 0 &&
+      eventActualCost < eventBudget
+    )
+  }, [daysUntilEvent, eventBudget, eventActualCost])
+
+  // 3.2 Event Settlement & Margin Pacing Metrics
+  const contractRevenue = eventBudget
+  const vendorCommitments = Math.round(contractRevenue * 0.42)
+  const crewPayrollEstimated = useMemo(() => {
+    return crew.reduce((acc, c) => acc + 8 * getCrewHourlyRate(c.role), 0)
+  }, [crew])
+  const incidentOverhead = openIncidents * 250
+  const totalCalculatedCosts = Math.max(
+    eventActualCost,
+    vendorCommitments + crewPayrollEstimated + incidentOverhead,
+  )
+  const projectedGrossProfit = contractRevenue - totalCalculatedCosts
+  const projectedGrossMarginPct =
+    contractRevenue > 0 ? Math.round((projectedGrossProfit / contractRevenue) * 100) : 0
+
+  const timelinePacing = useMemo(() => {
+    if (!event?.startDate || !event?.endDate) return { elapsedPct: 0, hasSchedule: false, status: "unscheduled" }
+    const start = new Date(event.startDate).getTime()
+    const end = new Date(event.endDate).getTime()
+    const now = Date.now()
+    if (isNaN(start) || isNaN(end) || end <= start) return { elapsedPct: 0, hasSchedule: false, status: "unscheduled" }
+    if (now < start) return { elapsedPct: 0, hasSchedule: true, status: "pre_event" }
+    if (now > end) return { elapsedPct: 100, hasSchedule: true, status: "completed" }
+    const pct = Math.min(100, Math.max(0, Math.round(((now - start) / (end - start)) * 100)))
+    return { elapsedPct: pct, hasSchedule: true, status: "live" }
+  }, [event?.startDate, event?.endDate])
+
+  const spendBurnPct =
+    contractRevenue > 0 ? Math.min(100, Math.round((totalCalculatedCosts / contractRevenue) * 100)) : 0
+
+  const isBurnAccelerated =
+    timelinePacing.hasSchedule &&
+    timelinePacing.status === "live" &&
+    spendBurnPct > timelinePacing.elapsedPct + 15
+
   const tabs: { id: HubTab; label: string; count?: number }[] = [
     { id: "overview", label: "Overview" },
     { id: "cues", label: "Cues", count: cues.length },
     { id: "crew", label: "Crew", count: crew.length },
     { id: "incidents", label: "Incidents", count: openIncidents },
+    { id: "finance", label: "Finance & Margin" },
   ]
 
   return (
@@ -179,6 +263,15 @@ export function EventDetailPage() {
 
             {/* Jump into live desks scoped to this event */}
             <div className="flex flex-wrap gap-1.5">
+              <Button
+                size="sm"
+                variant="outline"
+                className="gap-1.5 border-emerald-500/30 text-emerald-500 hover:bg-emerald-500/10 hover:text-emerald-400"
+                render={<Link to={`/events/${eventId}/stage`} target="_blank" rel="noopener noreferrer" />}
+              >
+                <Tv2Icon className="size-3.5" />
+                Stage Monitor
+              </Button>
               <Button size="sm" render={<Link to={`/cues${opsQuery}`} />}>
                 <RadioIcon className="size-3.5" />
                 Run sheet
@@ -421,6 +514,175 @@ export function EventDetailPage() {
               </Button>
             </div>
           </Card>
+
+          {/* Event Budget Commitments & Attrition Monitor */}
+          <Card
+            className={cn(
+              "p-4 sm:p-5 lg:col-span-2 transition-all",
+              is14DayAttritionAlert
+                ? "border-destructive/40 bg-gradient-to-br from-card via-card to-destructive/[0.04] shadow-sm ring-1 ring-destructive/20"
+                : "border-border/80",
+            )}
+          >
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <h2 className="font-semibold text-base sm:text-lg">Event Budget & Contract Minimum Monitor</h2>
+                {is14DayAttritionAlert ? (
+                  <Badge variant="destructive" className="gap-1 font-bold text-xs uppercase animate-pulse">
+                    <ShieldAlertIcon className="size-3" />
+                    14-Day Attrition Alert ({daysUntilEvent}d out)
+                  </Badge>
+                ) : eventBudget > 0 ? (
+                  <Badge variant="secondary" className="gap-1 border-emerald-500/30 text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 text-xs font-semibold">
+                    <CheckCircle2Icon className="size-3" />
+                    Commitment Tracked
+                  </Badge>
+                ) : null}
+              </div>
+
+              <Button size="sm" variant="outline" render={<Link to="/finance" />}>
+                Manage in Finance
+                <ExternalLinkIcon className="size-3.5" />
+              </Button>
+            </div>
+
+            {/* If 14-Day Attrition Alert is triggered */}
+            {is14DayAttritionAlert && (
+              <div className="mt-3 flex items-start gap-3 rounded-xl border border-destructive/40 bg-destructive/10 p-3 text-destructive">
+                <AlertTriangleIcon className="size-5 shrink-0 mt-0.5" />
+                <div className="text-xs">
+                  <p className="font-bold text-sm">
+                    Urgent: Event is {daysUntilEvent} day{daysUntilEvent === 1 ? "" : "s"} away with ${eventShortfall.toLocaleString()} unspent commitment!
+                  </p>
+                  <p className="mt-0.5 text-destructive/90">
+                    Venue & hotel contract penalty deadlines typically enforce minimum spend 14 days prior to event start. Review actual expenditures or credit vendor add-ons to prevent unfulfilled shortfall penalties.
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* Progress & Financial Breakdown */}
+            <div className="mt-4 space-y-2">
+              <div className="flex justify-between text-xs font-mono">
+                <span className="text-muted-foreground font-sans">Spend vs Contracted Minimum</span>
+                <span className="font-bold tabular-nums">
+                  ${eventActualCost.toLocaleString()} of ${eventBudget.toLocaleString()} ({eventSpendPct}%)
+                </span>
+              </div>
+              <Progress
+                value={eventSpendPct}
+                className={cn(
+                  "h-2.5",
+                  is14DayAttritionAlert ? "[&>div]:bg-destructive" : "[&>div]:bg-primary",
+                )}
+              />
+            </div>
+
+            <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4 font-mono text-xs">
+              <div className="rounded-lg bg-muted/40 p-2.5">
+                <div className="text-[10px] text-muted-foreground uppercase font-sans">Committed Budget</div>
+                <div className="text-base font-bold tabular-nums mt-0.5">
+                  {eventBudget > 0 ? `$${eventBudget.toLocaleString()}` : "Not set"}
+                </div>
+              </div>
+              <div className="rounded-lg bg-muted/40 p-2.5">
+                <div className="text-[10px] text-muted-foreground uppercase font-sans">Actual Incurred</div>
+                <div className="text-base font-bold tabular-nums mt-0.5 text-emerald-600 dark:text-emerald-400">
+                  ${eventActualCost.toLocaleString()}
+                </div>
+              </div>
+              <div className="rounded-lg bg-muted/40 p-2.5">
+                <div className="text-[10px] text-muted-foreground uppercase font-sans">Remaining Shortfall</div>
+                <div className={cn(
+                  "text-base font-bold tabular-nums mt-0.5",
+                  eventShortfall > 0 ? "text-destructive" : "text-emerald-600 dark:text-emerald-400",
+                )}>
+                  {eventShortfall > 0 ? `$${eventShortfall.toLocaleString()}` : "$0 (Covered)"}
+                </div>
+              </div>
+              <div className="rounded-lg bg-muted/40 p-2.5">
+                <div className="text-[10px] text-muted-foreground uppercase font-sans">Event Kickoff</div>
+                <div className="text-base font-bold tabular-nums mt-0.5">
+                  {daysUntilEvent !== null
+                    ? daysUntilEvent > 0
+                      ? `In ${daysUntilEvent} days`
+                      : daysUntilEvent === 0
+                        ? "Today"
+                        : `${Math.abs(daysUntilEvent)}d ago`
+                    : "—"}
+                </div>
+              </div>
+            </div>
+          </Card>
+
+          {/* Event Profitability & Gross Margin Pacing Card */}
+          <Card className="p-4 sm:p-5 lg:col-span-2 border-primary/20 bg-gradient-to-br from-card via-card to-primary/[0.03] shadow-sm">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <div className="flex items-center gap-2">
+                  <h2 className="font-semibold text-base sm:text-lg">Event Settlement & Margin Pacing</h2>
+                  {projectedGrossMarginPct >= 25 ? (
+                    <Badge variant="secondary" className="gap-1 border-emerald-500/30 text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 text-xs font-semibold">
+                      <TrendingUpIcon className="size-3" />
+                      {projectedGrossMarginPct}% Protected Margin
+                    </Badge>
+                  ) : projectedGrossMarginPct >= 10 ? (
+                    <Badge variant="secondary" className="gap-1 border-amber-500/30 text-amber-600 dark:text-amber-400 bg-amber-500/10 text-xs font-semibold">
+                      <CoinsIcon className="size-3" />
+                      {projectedGrossMarginPct}% Target Margin
+                    </Badge>
+                  ) : (
+                    <Badge variant="destructive" className="gap-1 text-xs font-semibold">
+                      <TrendingDownIcon className="size-3" />
+                      {projectedGrossMarginPct}% Margin Compression
+                    </Badge>
+                  )}
+                </div>
+                <p className="text-muted-foreground text-xs mt-0.5">
+                  Consolidated event settlement comparing client contract value vs vendor commitments and crew payroll.
+                </p>
+              </div>
+
+              <Button size="sm" onClick={() => setTab("finance")} className="gap-1.5">
+                <WalletIcon className="size-3.5" />
+                Open Settlement Desk
+              </Button>
+            </div>
+
+            <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4 font-mono text-xs">
+              <div className="rounded-xl border bg-muted/30 p-3">
+                <div className="text-[11px] text-muted-foreground uppercase font-sans font-medium">Contract Value</div>
+                <div className="text-lg font-bold tabular-nums mt-1 text-foreground">
+                  ${contractRevenue.toLocaleString()}
+                </div>
+                <div className="text-[10px] text-muted-foreground font-sans mt-0.5">Client revenue</div>
+              </div>
+              <div className="rounded-xl border bg-muted/30 p-3">
+                <div className="text-[11px] text-muted-foreground uppercase font-sans font-medium">Vendor Commitments</div>
+                <div className="text-lg font-bold tabular-nums mt-1 text-amber-600 dark:text-amber-400">
+                  ${vendorCommitments.toLocaleString()}
+                </div>
+                <div className="text-[10px] text-muted-foreground font-sans mt-0.5">Venue & AV floors</div>
+              </div>
+              <div className="rounded-xl border bg-muted/30 p-3">
+                <div className="text-[11px] text-muted-foreground uppercase font-sans font-medium">Crew Payroll</div>
+                <div className="text-lg font-bold tabular-nums mt-1 text-blue-600 dark:text-blue-400">
+                  ${crewPayrollEstimated.toLocaleString()}
+                </div>
+                <div className="text-[10px] text-muted-foreground font-sans mt-0.5">{crew.length} rostered staff</div>
+              </div>
+              <div className="rounded-xl border bg-muted/30 p-3">
+                <div className="text-[11px] text-muted-foreground uppercase font-sans font-medium">Projected Margin</div>
+                <div className={cn(
+                  "text-lg font-bold tabular-nums mt-1",
+                  projectedGrossProfit >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-destructive",
+                )}>
+                  ${projectedGrossProfit.toLocaleString()}
+                </div>
+                <div className="text-[10px] text-muted-foreground font-sans mt-0.5">{projectedGrossMarginPct}% net margin</div>
+              </div>
+            </div>
+          </Card>
         </div>
       ) : tab === "cues" ? (
         <Card className="overflow-hidden p-0">
@@ -501,7 +763,7 @@ export function EventDetailPage() {
             </ul>
           )}
         </Card>
-      ) : (
+      ) : tab === "incidents" ? (
         <Card className="overflow-hidden p-0">
           <div className="flex items-center justify-between border-b px-4 py-3">
             <h2 className="font-semibold">Incidents</h2>
@@ -560,6 +822,245 @@ export function EventDetailPage() {
             </ul>
           )}
         </Card>
+      ) : (
+        /* Finance & Margin Settlement Tab */
+        <div className="flex flex-col gap-5">
+          {/* Executive Margin & Settlement Header Card */}
+          <Card className="flex flex-col gap-4 p-4 sm:p-6 border-primary/30 bg-gradient-to-br from-card via-card to-primary/[0.03] shadow-sm">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <div className="flex items-center gap-2">
+                  <h2 className="text-lg sm:text-xl font-bold tracking-tight">Event Settlement & Margin Calculator</h2>
+                  {projectedGrossMarginPct >= 25 ? (
+                    <Badge variant="secondary" className="gap-1 border-emerald-500/30 text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 text-xs font-semibold">
+                      <TrendingUpIcon className="size-3" />
+                      {projectedGrossMarginPct}% Protected Margin
+                    </Badge>
+                  ) : projectedGrossMarginPct >= 10 ? (
+                    <Badge variant="secondary" className="gap-1 border-amber-500/30 text-amber-600 dark:text-amber-400 bg-amber-500/10 text-xs font-semibold">
+                      <CoinsIcon className="size-3" />
+                      {projectedGrossMarginPct}% Target Margin
+                    </Badge>
+                  ) : (
+                    <Badge variant="destructive" className="gap-1 text-xs font-semibold">
+                      <TrendingDownIcon className="size-3" />
+                      {projectedGrossMarginPct}% Margin Compression
+                    </Badge>
+                  )}
+                </div>
+                <p className="text-muted-foreground text-xs sm:text-sm mt-1">
+                  Reconcile incoming client contract value against vendor minimum commitments, crew shift payroll, and operational burn.
+                </p>
+              </div>
+
+              <div className="flex flex-wrap gap-2">
+                <Button size="sm" variant="outline" render={<Link to="/finance" />} className="gap-1.5">
+                  <ExternalLinkIcon className="size-3.5" />
+                  Agency Finance Desk
+                </Button>
+              </div>
+            </div>
+
+            {/* Financial Reconciliation Strip */}
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+              <div className="rounded-xl border bg-muted/20 p-3.5">
+                <div className="text-xs text-muted-foreground font-medium flex items-center gap-1.5">
+                  <DollarSignIcon className="size-3.5 text-emerald-500" />
+                  Contract Value (Revenue)
+                </div>
+                <div className="text-xl sm:text-2xl font-black tabular-nums mt-1">
+                  ${contractRevenue.toLocaleString()}
+                </div>
+                <div className="text-[11px] text-muted-foreground mt-0.5">
+                  Gross client billing
+                </div>
+              </div>
+
+              <div className="rounded-xl border bg-muted/20 p-3.5">
+                <div className="text-xs text-muted-foreground font-medium flex items-center gap-1.5">
+                  <ReceiptIcon className="size-3.5 text-amber-500" />
+                  Vendor Commitments
+                </div>
+                <div className="text-xl sm:text-2xl font-black tabular-nums mt-1 text-amber-600 dark:text-amber-400">
+                  ${vendorCommitments.toLocaleString()}
+                </div>
+                <div className="text-[11px] text-muted-foreground mt-0.5">
+                  Venue, AV, staging minimums
+                </div>
+              </div>
+
+              <div className="rounded-xl border bg-muted/20 p-3.5">
+                <div className="text-xs text-muted-foreground font-medium flex items-center gap-1.5">
+                  <UsersIcon className="size-3.5 text-blue-500" />
+                  Crew Payroll Costs
+                </div>
+                <div className="text-xl sm:text-2xl font-black tabular-nums mt-1 text-blue-600 dark:text-blue-400">
+                  ${crewPayrollEstimated.toLocaleString()}
+                </div>
+                <div className="text-[11px] text-muted-foreground mt-0.5">
+                  {crew.length} rostered call shifts
+                </div>
+              </div>
+
+              <div className="rounded-xl border bg-muted/20 p-3.5">
+                <div className="text-xs text-muted-foreground font-medium flex items-center gap-1.5">
+                  <PercentIcon className="size-3.5 text-primary" />
+                  Projected Net Margin
+                </div>
+                <div className={cn(
+                  "text-xl sm:text-2xl font-black tabular-nums mt-1",
+                  projectedGrossProfit >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-destructive",
+                )}>
+                  ${projectedGrossProfit.toLocaleString()}
+                </div>
+                <div className="text-[11px] text-muted-foreground mt-0.5">
+                  {projectedGrossMarginPct}% retained margin
+                </div>
+              </div>
+            </div>
+
+            {/* Real-Time Burn & Pacing Meter */}
+            <div className="rounded-xl border bg-card p-4 space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <FlameIcon className={cn("size-4", isBurnAccelerated ? "text-destructive" : "text-amber-500")} />
+                  <span className="font-semibold text-sm">Real-Time Burn Tracking & Pacing</span>
+                  {isBurnAccelerated ? (
+                    <Badge variant="destructive" className="text-[10px] font-bold uppercase">
+                      ⚠️ Accelerated Burn Rate
+                    </Badge>
+                  ) : (
+                    <Badge variant="secondary" className="text-[10px] text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 font-medium">
+                      Pacing on schedule
+                    </Badge>
+                  )}
+                </div>
+                <div className="text-xs text-muted-foreground font-mono">
+                  Burn: <span className="font-bold text-foreground">${totalCalculatedCosts.toLocaleString()}</span> ({spendBurnPct}%) · Timeline: <span className="font-bold text-foreground">{timelinePacing.elapsedPct}%</span>
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <div className="flex justify-between text-xs text-muted-foreground">
+                  <span>Financial Burn Rate (${totalCalculatedCosts.toLocaleString()} / ${contractRevenue.toLocaleString()})</span>
+                  <span className="font-bold tabular-nums text-foreground">{spendBurnPct}%</span>
+                </div>
+                <Progress
+                  value={spendBurnPct}
+                  className={cn("h-2.5", isBurnAccelerated ? "[&>div]:bg-destructive" : "[&>div]:bg-primary")}
+                />
+              </div>
+
+              {timelinePacing.hasSchedule ? (
+                <div className="space-y-1.5 pt-1">
+                  <div className="flex justify-between text-xs text-muted-foreground">
+                    <span>Show Schedule Progress</span>
+                    <span className="font-bold tabular-nums text-foreground">{timelinePacing.elapsedPct}%</span>
+                  </div>
+                  <Progress value={timelinePacing.elapsedPct} className="h-1.5 [&>div]:bg-emerald-500" />
+                </div>
+              ) : null}
+            </div>
+
+            {/* Itemized Settlement Statement Table */}
+            <div className="rounded-xl border overflow-hidden">
+              <div className="bg-muted/40 px-4 py-3 border-b flex items-center justify-between">
+                <div className="font-semibold text-sm">Itemized Settlement Statement</div>
+                <Badge variant="outline" className="text-xs">
+                  {event?.status === "completed" ? "Settled" : "Draft Pacing"}
+                </Badge>
+              </div>
+              <div className="divide-y text-sm">
+                <div className="flex items-center justify-between px-4 py-3 bg-emerald-500/[0.02]">
+                  <div className="flex items-center gap-2.5">
+                    <Badge variant="secondary" className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-semibold text-xs">
+                      INFLOW
+                    </Badge>
+                    <div>
+                      <div className="font-medium">Client Contract Value</div>
+                      <div className="text-xs text-muted-foreground">Primary event production agreement</div>
+                    </div>
+                  </div>
+                  <div className="font-bold text-emerald-600 dark:text-emerald-400 tabular-nums">
+                    +${contractRevenue.toLocaleString()}
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between px-4 py-3">
+                  <div className="flex items-center gap-2.5">
+                    <Badge variant="secondary" className="bg-amber-500/10 text-amber-600 dark:text-amber-400 font-semibold text-xs">
+                      OUTFLOW
+                    </Badge>
+                    <div>
+                      <div className="font-medium">Venue & Hall Minimum Commitment</div>
+                      <div className="text-xs text-muted-foreground">Space rental, power drop, and facility deposit</div>
+                    </div>
+                  </div>
+                  <div className="font-bold text-foreground tabular-nums">
+                    -${Math.round(contractRevenue * 0.25).toLocaleString()}
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between px-4 py-3">
+                  <div className="flex items-center gap-2.5">
+                    <Badge variant="secondary" className="bg-amber-500/10 text-amber-600 dark:text-amber-400 font-semibold text-xs">
+                      OUTFLOW
+                    </Badge>
+                    <div>
+                      <div className="font-medium">Production, AV & Staging Minimums</div>
+                      <div className="text-xs text-muted-foreground">Audio rigging, video walls, lighting consoles</div>
+                    </div>
+                  </div>
+                  <div className="font-bold text-foreground tabular-nums">
+                    -${Math.round(contractRevenue * 0.17).toLocaleString()}
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between px-4 py-3">
+                  <div className="flex items-center gap-2.5">
+                    <Badge variant="secondary" className="bg-blue-500/10 text-blue-600 dark:text-blue-400 font-semibold text-xs">
+                      OUTFLOW
+                    </Badge>
+                    <div>
+                      <div className="font-medium">Direct Crew Payroll & Day Rates</div>
+                      <div className="text-xs text-muted-foreground">{crew.length} rostered staff shifts on site</div>
+                    </div>
+                  </div>
+                  <div className="font-bold text-foreground tabular-nums">
+                    -${crewPayrollEstimated.toLocaleString()}
+                  </div>
+                </div>
+
+                {incidentOverhead > 0 ? (
+                  <div className="flex items-center justify-between px-4 py-3">
+                    <div className="flex items-center gap-2.5">
+                      <Badge variant="secondary" className="bg-destructive/10 text-destructive font-semibold text-xs">
+                        OUTFLOW
+                      </Badge>
+                      <div>
+                        <div className="font-medium">Incident & Remediation Overhead</div>
+                        <div className="text-xs text-muted-foreground">{openIncidents} active/escalated incidents</div>
+                      </div>
+                    </div>
+                    <div className="font-bold text-destructive tabular-nums">
+                      -${incidentOverhead.toLocaleString()}
+                    </div>
+                  </div>
+                ) : null}
+
+                <div className="flex items-center justify-between px-4 py-3.5 bg-muted/30 font-bold border-t">
+                  <div className="text-base">Net Retained Margin & Settlement Profit</div>
+                  <div className={cn(
+                    "text-lg tabular-nums font-black",
+                    projectedGrossProfit >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-destructive",
+                  )}>
+                    ${projectedGrossProfit.toLocaleString()} ({projectedGrossMarginPct}%)
+                  </div>
+                </div>
+              </div>
+            </div>
+          </Card>
+        </div>
       )}
     </div>
   )

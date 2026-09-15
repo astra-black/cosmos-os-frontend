@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { toast } from "sonner"
 import { LoaderCircleIcon } from "lucide-react"
 
@@ -14,9 +14,9 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
-import { createClient } from "@/lib/api/agency"
+import { createClient, listTeamMembers } from "@/lib/api/agency"
 import { ApiError } from "@/lib/api/client"
-import type { AgencyClient } from "@/types/agency"
+import type { AgencyClient, TeamMember } from "@/types/agency"
 
 const STAGES = ["prospect", "onboarding", "active", "paused", "churned"] as const
 const HEALTH_OPTIONS = ["strong", "watch", "new", "risk"] as const
@@ -36,6 +36,7 @@ export function CreateClientModal({
   const [industry, setIndustry] = useState("")
   const [stage, setStage] = useState<string>("prospect")
   const [accountLead, setAccountLead] = useState("")
+  const [teamMembers, setTeamMembers] = useState<TeamMember[]>([])
   const [primaryContact, setPrimaryContact] = useState("")
   const [email, setEmail] = useState("")
   const [phone, setPhone] = useState("")
@@ -45,6 +46,16 @@ export function CreateClientModal({
   const [notes, setNotes] = useState("")
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (open) {
+      void listTeamMembers()
+        .then((res) => {
+          setTeamMembers(res.data ?? [])
+        })
+        .catch(() => {})
+    }
+  }, [open])
 
   function reset() {
     setName("")
@@ -194,11 +205,19 @@ export function CreateClientModal({
                 <Label htmlFor="client-lead">Account Lead / Owner</Label>
                 <Input
                   id="client-lead"
-                  placeholder="e.g. Alex Rivera"
+                  list="team-members-leads-list"
+                  placeholder="Select or enter lead"
                   value={accountLead}
                   onChange={(e) => setAccountLead(e.target.value)}
                   disabled={busy}
                 />
+                <datalist id="team-members-leads-list">
+                  {teamMembers.map((m) => (
+                    <option key={m.memberId} value={m.name}>
+                      {m.title ? `${m.name} (${m.title})` : m.name}
+                    </option>
+                  ))}
+                </datalist>
               </div>
             </div>
 

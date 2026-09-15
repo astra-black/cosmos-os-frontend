@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react"
 import { Link } from "react-router-dom"
-import { PlusIcon } from "lucide-react"
+import { PlusIcon, Tv2Icon } from "lucide-react"
 import { toast } from "sonner"
 
 import { CreateCueModal } from "@/components/modals"
@@ -295,16 +295,29 @@ export function CuesPage() {
         selectedEvent={selectedEvent}
         compact
         trailing={
-          canWrite ? (
-            <Button
-              size="sm"
-              onClick={openCreateDialog}
-              disabled={events.length === 0}
-            >
-              <PlusIcon className="size-3.5" />
-              Add cue
-            </Button>
-          ) : undefined
+          <div className="flex items-center gap-2">
+            {eventId ? (
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-1.5 border-emerald-500/30 text-emerald-500 hover:bg-emerald-500/10 hover:text-emerald-400"
+                render={<Link to={`/events/${eventId}/stage`} target="_blank" rel="noopener noreferrer" />}
+              >
+                <Tv2Icon className="size-3.5" />
+                Stage Display
+              </Button>
+            ) : null}
+            {canWrite ? (
+              <Button
+                size="sm"
+                onClick={openCreateDialog}
+                disabled={events.length === 0}
+              >
+                <PlusIcon className="size-3.5" />
+                Add cue
+              </Button>
+            ) : null}
+          </div>
         }
       />
 
