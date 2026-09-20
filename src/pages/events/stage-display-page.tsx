@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useNavigate, useParams, Link } from "react-router-dom"
 import {
+  AlertCircleIcon,
+  AlertOctagonIcon,
   AlertTriangleIcon,
   ArrowLeftIcon,
   CheckCircle2Icon,
@@ -10,6 +12,7 @@ import {
   FlameIcon,
   ForwardIcon,
   LayoutGridIcon,
+  LoaderCircleIcon,
   Maximize2Icon,
   Minimize2Icon,
   PauseIcon,
@@ -17,7 +20,9 @@ import {
   RadioIcon,
   RotateCcwIcon,
   ScrollTextIcon,
+  SendIcon,
   ShieldAlertIcon,
+  SirenIcon,
   SkipForwardIcon,
   SparklesIcon,
   TimerIcon,
@@ -26,16 +31,29 @@ import {
   Volume2Icon,
   WifiIcon,
   WifiOffIcon,
+  XIcon,
 } from "lucide-react"
 import { toast } from "sonner"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Textarea } from "@/components/ui/textarea"
 import { useLiveOpsWs, type LiveOpsEvent } from "@/hooks/use-live-ops-ws"
 import {
   advanceCues,
   completeCue,
+  createIncident,
   getEvent,
   listCues,
   resetCue,
@@ -46,6 +64,59 @@ import { cn } from "@/lib/utils"
 import type { Cue, Event as AgencyEvent } from "@/types/agency"
 
 type ViewMode = "rundown" | "split" | "timer"
+
+const EMERGENCY_PRESETS = [
+  {
+    id: "audio-drop",
+    label: "Critical Audio / Mic Drop",
+    icon: "🎙️",
+    dept: "Audio Dept",
+    severity: "critical" as const,
+    category: "audio",
+    title: "Critical Audio / Mic Drop",
+    defaultNote: "Stage mic cut out or feedback spike detected. Immediate FOH intervention required.",
+  },
+  {
+    id: "lighting-hang",
+    label: "Lighting Console Hang",
+    icon: "💡",
+    dept: "Lighting Dept",
+    severity: "critical" as const,
+    category: "lighting",
+    title: "Lighting Console Hang",
+    defaultNote: "DMX fixture freeze or universe packet drop on main stage wash.",
+  },
+  {
+    id: "talent-missing",
+    label: "Presenter / Talent Missing",
+    icon: "🎤",
+    dept: "Stage Mgmt",
+    severity: "critical" as const,
+    category: "stage",
+    title: "Presenter / Talent Missing",
+    defaultNote: "Keynote speaker or presenter missing from backstage green room for upcoming cue.",
+  },
+  {
+    id: "stream-drop",
+    label: "Stream / Broadcast Drop",
+    icon: "📡",
+    dept: "Video / Stream Dept",
+    severity: "critical" as const,
+    category: "broadcast",
+    title: "Stream / Broadcast Drop",
+    defaultNote: "RTMP encoder packet drop or CDN transmission interrupted.",
+  },
+  {
+    id: "power-fault",
+    label: "Hardware / Power Fault",
+    icon: "🔌",
+    dept: "Power / Infra Dept",
+    severity: "critical" as const,
+    category: "infra",
+    title: "Hardware / Power Fault",
+    defaultNote: "Circuit breaker trip or UPS power alert on backstage racks.",
+  },
+] as const
 
 function pad(n: number) {
   return String(Math.floor(Math.abs(n))).padStart(2, "0")
@@ -58,11 +129,11 @@ function formatDurationSeconds(totalSeconds: number, forceHours = false) {
   const m = Math.floor((abs % 3600) / 60)
   const s = Math.floor(abs % 60)
 
-  const prefix = isNegative ? "-" : ""
+  const prefix = isNegative ? "" : ""
   if (h > 0 || forceHours) {
-    return `${prefix}${pad(h)}:${pad(m)}:${pad(s)}`
+    return `${isNegative ? "-" : ""}${pad(h)}:${pad(m)}:${pad(s)}`
   }
-  return `${prefix}${pad(m)}:${pad(s)}`
+  return `${isNegative ? "-" : ""}${pad(m)}:${pad(s)}`
 }
 
 function formatClockTime(date: Date) {
@@ -111,6 +182,27 @@ export function StageDisplayPage() {
   const [autoScroll, setAutoScroll] = useState(true)
   const [actionBusy, setActionBusy] = useState(false)
 
+  // Incident reporting state
+  const [incidentModalOpen, setIncidentModalOpen] = useState(false)
+  const [selectedPresetId, setSelectedPresetId] = useState<string | null>(null)
+  const [incidentTitle, setIncidentTitle] = useState("")
+  const [incidentDept, setIncidentDept] = useState("")
+  const [incidentCategory, setIncidentCategory] = useState("ops")
+  const [incidentSeverity, setIncidentSeverity] = useState<"critical" | "warning" | "info">("critical")
+  const [incidentNotes, setIncidentNotes] = useState("")
+  const [incidentCostEstimate, setIncidentCostEstimate] = useState("")
+  const [incidentReporting, setIncidentReporting] = useState(false)
+
+  // Neon broadcast alert banner state
+  const [broadcastAlert, setBroadcastAlert] = useState<{
+    id?: string
+    title: string
+    severity: string
+    dept?: string
+    notes?: string
+    time: string
+  } | null>(null)
+
   const activeCueRef = useRef<HTMLDivElement | null>(null)
   const rundownScrollContainerRef = useRef<HTMLDivElement | null>(null)
 
@@ -158,6 +250,34 @@ export function StageDisplayPage() {
           "CUE_SKIPPED",
         ].includes(wsEvent.type)
       ) {
+        void loadData()
+      } else if (
+        wsEvent.type === "INCIDENT_FLAGGED" ||
+        wsEvent.type === "INCIDENT_ESCALATED" ||
+        wsEvent.type === "INCIDENT_LOGGED"
+      ) {
+        const inc = wsEvent.data?.incident
+        if (inc) {
+          setBroadcastAlert({
+            id: inc.incidentId || inc.id,
+            title: inc.title || "Emergency Incident Reported",
+            severity: String(inc.severity || "CRITICAL").toUpperCase(),
+            dept: inc.departmentName || inc.category || "Live Ops",
+            notes: inc.description,
+            time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" }),
+          })
+          toast.error(`🚨 [${String(inc.severity || "CRITICAL").toUpperCase()}] ${inc.title || "Emergency Incident Reported"}`, {
+            description: inc.departmentName ? `Assigned to ${inc.departmentName}` : "Broadcast via LiveOps Hub",
+            duration: 9000,
+          })
+        }
+        void loadData()
+      } else if (wsEvent.type === "INCIDENT_RESOLVED") {
+        const inc = wsEvent.data?.incident
+        if (inc) {
+          setBroadcastAlert((curr) => (curr?.id === (inc.incidentId || inc.id) ? null : curr))
+          toast.success(`✓ Incident Resolved: ${inc.title || inc.incidentId || "Issue cleared"}`)
+        }
         void loadData()
       }
     },
@@ -397,6 +517,72 @@ export function StageDisplayPage() {
     return () => document.removeEventListener("fullscreenchange", onFsChange)
   }, [])
 
+  // Preset selection handler
+  const handleSelectPreset = useCallback((preset: typeof EMERGENCY_PRESETS[number]) => {
+    setSelectedPresetId(preset.id)
+    setIncidentTitle(preset.title)
+    setIncidentDept(preset.dept)
+    setIncidentCategory(preset.category)
+    setIncidentSeverity(preset.severity)
+    setIncidentNotes(preset.defaultNote)
+  }, [])
+
+  // Quick broadcast incident handler
+  const handleQuickBroadcast = useCallback(async (customPreset?: typeof EMERGENCY_PRESETS[number]) => {
+    if (!eventId || incidentReporting) return
+
+    const titleToUse = (customPreset ? customPreset.title : incidentTitle).trim()
+    const deptToUse = customPreset ? customPreset.dept : incidentDept
+    const catToUse = customPreset ? customPreset.category : incidentCategory
+    const sevToUse = customPreset ? customPreset.severity : incidentSeverity
+    const notesToUse = customPreset ? customPreset.defaultNote : incidentNotes
+    const costToUse = incidentCostEstimate ? Number(incidentCostEstimate) : 0
+
+    if (!titleToUse) {
+      toast.error("Please provide an incident summary")
+      return
+    }
+
+    setIncidentReporting(true)
+    try {
+      const res = await createIncident(eventId, {
+        title: titleToUse,
+        departmentName: deptToUse || undefined,
+        category: catToUse || "ops",
+        severity: sevToUse,
+        description: notesToUse.trim() || undefined,
+        costImpact: costToUse > 0 ? costToUse : undefined,
+      })
+
+      const newInc = res.data
+      setBroadcastAlert({
+        id: newInc?.incidentId || newInc?.id,
+        title: titleToUse,
+        severity: sevToUse.toUpperCase(),
+        dept: deptToUse,
+        notes: notesToUse,
+        time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" }),
+      })
+
+      toast.error(`🚨 Broadcast Emergency: ${titleToUse}`, {
+        description: `Dispatched to ${deptToUse || "all crew"} via LiveOps Hub`,
+        duration: 9000,
+      })
+
+      setIncidentModalOpen(false)
+      setSelectedPresetId(null)
+      setIncidentTitle("")
+      setIncidentDept("")
+      setIncidentNotes("")
+      setIncidentCostEstimate("")
+      await loadData()
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to broadcast emergency incident")
+    } finally {
+      setIncidentReporting(false)
+    }
+  }, [eventId, incidentReporting, incidentTitle, incidentDept, incidentCategory, incidentSeverity, incidentNotes, incidentCostEstimate, loadData])
+
   // Keyboard Hotkeys
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
@@ -404,7 +590,10 @@ export function StageDisplayPage() {
         return
       }
 
-      if (e.code === "Space") {
+      if ((e.shiftKey && e.key.toLowerCase() === "i") || e.key === "!") {
+        e.preventDefault()
+        setIncidentModalOpen((prev) => !prev)
+      } else if (e.code === "Space") {
         e.preventDefault()
         void handleAdvance()
       } else if (e.key.toLowerCase() === "p") {
@@ -462,7 +651,7 @@ export function StageDisplayPage() {
       {/* ============================================================ */}
       {/* TOP NAVIGATION & TELEMETRY HEADER                            */}
       {/* ============================================================ */}
-      <header className="relative z-10 flex h-16 shrink-0 items-center justify-between border-b border-[#1b1f28] bg-[#0d0f14]/95 px-4 sm:px-6 backdrop-blur-xl">
+      <header className="relative z-10 flex h-16 shrink-0 items-center justify-between border-b border-[#1b1f28] bg-[#0d0f14]/95 px-4 sm:px-6 backdrop-blur-xl gap-2">
         {/* Left: Event Identity & Exit Button */}
         <div className="flex items-center gap-3 min-w-0">
           <Button
@@ -522,8 +711,21 @@ export function StageDisplayPage() {
           )}
         </div>
 
-        {/* Right: View Mode Switcher & Fullscreen Action */}
+        {/* Right: Broadcast Emergency Button, View Mode Switcher & Fullscreen Action */}
         <div className="flex items-center gap-2">
+          {/* Prominent Emergency Flag Button */}
+          <Button
+            size="sm"
+            variant="destructive"
+            className="h-9 px-3.5 bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-500 hover:to-red-500 text-white font-extrabold rounded-xl shadow-[0_0_15px_rgba(225,29,72,0.45)] border border-rose-400/40 flex items-center gap-1.5 transition-all"
+            onClick={() => setIncidentModalOpen(true)}
+            title="Flag Incident Broadcast (Shift+I or !)"
+          >
+            <AlertTriangleIcon className="size-4 animate-bounce" />
+            <span className="tracking-tight">🚨 Flag Incident</span>
+            <kbd className="hidden xl:inline-block ml-1 px-1.5 py-0.5 text-[9px] font-mono bg-black/40 rounded border border-white/20">Shift+I</kbd>
+          </Button>
+
           {/* View Mode Switcher */}
           <div className="flex items-center rounded-xl bg-[#13161f] p-1 border border-[#242938] shadow-inner">
             <button
@@ -575,6 +777,78 @@ export function StageDisplayPage() {
           </Button>
         </div>
       </header>
+
+      {/* ============================================================ */}
+      {/* NEON BROADCAST EMERGENCY ALERT BANNER                        */}
+      {/* ============================================================ */}
+      {broadcastAlert && (
+        <div
+          className={cn(
+            "relative z-20 mx-4 sm:mx-6 mt-3 flex items-center justify-between gap-4 rounded-2xl border p-3.5 sm:p-4 shadow-2xl backdrop-blur-2xl transition-all",
+            broadcastAlert.severity === "CRITICAL"
+              ? "bg-rose-950/90 border-rose-500 text-rose-100 shadow-[0_0_35px_rgba(244,63,94,0.5)] ring-2 ring-rose-500/60"
+              : broadcastAlert.severity === "WARNING"
+                ? "bg-amber-950/90 border-amber-500 text-amber-100 shadow-[0_0_25px_rgba(245,158,11,0.4)] ring-2 ring-amber-500/60"
+                : "bg-blue-950/90 border-blue-500 text-blue-100 shadow-[0_0_20px_rgba(59,130,246,0.35)] ring-2 ring-blue-500/60",
+          )}
+        >
+          <div className="flex items-start sm:items-center gap-3 min-w-0">
+            <div
+              className={cn(
+                "flex size-11 shrink-0 items-center justify-center rounded-xl font-bold animate-pulse shadow-lg",
+                broadcastAlert.severity === "CRITICAL"
+                  ? "bg-rose-600 text-white shadow-[0_0_15px_rgba(225,29,72,0.9)]"
+                  : "bg-amber-600 text-white",
+              )}
+            >
+              <SirenIcon className="size-6" />
+            </div>
+
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge
+                  className={cn(
+                    "font-mono font-black text-[11px] tracking-wider uppercase shadow-xs",
+                    broadcastAlert.severity === "CRITICAL"
+                      ? "bg-rose-500 text-white border-rose-400"
+                      : "bg-amber-500 text-white border-amber-400",
+                  )}
+                >
+                  🚨 {broadcastAlert.severity} ALERT
+                </Badge>
+                {broadcastAlert.dept && (
+                  <span className="px-2.5 py-0.5 rounded-lg bg-black/50 border border-white/10 text-xs font-bold text-zinc-200">
+                    {broadcastAlert.dept}
+                  </span>
+                )}
+                <span className="text-[11px] font-mono text-zinc-300">
+                  {broadcastAlert.time}
+                </span>
+              </div>
+              <p className="mt-1 font-black text-sm sm:text-base tracking-tight truncate text-white drop-shadow-md">
+                {broadcastAlert.title}
+              </p>
+              {broadcastAlert.notes && (
+                <p className="text-xs text-zinc-300 line-clamp-1 mt-0.5">
+                  {broadcastAlert.notes}
+                </p>
+              )}
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 shrink-0">
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-8 px-3 text-xs font-bold text-zinc-200 hover:text-white hover:bg-white/20 rounded-xl"
+              onClick={() => setBroadcastAlert(null)}
+            >
+              <XIcon className="size-4 mr-1" />
+              Dismiss
+            </Button>
+          </div>
+        </div>
+      )}
 
       {/* ============================================================ */}
       {/* MAIN VIEW AREA                                               */}
@@ -1202,6 +1476,180 @@ export function StageDisplayPage() {
           </div>
         )}
       </main>
+
+      {/* ============================================================ */}
+      {/* QUICK EMERGENCY INCIDENT REPORT MODAL                        */}
+      {/* ============================================================ */}
+      <Dialog open={incidentModalOpen} onOpenChange={setIncidentModalOpen}>
+        <DialogContent className="max-w-2xl bg-[#0e1117] border-[#222838] text-zinc-100 shadow-2xl p-6 sm:p-7">
+          <DialogHeader>
+            <div className="flex items-center gap-2.5">
+              <div className="flex size-9 items-center justify-center rounded-xl bg-rose-500/20 text-rose-400 border border-rose-500/30">
+                <SirenIcon className="size-5" />
+              </div>
+              <div>
+                <DialogTitle className="text-lg sm:text-xl font-black text-white tracking-tight">
+                  🚨 Quick Emergency Incident Report
+                </DialogTitle>
+                <DialogDescription className="text-xs sm:text-sm text-zinc-400 mt-0.5">
+                  Broadcast a high-priority incident alert to all connected stage crew and live ops monitors.
+                </DialogDescription>
+              </div>
+            </div>
+          </DialogHeader>
+
+          <div className="flex flex-col gap-4 py-2">
+            {/* 1-Click Broadcast Presets */}
+            <div>
+              <label className="text-xs font-bold uppercase tracking-wider text-zinc-400 mb-2 block">
+                ⚡ 1-Click Emergency Presets
+              </label>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {EMERGENCY_PRESETS.map((preset) => {
+                  const isSelected = selectedPresetId === preset.id
+                  return (
+                    <button
+                      key={preset.id}
+                      type="button"
+                      onClick={() => handleSelectPreset(preset)}
+                      className={cn(
+                        "flex items-center justify-between p-3 rounded-xl border text-left transition-all group",
+                        isSelected
+                          ? "bg-rose-950/40 border-rose-500 ring-1 ring-rose-500 text-white shadow-lg"
+                          : "bg-[#141722]/80 border-[#252b3d] hover:border-rose-500/50 hover:bg-[#191d2c] text-zinc-300",
+                      )}
+                    >
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <span className="text-lg">{preset.icon}</span>
+                        <div className="min-w-0">
+                          <div className="font-bold text-xs sm:text-sm truncate group-hover:text-white">
+                            {preset.label}
+                          </div>
+                          <div className="text-[11px] text-zinc-400 truncate">
+                            {preset.dept}
+                          </div>
+                        </div>
+                      </div>
+                      <Badge
+                        variant="outline"
+                        className="ml-2 shrink-0 text-[10px] uppercase font-mono border-rose-500/30 text-rose-400 bg-rose-500/10"
+                      >
+                        CRITICAL
+                      </Badge>
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+
+            {/* Incident Details Form */}
+            <div className="space-y-3 pt-2 border-t border-[#1e2332]">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="sm:col-span-2 space-y-1.5">
+                  <Label className="text-xs font-semibold text-zinc-300">Incident Title / Summary *</Label>
+                  <Input
+                    value={incidentTitle}
+                    onChange={(e) => setIncidentTitle(e.target.value)}
+                    placeholder="e.g., Wireless Mic 1 RF interference"
+                    className="h-9 bg-[#131620] border-[#252b3d] text-zinc-100 text-xs focus:ring-rose-500 focus:border-rose-500"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-semibold text-zinc-300">Severity Level</Label>
+                  <div className="flex rounded-lg border border-[#252b3d] bg-[#131620] p-0.5">
+                    {(["critical", "warning", "info"] as const).map((sev) => (
+                      <button
+                        key={sev}
+                        type="button"
+                        onClick={() => setIncidentSeverity(sev)}
+                        className={cn(
+                          "flex-1 py-1 text-[11px] font-bold rounded-md uppercase transition-all",
+                          incidentSeverity === sev
+                            ? sev === "critical"
+                              ? "bg-rose-600 text-white shadow-xs"
+                              : sev === "warning"
+                                ? "bg-amber-600 text-white shadow-xs"
+                                : "bg-blue-600 text-white shadow-xs"
+                            : "text-zinc-400 hover:text-zinc-200",
+                        )}
+                      >
+                        {sev}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-semibold text-zinc-300">Target Department</Label>
+                  <Input
+                    value={incidentDept}
+                    onChange={(e) => setIncidentDept(e.target.value)}
+                    placeholder="e.g., Audio Dept, Stage Mgmt"
+                    className="h-9 bg-[#131620] border-[#252b3d] text-zinc-100 text-xs"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-semibold text-zinc-300">Estimated Cost Impact ($)</Label>
+                  <Input
+                    type="number"
+                    min="0"
+                    value={incidentCostEstimate}
+                    onChange={(e) => setIncidentCostEstimate(e.target.value)}
+                    placeholder="Optional remediation cost"
+                    className="h-9 bg-[#131620] border-[#252b3d] text-zinc-100 text-xs"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-xs font-semibold text-zinc-300">Operational Notes & Directives</Label>
+                <Textarea
+                  rows={2}
+                  value={incidentNotes}
+                  onChange={(e) => setIncidentNotes(e.target.value)}
+                  placeholder="Describe immediate remediation steps or status..."
+                  className="bg-[#131620] border-[#252b3d] text-zinc-100 text-xs resize-none"
+                />
+              </div>
+            </div>
+          </div>
+
+          <DialogFooter className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-3 border-t border-[#1e2332]">
+            <span className="text-[11px] text-zinc-400 font-mono hidden sm:inline">
+              Shortcut: <kbd className="px-1.5 py-0.5 rounded bg-[#1c202c] border border-white/10 text-zinc-300">Shift+I</kbd> to toggle
+            </span>
+            <div className="flex items-center gap-2 w-full sm:w-auto">
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => setIncidentModalOpen(false)}
+                className="text-zinc-400 hover:text-white"
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                disabled={incidentReporting || !incidentTitle.trim()}
+                onClick={() => void handleQuickBroadcast()}
+                className="bg-rose-600 hover:bg-rose-500 text-white font-black px-5 shadow-[0_0_20px_rgba(225,29,72,0.5)] border border-rose-400/40 gap-2 flex-1 sm:flex-none"
+              >
+                {incidentReporting ? (
+                  <LoaderCircleIcon className="size-4 animate-spin" />
+                ) : (
+                  <SendIcon className="size-4" />
+                )}
+                <span>Broadcast Alert</span>
+              </Button>
+            </div>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

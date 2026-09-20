@@ -241,6 +241,11 @@ export type Incident = {
   resolvedAt?: string
   resolution?: string
   location?: string
+  costImpact?: number
+  metadata?: {
+    costImpact?: number
+    [key: string]: any
+  }
   createdAt?: string
   updatedAt?: string
 }

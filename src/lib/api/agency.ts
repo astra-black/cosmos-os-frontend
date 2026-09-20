@@ -268,22 +268,23 @@ export async function resolveIncident(
   incidentId: string,
   resolution: string,
   eventId?: string,
+  costImpact?: number,
 ) {
   return apiRequest<ApiEnvelope<Incident>>(
     `/api/v1/agency/incidents/incidents/${incidentId}/resolve`,
     {
       method: "POST",
-      body: JSON.stringify({ resolution, eventId }),
+      body: JSON.stringify({ resolution, eventId, costImpact }),
     },
   )
 }
 
-export async function escalateIncident(incidentId: string, eventId?: string) {
+export async function escalateIncident(incidentId: string, eventId?: string, costImpact?: number) {
   return apiRequest<ApiEnvelope<Incident>>(
     `/api/v1/agency/incidents/incidents/${incidentId}/escalate`,
     {
       method: "POST",
-      body: JSON.stringify({ eventId }),
+      body: JSON.stringify({ eventId, costImpact }),
     },
   )
 }
@@ -310,6 +311,9 @@ export async function createIncident(
     departmentName?: string
     reportedBy?: string
     assignedTo?: string
+    costImpact?: number
+    financialImpact?: number
+    metadata?: Record<string, any>
   },
 ) {
   return apiRequest<ApiEnvelope<Incident>>(
@@ -318,6 +322,12 @@ export async function createIncident(
       method: "POST",
       body: JSON.stringify(body),
     },
+  )
+}
+
+export async function getIncidentCost(eventId: string) {
+  return apiRequest<ApiEnvelope<{ eventId: string; totalCost: number; resolvedCost: number; activeCost: number; count: number }>>(
+    `/api/v1/agency/incidents/events/${eventId}/incidents/cost`,
   )
 }
 
@@ -399,6 +409,24 @@ export async function updateCrewStatus(
     {
       method: "PATCH",
       body: JSON.stringify({ status, eventId }),
+    },
+  )
+}
+
+export async function checkInCrew(eventId: string, crewId: string) {
+  return apiRequest<ApiEnvelope<CrewMember>>(
+    `/api/v1/agency/events/${eventId}/crew/${crewId}/checkin`,
+    {
+      method: "POST",
+    },
+  )
+}
+
+export async function checkOutCrew(eventId: string, crewId: string) {
+  return apiRequest<ApiEnvelope<CrewMember>>(
+    `/api/v1/agency/events/${eventId}/crew/${crewId}/checkout`,
+    {
+      method: "POST",
     },
   )
 }

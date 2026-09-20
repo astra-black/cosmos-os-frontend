@@ -36,7 +36,8 @@ import {
   getPortalUser,
   LandingPage,
   AcceptInvitePage,
-  StageDisplayPage
+  StageDisplayPage,
+  CrewKioskPage
 } from "@/pages"
 
 function AccessDenied() {
@@ -81,6 +82,8 @@ export default function App() {
       <Route element={<ProtectedRoute />}>
         <Route path="events/:eventId/stage" element={<StageDisplayPage />} />
         <Route path="events/:eventId/display" element={<StageDisplayPage />} />
+        <Route path="events/:eventId/crew-kiosk" element={<CrewKioskPage />} />
+        <Route path="events/:eventId/checkin" element={<CrewKioskPage />} />
         <Route element={<AppShell />}>
           <Route index element={<Navigate to="/dashboard" replace />} />
           <Route path="dashboard" element={<DashboardPage />} />

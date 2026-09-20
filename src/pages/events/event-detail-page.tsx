@@ -10,30 +10,50 @@ import {
   DollarSignIcon,
   ExternalLinkIcon,
   FlameIcon,
+  Loader2Icon,
+  LogInIcon,
+  LogOutIcon,
   MapPinIcon,
   PercentIcon,
+  QrCodeIcon,
   RadioIcon,
   ReceiptIcon,
   ShieldAlertIcon,
   TrendingDownIcon,
   TrendingUpIcon,
   Tv2Icon,
+  UserCheckIcon,
   UsersIcon,
   WalletIcon,
 } from "lucide-react"
+import { toast } from "sonner"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 import { Progress } from "@/components/ui/progress"
 import { Skeleton } from "@/components/ui/skeleton"
+import { Textarea } from "@/components/ui/textarea"
 import {
+  checkInCrew,
+  checkOutCrew,
   getEvent,
   getEventAnalytics,
   getIncidentStats,
   listCrew,
   listCues,
   listIncidents,
+  resolveIncident,
 } from "@/lib/api/agency"
 import { ApiError } from "@/lib/api/client"
 import type { CrewMember, Cue, Event, EventAnalytics, Incident } from "@/types/agency"
@@ -80,6 +100,101 @@ export function EventDetailPage({ defaultTab }: { defaultTab?: HubTab } = {}) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [tab, setTab] = useState<HubTab>(() => defaultTab || (window.location.pathname.endsWith("/finance") ? "finance" : "overview"))
+
+  // Incident Resolution Modal state
+  const [resolvingIncident, setResolvingIncident] = useState<Incident | null>(null)
+  const [resolutionNotes, setResolutionNotes] = useState("")
+  const [resolutionCost, setResolutionCost] = useState("")
+  const [resolvingBusy, setResolvingBusy] = useState(false)
+
+  const handleOpenResolveModal = (inc: Incident) => {
+    setResolvingIncident(inc)
+    setResolutionNotes(inc.resolution || "")
+    const cost = Number(inc.costImpact ?? inc.metadata?.costImpact)
+    setResolutionCost(cost > 0 ? String(cost) : "")
+  }
+
+  const handleConfirmResolve = async () => {
+    if (!resolvingIncident || !eventId || resolvingBusy) return
+    if (!resolutionNotes.trim()) {
+      toast.error("Resolution notes are required")
+      return
+    }
+
+    setResolvingBusy(true)
+    const costNum = resolutionCost ? Number(resolutionCost) : 0
+
+    try {
+      await resolveIncident(
+        resolvingIncident.incidentId,
+        resolutionNotes.trim(),
+        eventId,
+        costNum,
+      )
+
+      setIncidents((prev) =>
+        prev.map((i) =>
+          i.incidentId === resolvingIncident.incidentId
+            ? {
+                ...i,
+                status: "resolved",
+                resolution: resolutionNotes.trim(),
+                resolvedAt: new Date().toISOString(),
+                costImpact: costNum,
+                metadata: { ...(i.metadata || {}), costImpact: costNum },
+              }
+            : i,
+        ),
+      )
+
+      toast.success(`Incident ${resolvingIncident.incidentId} resolved`)
+      setResolvingIncident(null)
+      setResolutionNotes("")
+      setResolutionCost("")
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to resolve incident")
+    } finally {
+      setResolvingBusy(false)
+    }
+  }
+
+  const [crewActionBusyId, setCrewActionBusyId] = useState<string | null>(null)
+
+  const handleCheckInCrew = async (crewId: string) => {
+    if (!eventId || crewActionBusyId) return
+    setCrewActionBusyId(crewId)
+    try {
+      await checkInCrew(eventId, crewId)
+      setCrew((prev) =>
+        prev.map((c) =>
+          c.crewId === crewId ? { ...c, status: "on_site", onSiteAt: new Date().toISOString() } : c
+        )
+      )
+      toast.success("Crew member checked in on-site")
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to check in crew")
+    } finally {
+      setCrewActionBusyId(null)
+    }
+  }
+
+  const handleCheckOutCrew = async (crewId: string) => {
+    if (!eventId || crewActionBusyId) return
+    setCrewActionBusyId(crewId)
+    try {
+      await checkOutCrew(eventId, crewId)
+      setCrew((prev) =>
+        prev.map((c) =>
+          c.crewId === crewId ? { ...c, status: "complete", completedAt: new Date().toISOString() } : c
+        )
+      )
+      toast.success("Crew member checked out (time entry logged)")
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to check out crew")
+    } finally {
+      setCrewActionBusyId(null)
+    }
+  }
 
   useEffect(() => {
     if (!eventId) return
@@ -177,7 +292,29 @@ export function EventDetailPage({ defaultTab }: { defaultTab?: HubTab } = {}) {
   const crewPayrollEstimated = useMemo(() => {
     return crew.reduce((acc, c) => acc + 8 * getCrewHourlyRate(c.role), 0)
   }, [crew])
-  const incidentOverhead = openIncidents * 250
+
+  // Dynamically sum all resolved incidents' costImpact and factor active/unresolved baseline
+  const resolvedIncidentsCost = useMemo(() => {
+    return incidents
+      .filter((i) => i.status === "resolved")
+      .reduce((sum, inc) => {
+        const directCost = Number(inc.costImpact ?? inc.metadata?.costImpact ?? 0)
+        return sum + (isNaN(directCost) ? 0 : directCost)
+      }, 0)
+  }, [incidents])
+
+  const totalIncidentsCost = useMemo(() => {
+    return incidents.reduce((sum, inc) => {
+      const directCost = Number(inc.costImpact ?? inc.metadata?.costImpact ?? 0)
+      return sum + (isNaN(directCost) ? 0 : directCost)
+    }, 0)
+  }, [incidents])
+
+  const activeIncidentsOverhead = openIncidents * 250
+  const incidentOverhead = resolvedIncidentsCost > 0
+    ? resolvedIncidentsCost + activeIncidentsOverhead
+    : (totalIncidentsCost > 0 ? totalIncidentsCost : activeIncidentsOverhead)
+
   const totalCalculatedCosts = Math.max(
     eventActualCost,
     vendorCommitments + crewPayrollEstimated + incidentOverhead,
@@ -733,31 +870,108 @@ export function EventDetailPage({ defaultTab }: { defaultTab?: HubTab } = {}) {
         </Card>
       ) : tab === "crew" ? (
         <Card className="overflow-hidden p-0">
-          <div className="flex items-center justify-between border-b px-4 py-3">
-            <h2 className="font-semibold">Crew roster</h2>
-            <Button size="sm" render={<Link to={`/crew${opsQuery}`} />}>
-              Open board
-            </Button>
+          <div className="flex flex-wrap items-center justify-between border-b px-4 py-3 gap-2">
+            <div>
+              <h2 className="font-semibold">Crew roster & presence</h2>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                {crew.filter((c) => c.status === "on_site").length} of {crew.length} on-site · Real-time check-in time tracking
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button size="sm" variant="outline" render={<Link to={`/events/${eventId}/crew-kiosk`} target="_blank" />} className="gap-1.5">
+                <QrCodeIcon className="size-3.5 text-primary" />
+                Check-in Kiosk
+              </Button>
+              <Button size="sm" variant="ghost" render={<Link to={`/crew${opsQuery}`} />}>
+                Open board
+              </Button>
+            </div>
           </div>
           {crew.length === 0 ? (
-            <p className="text-muted-foreground p-6 text-sm">No crew assigned.</p>
+            <p className="text-muted-foreground p-6 text-sm">No crew assigned to this event.</p>
           ) : (
             <ul className="divide-y">
               {crew.map((m) => (
                 <li
                   key={m.crewId}
-                  className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 text-sm"
+                  className={cn(
+                    "flex flex-wrap items-center justify-between gap-3 px-4 py-3 text-sm transition-colors",
+                    m.status === "on_site" && "bg-emerald-500/[0.03]",
+                  )}
                 >
-                  <div>
-                    <div className="font-medium">{m.name || m.crewId}</div>
-                    <div className="text-muted-foreground text-xs">
-                      {m.role}
-                      {m.departmentName ? ` · ${m.departmentName}` : ""}
+                  <div className="flex items-center gap-3">
+                    <div className={cn(
+                      "flex size-8 items-center justify-center rounded-full text-xs font-bold",
+                      m.status === "on_site"
+                        ? "bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30"
+                        : m.status === "complete"
+                        ? "bg-blue-500/20 text-blue-500 border border-blue-500/30"
+                        : "bg-muted text-muted-foreground"
+                    )}>
+                      {m.name ? m.name.charAt(0).toUpperCase() : "C"}
+                    </div>
+                    <div>
+                      <div className="font-medium flex items-center gap-2">
+                        {m.name || m.crewId}
+                        {m.status === "on_site" ? (
+                          <span className="flex size-2 rounded-full bg-emerald-500 animate-pulse" />
+                        ) : null}
+                      </div>
+                      <div className="text-muted-foreground text-xs">
+                        {m.role || "Crew"}
+                        {m.departmentName ? ` · ${m.departmentName}` : ""}
+                        {m.onSiteAt ? ` · In: ${formatTime(m.onSiteAt)}` : ""}
+                        {m.completedAt ? ` · Out: ${formatTime(m.completedAt)}` : ""}
+                      </div>
                     </div>
                   </div>
-                  <Badge variant="outline" className="capitalize">
-                    {m.status.replace("_", " ")}
-                  </Badge>
+
+                  <div className="flex items-center gap-2">
+                    <Badge
+                      variant="outline"
+                      className={cn(
+                        "capitalize text-[11px]",
+                        m.status === "on_site" && "border-emerald-500/40 text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 font-semibold",
+                        m.status === "complete" && "border-blue-500/40 text-blue-500 bg-blue-500/10",
+                      )}
+                    >
+                      {m.status.replace("_", " ")}
+                    </Badge>
+
+                    {m.status === "on_site" ? (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => handleCheckOutCrew(m.crewId)}
+                        disabled={crewActionBusyId === m.crewId}
+                        className="h-7 text-xs border-blue-500/30 text-blue-500 hover:bg-blue-500/10 gap-1 font-medium"
+                      >
+                        {crewActionBusyId === m.crewId ? (
+                          <Loader2Icon className="size-3 animate-spin" />
+                        ) : (
+                          <LogOutIcon className="size-3" />
+                        )}
+                        Check Out
+                      </Button>
+                    ) : m.status !== "complete" ? (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => handleCheckInCrew(m.crewId)}
+                        disabled={crewActionBusyId === m.crewId}
+                        className="h-7 text-xs border-emerald-500/30 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10 gap-1 font-medium"
+                      >
+                        {crewActionBusyId === m.crewId ? (
+                          <Loader2Icon className="size-3 animate-spin" />
+                        ) : (
+                          <LogInIcon className="size-3" />
+                        )}
+                        Check In
+                      </Button>
+                    ) : (
+                      <span className="text-[11px] text-muted-foreground font-mono px-2">✓ Logged</span>
+                    )}
+                  </div>
                 </li>
               ))}
             </ul>
@@ -765,14 +979,25 @@ export function EventDetailPage({ defaultTab }: { defaultTab?: HubTab } = {}) {
         </Card>
       ) : tab === "incidents" ? (
         <Card className="overflow-hidden p-0">
-          <div className="flex items-center justify-between border-b px-4 py-3">
-            <h2 className="font-semibold">Incidents</h2>
-            <Button size="sm" render={<Link to={`/incidents${opsQuery}`} />}>
-              Open triage
-            </Button>
+          <div className="flex flex-wrap items-center justify-between border-b px-4 py-3 gap-2">
+            <div>
+              <h2 className="font-semibold">Incidents & triage</h2>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                {openIncidents} active incident{openIncidents === 1 ? "" : "s"} · {incidentOverhead > 0 ? `$${incidentOverhead.toLocaleString()} financial cost impact` : "No financial overhead"}
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button size="sm" variant="outline" render={<Link to={`/events/${eventId}/stage`} target="_blank" />} className="gap-1.5">
+                <RadioIcon className="size-3.5 text-rose-500" />
+                Stage Hotbar
+              </Button>
+              <Button size="sm" variant="ghost" render={<Link to={`/incidents${opsQuery}`} />}>
+                Open triage
+              </Button>
+            </div>
           </div>
           {incidents.length === 0 ? (
-            <p className="text-muted-foreground p-6 text-sm">No incidents logged.</p>
+            <p className="text-muted-foreground p-6 text-sm">No incidents logged for this event.</p>
           ) : (
             <ul className="divide-y">
               {[...incidents]
@@ -783,42 +1008,82 @@ export function EventDetailPage({ defaultTab }: { defaultTab?: HubTab } = {}) {
                     (order[b.severity as keyof typeof order] ?? 9)
                   )
                 })
-                .map((inc) => (
-                  <li
-                    key={inc.incidentId}
-                    className={cn(
-                      "flex flex-wrap items-start justify-between gap-2 border-l-4 px-4 py-3 text-sm",
-                      inc.severity === "critical" && "border-l-destructive",
-                      inc.severity === "warning" && "border-l-chart-4",
-                      inc.severity === "info" && "border-l-muted-foreground/40",
-                    )}
-                  >
-                    <div className="min-w-0">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="text-muted-foreground font-mono text-[11px]">
-                          {inc.incidentId}
-                        </span>
-                        <Badge variant="outline" className="h-5 capitalize">
-                          {inc.severity}
-                        </Badge>
-                        <Badge
-                          className={cn(
-                            "h-5 capitalize",
-                            inc.status === "resolved"
-                              ? "bg-chart-2/15"
-                              : "bg-primary/10 text-primary",
-                          )}
-                        >
-                          {inc.status.replace("_", " ")}
-                        </Badge>
+                .map((inc) => {
+                  const cost = Number(inc.costImpact ?? inc.metadata?.costImpact) || 0
+                  return (
+                    <li
+                      key={inc.incidentId}
+                      className={cn(
+                        "flex flex-wrap items-start justify-between gap-3 border-l-4 px-4 py-3 text-sm transition-colors",
+                        inc.severity === "critical" && "border-l-destructive bg-destructive/[0.02]",
+                        inc.severity === "warning" && "border-l-amber-500 bg-amber-500/[0.02]",
+                        inc.severity === "info" && "border-l-muted-foreground/40",
+                      )}
+                    >
+                      <div className="min-w-0 flex-1 space-y-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="text-muted-foreground font-mono text-[11px]">
+                            {inc.incidentId}
+                          </span>
+                          <Badge
+                            variant={inc.severity === "critical" ? "destructive" : "outline"}
+                            className="h-5 capitalize text-[11px]"
+                          >
+                            {inc.severity}
+                          </Badge>
+                          <Badge
+                            className={cn(
+                              "h-5 capitalize text-[11px]",
+                              inc.status === "resolved"
+                                ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30"
+                                : "bg-primary/10 text-primary",
+                            )}
+                          >
+                            {inc.status.replace("_", " ")}
+                          </Badge>
+                          {cost > 0 ? (
+                            <Badge variant="secondary" className="h-5 text-[11px] text-destructive bg-destructive/10 border-destructive/20 font-mono font-semibold">
+                              -${cost.toLocaleString()} Cost Impact
+                            </Badge>
+                          ) : null}
+                        </div>
+                        <div className="font-medium text-foreground">{inc.title}</div>
+                        {inc.description ? (
+                          <p className="text-xs text-muted-foreground">{inc.description}</p>
+                        ) : null}
+                        {inc.resolution ? (
+                          <div className="rounded-md bg-muted/50 p-2 text-xs text-muted-foreground mt-1.5 border">
+                            <span className="font-semibold text-foreground">Resolution: </span>
+                            {inc.resolution}
+                          </div>
+                        ) : null}
+                        <div className="text-muted-foreground text-xs flex flex-wrap gap-2 pt-0.5">
+                          {inc.departmentName ? <span>Dept: {inc.departmentName}</span> : null}
+                          {inc.location ? <span>Loc: {inc.location}</span> : null}
+                          <span>Reported: {formatWhen(inc.reportedAt)}</span>
+                        </div>
                       </div>
-                      <div className="mt-0.5 font-medium">{inc.title}</div>
-                      {inc.location ? (
-                        <div className="text-muted-foreground text-xs">{inc.location}</div>
-                      ) : null}
-                    </div>
-                  </li>
-                ))}
+
+                      <div className="flex items-center gap-2 self-center">
+                        {inc.status !== "resolved" ? (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleOpenResolveModal(inc)}
+                            className="h-7 text-xs border-emerald-500/30 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10 gap-1 font-medium"
+                          >
+                            <CheckCircle2Icon className="size-3" />
+                            Resolve
+                          </Button>
+                        ) : (
+                          <Badge variant="outline" className="text-[11px] text-emerald-600 dark:text-emerald-400 bg-emerald-500/5">
+                            Resolved
+                          </Badge>
+                        )}
+                      </div>
+                    </li>
+                  )
+                })}
             </ul>
           )}
         </Card>
@@ -1062,6 +1327,103 @@ export function EventDetailPage({ defaultTab }: { defaultTab?: HubTab } = {}) {
           </Card>
         </div>
       )}
+
+      {/* Resolve Incident Dialog */}
+      <Dialog
+        open={!!resolvingIncident}
+        onOpenChange={(open) => {
+          if (!open) {
+            setResolvingIncident(null)
+            setResolutionNotes("")
+            setResolutionCost("")
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <CheckCircle2Icon className="size-5 text-emerald-500" />
+              Resolve Incident
+            </DialogTitle>
+            <DialogDescription>
+              Record the operational resolution and any financial cost impact incurred for this incident.
+            </DialogDescription>
+          </DialogHeader>
+
+          {resolvingIncident ? (
+            <div className="space-y-4 py-2">
+              <div className="rounded-lg bg-muted/50 p-3 space-y-1 text-sm border">
+                <div className="flex items-center gap-2">
+                  <span className="font-mono text-xs text-muted-foreground">{resolvingIncident.incidentId}</span>
+                  <Badge variant="outline" className="text-[10px] capitalize">
+                    {resolvingIncident.severity}
+                  </Badge>
+                </div>
+                <div className="font-medium text-foreground">{resolvingIncident.title}</div>
+                {resolvingIncident.location ? (
+                  <div className="text-xs text-muted-foreground">Location: {resolvingIncident.location}</div>
+                ) : null}
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="resolution-notes" className="text-xs font-semibold">
+                  Resolution Summary <span className="text-destructive">*</span>
+                </Label>
+                <Textarea
+                  id="resolution-notes"
+                  placeholder="e.g. Swapped wireless receiver to backup channel B. Audio restored."
+                  value={resolutionNotes}
+                  onChange={(e) => setResolutionNotes(e.target.value)}
+                  rows={3}
+                  className="text-sm"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="resolution-cost" className="text-xs font-semibold">
+                  Financial Cost Impact ($ USD)
+                </Label>
+                <div className="relative">
+                  <DollarSignIcon className="absolute left-2.5 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+                  <Input
+                    id="resolution-cost"
+                    type="number"
+                    min="0"
+                    step="50"
+                    placeholder="0.00"
+                    value={resolutionCost}
+                    onChange={(e) => setResolutionCost(e.target.value)}
+                    className="pl-8 text-sm tabular-nums"
+                  />
+                </div>
+                <p className="text-[11px] text-muted-foreground">
+                  Incurred equipment replacement, overtime, or expedite fees will be deducted from net retained margin.
+                </p>
+              </div>
+            </div>
+          ) : null}
+
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setResolvingIncident(null)}
+              disabled={resolvingBusy}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              onClick={handleConfirmResolve}
+              disabled={resolvingBusy || !resolutionNotes.trim()}
+              className="bg-emerald-600 hover:bg-emerald-700 text-white gap-1.5"
+            >
+              {resolvingBusy ? <Loader2Icon className="size-3.5 animate-spin" /> : <CheckCircle2Icon className="size-3.5" />}
+              Resolve & Update Ledger
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

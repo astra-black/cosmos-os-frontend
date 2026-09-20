@@ -11,6 +11,8 @@ export type LiveOpsEvent =
   | { type: "CUE_CREATED"; data: { cue: any } }
   | { type: "CUE_DELETED"; data: { cueId: string } }
   | { type: "CUE_ASSIGNED"; data: { cue: any; assignedCrew?: any } }
+  | { type: "INCIDENT_FLAGGED"; data: { incident: any } }
+  | { type: "INCIDENT_ESCALATED"; data: { incident: any } }
   | { type: "INCIDENT_LOGGED"; data: { incident: any } }
   | { type: "INCIDENT_UPDATED"; data: { incident: any } }
   | { type: "INCIDENT_RESOLVED"; data: { incident: any } }

@@ -244,3 +244,6 @@ export async function portalDecide(
     body: JSON.stringify({ decision, notes }),
   })
 }
+
+export { checkInCrew, checkOutCrew } from "@/lib/api/agency"
+
