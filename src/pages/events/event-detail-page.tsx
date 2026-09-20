@@ -7,9 +7,11 @@ import {
   ChevronRightIcon,
   ClipboardListIcon,
   CoinsIcon,
+  CopyIcon,
   DollarSignIcon,
   ExternalLinkIcon,
   FlameIcon,
+  KeyRoundIcon,
   Loader2Icon,
   LogInIcon,
   LogOutIcon,
@@ -18,6 +20,7 @@ import {
   QrCodeIcon,
   RadioIcon,
   ReceiptIcon,
+  Share2Icon,
   ShieldAlertIcon,
   TrendingDownIcon,
   TrendingUpIcon,
@@ -54,6 +57,7 @@ import {
   listCues,
   listIncidents,
   resolveIncident,
+  updateKioskPin,
 } from "@/lib/api/agency"
 import { ApiError } from "@/lib/api/client"
 import type { CrewMember, Cue, Event, EventAnalytics, Incident } from "@/types/agency"
@@ -193,6 +197,50 @@ export function EventDetailPage({ defaultTab }: { defaultTab?: HubTab } = {}) {
       toast.error(err?.message || "Failed to check out crew")
     } finally {
       setCrewActionBusyId(null)
+    }
+  }
+
+  const [kioskModalOpen, setKioskModalOpen] = useState(false)
+  const currentKioskPin = String(event?.metadata?.kioskPin || "1234").trim()
+  const [editingPin, setEditingPin] = useState(currentKioskPin)
+  const [pinUpdateBusy, setPinUpdateBusy] = useState(false)
+
+  const handleCopyKioskLink = () => {
+    if (typeof window === "undefined" || !eventId) return
+    const url = `${window.location.origin}/events/${eventId}/checkin?pin=${currentKioskPin}`
+    navigator.clipboard.writeText(url)
+    toast.success("Kiosk check-in link copied with PIN embedded!", {
+      description: url,
+    })
+  }
+
+  const handleSaveKioskPin = async () => {
+    if (!eventId || pinUpdateBusy) return
+    if (!editingPin || editingPin.trim().length < 4) {
+      toast.error("PIN must be at least 4 digits")
+      return
+    }
+
+    setPinUpdateBusy(true)
+    try {
+      await updateKioskPin(eventId, editingPin.trim())
+      setEvent((prev) =>
+        prev
+          ? {
+              ...prev,
+              metadata: {
+                ...(prev.metadata || {}),
+                kioskPin: editingPin.trim(),
+              },
+            }
+          : prev
+      )
+      toast.success(`Event Kiosk PIN updated to ${editingPin.trim()}`)
+      setKioskModalOpen(false)
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to update kiosk PIN")
+    } finally {
+      setPinUpdateBusy(false)
     }
   }
 
@@ -877,7 +925,19 @@ export function EventDetailPage({ defaultTab }: { defaultTab?: HubTab } = {}) {
                 {crew.filter((c) => c.status === "on_site").length} of {crew.length} on-site · Real-time check-in time tracking
               </p>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  setEditingPin(currentKioskPin)
+                  setKioskModalOpen(true)
+                }}
+                className="gap-1.5 border-amber-500/30 text-amber-600 dark:text-amber-400 bg-amber-500/5 hover:bg-amber-500/10"
+              >
+                <KeyRoundIcon className="size-3.5" />
+                PIN & Share: {currentKioskPin}
+              </Button>
               <Button size="sm" variant="outline" render={<Link to={`/events/${eventId}/crew-kiosk`} target="_blank" />} className="gap-1.5">
                 <QrCodeIcon className="size-3.5 text-primary" />
                 Check-in Kiosk
@@ -1420,6 +1480,111 @@ export function EventDetailPage({ defaultTab }: { defaultTab?: HubTab } = {}) {
             >
               {resolvingBusy ? <Loader2Icon className="size-3.5 animate-spin" /> : <CheckCircle2Icon className="size-3.5" />}
               Resolve & Update Ledger
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Kiosk PIN & Mobile Check-in Sharing Dialog */}
+      <Dialog open={kioskModalOpen} onOpenChange={setKioskModalOpen}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <KeyRoundIcon className="size-5 text-amber-500" />
+              Event Kiosk PIN & Freelancer Self-Serve
+            </DialogTitle>
+            <DialogDescription>
+              Share this direct link or 4-digit PIN for venue tablets and freelance crew check-ins on mobile.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-2">
+            {/* Direct Mobile Link */}
+            <div className="space-y-1.5">
+              <Label className="text-xs font-semibold">Direct Self-Serve Check-in Link (PIN Embedded)</Label>
+              <div className="flex items-center gap-2">
+                <Input
+                  readOnly
+                  value={typeof window !== "undefined" ? `${window.location.origin}/events/${eventId}/checkin?pin=${currentKioskPin}` : ""}
+                  className="text-xs font-mono bg-muted select-all"
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={handleCopyKioskLink}
+                  className="gap-1.5 shrink-0"
+                >
+                  <CopyIcon className="size-3.5" />
+                  Copy
+                </Button>
+              </div>
+              <p className="text-[11px] text-muted-foreground">
+                Opening this link on mobile phones or iPads automatically unlocks the check-in roster.
+              </p>
+            </div>
+
+            {/* PIN Editor */}
+            <div className="rounded-xl border bg-muted/30 p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="text-sm font-semibold">4-Digit Event PIN Gate</div>
+                  <div className="text-xs text-muted-foreground">Used to access the kiosk if URL PIN is omitted</div>
+                </div>
+                <Badge variant="secondary" className="font-mono text-base font-bold px-3 py-1 bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
+                  {currentKioskPin}
+                </Badge>
+              </div>
+
+              <div className="flex items-center gap-2 pt-1">
+                <Input
+                  type="text"
+                  maxLength={6}
+                  placeholder="New 4-digit PIN"
+                  value={editingPin}
+                  onChange={(e) => setEditingPin(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                  className="text-sm font-mono tracking-widest tabular-nums w-40"
+                />
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={handleSaveKioskPin}
+                  disabled={pinUpdateBusy || editingPin === currentKioskPin || editingPin.length < 4}
+                  className="text-xs"
+                >
+                  {pinUpdateBusy ? <Loader2Icon className="size-3.5 animate-spin" /> : "Update PIN"}
+                </Button>
+              </div>
+            </div>
+
+            {/* Instructions box */}
+            <div className="rounded-lg bg-emerald-500/10 border border-emerald-500/20 p-3 text-xs text-emerald-800 dark:text-emerald-300 space-y-1">
+              <div className="font-semibold flex items-center gap-1.5">
+                <CheckCircle2Icon className="size-3.5" />
+                Venue Tablet & Mobile QR Posters
+              </div>
+              <p className="text-[11px] opacity-90">
+                You can print or project the check-in QR code at the front-desk station. Freelance staff scan and tap their name to check in, automatically starting their time-tracking clock.
+              </p>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setKioskModalOpen(false)}
+            >
+              Close
+            </Button>
+            <Button
+              type="button"
+              render={<Link to={`/events/${eventId}/checkin?pin=${currentKioskPin}`} target="_blank" />}
+              className="bg-primary text-primary-foreground gap-1.5"
+            >
+              <ExternalLinkIcon className="size-3.5" />
+              Open Live Kiosk
             </Button>
           </DialogFooter>
         </DialogContent>

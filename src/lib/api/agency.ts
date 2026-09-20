@@ -431,6 +431,80 @@ export async function checkOutCrew(eventId: string, crewId: string) {
   )
 }
 
+export type KioskDataPayload = {
+  event: {
+    eventId: string
+    id: string
+    name: string
+    venue: string
+    location?: string
+    startDate?: string
+    endDate?: string
+    status: string
+  }
+  crew: CrewMember[]
+  departments: Department[]
+  kioskPin: string
+  isStaff: boolean
+}
+
+export async function getKioskData(eventId: string, pin?: string) {
+  const headers: Record<string, string> = {}
+  if (pin) headers["x-kiosk-pin"] = pin
+  const suffix = pin ? `?pin=${encodeURIComponent(pin)}` : ""
+
+  return apiRequest<{
+    success: boolean
+    requiresPin?: boolean
+    error?: string
+    data?: KioskDataPayload
+    eventName?: string
+    venue?: string
+    startDate?: string
+  }>(`/api/v1/agency/events/${eventId}/kiosk-data${suffix}`, {
+    headers,
+    auth: true, // will attach Bearer if available, but doesn't fail if guest
+  })
+}
+
+export async function kioskCheckInCrew(eventId: string, crewId: string, pin?: string) {
+  const headers: Record<string, string> = {}
+  if (pin) headers["x-kiosk-pin"] = pin
+
+  return apiRequest<ApiEnvelope<CrewMember>>(
+    `/api/v1/agency/events/${eventId}/crew/${crewId}/kiosk-checkin`,
+    {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ pin }),
+    },
+  )
+}
+
+export async function kioskCheckOutCrew(eventId: string, crewId: string, pin?: string) {
+  const headers: Record<string, string> = {}
+  if (pin) headers["x-kiosk-pin"] = pin
+
+  return apiRequest<ApiEnvelope<CrewMember>>(
+    `/api/v1/agency/events/${eventId}/crew/${crewId}/kiosk-checkout`,
+    {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ pin }),
+    },
+  )
+}
+
+export async function updateKioskPin(eventId: string, pin: string) {
+  return apiRequest<ApiEnvelope<{ kioskPin: string }>>(
+    `/api/v1/agency/events/${eventId}/kiosk-pin`,
+    {
+      method: "POST",
+      body: JSON.stringify({ pin }),
+    },
+  )
+}
+
 export async function listDepartments(eventId: string) {
   return apiRequest<ApiEnvelope<Department[]>>(
     `/api/v1/agency/departments/events/${eventId}/departments`,

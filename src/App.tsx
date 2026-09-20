@@ -79,11 +79,13 @@ export default function App() {
       <Route path="/portal/login" element={<PortalLoginPage />} />
       <Route path="/portal" element={<PortalRoute />} />
 
+      {/* Public / PIN-Gated Event Desks (auto-bypasses for authenticated staff) */}
+      <Route path="events/:eventId/stage" element={<StageDisplayPage />} />
+      <Route path="events/:eventId/display" element={<StageDisplayPage />} />
+      <Route path="events/:eventId/crew-kiosk" element={<CrewKioskPage />} />
+      <Route path="events/:eventId/checkin" element={<CrewKioskPage />} />
+
       <Route element={<ProtectedRoute />}>
-        <Route path="events/:eventId/stage" element={<StageDisplayPage />} />
-        <Route path="events/:eventId/display" element={<StageDisplayPage />} />
-        <Route path="events/:eventId/crew-kiosk" element={<CrewKioskPage />} />
-        <Route path="events/:eventId/checkin" element={<CrewKioskPage />} />
         <Route element={<AppShell />}>
           <Route index element={<Navigate to="/dashboard" replace />} />
           <Route path="dashboard" element={<DashboardPage />} />

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { Link, useNavigate, useParams } from "react-router-dom"
+import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom"
 import {
   AlertCircleIcon,
   ArrowLeftIcon,
@@ -8,7 +8,9 @@ import {
   ChevronRightIcon,
   ClockIcon,
   FilterIcon,
+  KeyRoundIcon,
   LayersIcon,
+  LockIcon,
   LogInIcon,
   LogOutIcon,
   Maximize2Icon,
@@ -17,7 +19,9 @@ import {
   RadioIcon,
   RefreshCwIcon,
   SearchIcon,
+  ShieldCheckIcon,
   SparklesIcon,
+  UnlockIcon,
   UserCheckIcon,
   UserIcon,
   UsersIcon,
@@ -40,9 +44,13 @@ import {
   checkInCrew,
   checkOutCrew,
   getEvent,
+  getKioskData,
+  kioskCheckInCrew,
+  kioskCheckOutCrew,
   listCrew,
   listDepartments,
 } from "@/lib/api/agency"
+import { useAuth } from "@/lib/auth"
 import { cn } from "@/lib/utils"
 import type { CrewMember, Department, Event as AgencyEvent } from "@/types/agency"
 
@@ -80,7 +88,21 @@ function getDeptColor(deptName?: string) {
 
 export function CrewKioskPage() {
   const { eventId = "" } = useParams<{ eventId: string }>()
+  const [searchParams] = useSearchParams()
   const navigate = useNavigate()
+  const { isAuthenticated, user } = useAuth()
+
+  const urlPin = searchParams.get("pin") || ""
+  const [activePin, setActivePin] = useState<string>(() => {
+    if (urlPin) return urlPin
+    return typeof window !== "undefined" ? sessionStorage.getItem(`kiosk_pin_${eventId}`) || "" : ""
+  })
+
+  const [isPinLocked, setIsPinLocked] = useState<boolean>(!isAuthenticated && !urlPin && !sessionStorage.getItem(`kiosk_pin_${eventId}`))
+  const [pinInput, setPinInput] = useState<string>("")
+  const [pinError, setPinError] = useState<string | null>(null)
+  const [pinValidating, setPinValidating] = useState<boolean>(false)
+  const [isStaff, setIsStaff] = useState<boolean>(isAuthenticated)
 
   const [event, setEvent] = useState<AgencyEvent | null>(null)
   const [crew, setCrew] = useState<CrewMember[]>([])
@@ -106,7 +128,7 @@ export function CrewKioskPage() {
   }, [])
 
   // Audio beep feedback simulator
-  const playFeedbackSound = useCallback((action: "checkin" | "checkout") => {
+  const playFeedbackSound = useCallback((action: "checkin" | "checkout" | "error") => {
     if (!soundEnabled || typeof window === "undefined") return
     try {
       const ctx = new (window.AudioContext || (window as any).webkitAudioContext)()
@@ -122,40 +144,172 @@ export function CrewKioskPage() {
         gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.25)
         osc.start(ctx.currentTime)
         osc.stop(ctx.currentTime + 0.25)
-      } else {
+      } else if (action === "checkout") {
         osc.frequency.setValueAtTime(659.25, ctx.currentTime) // E5
         osc.frequency.setValueAtTime(523.25, ctx.currentTime + 0.1) // C5
         gain.gain.setValueAtTime(0.15, ctx.currentTime)
         gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.25)
         osc.start(ctx.currentTime)
         osc.stop(ctx.currentTime + 0.25)
+      } else {
+        osc.frequency.setValueAtTime(300, ctx.currentTime) // Low buzz
+        osc.frequency.setValueAtTime(200, ctx.currentTime + 0.1)
+        gain.gain.setValueAtTime(0.2, ctx.currentTime)
+        gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.3)
+        osc.start(ctx.currentTime)
+        osc.stop(ctx.currentTime + 0.3)
       }
     } catch (_) {}
   }, [soundEnabled])
 
-  // Load initial data
-  const loadData = useCallback(async () => {
+  // Load initial data (supports PIN or authenticated session)
+  const loadData = useCallback(async (pinToUse?: string) => {
     if (!eventId) return
+    setLoading(true)
+    const pin = pinToUse !== undefined ? pinToUse : activePin
+
     try {
-      const [evRes, crewRes, deptRes] = await Promise.all([
-        getEvent(eventId).catch(() => ({ data: null })),
-        listCrew(eventId).catch(() => ({ data: [] })),
-        listDepartments(eventId).catch(() => ({ data: [] })),
-      ])
-      if (evRes?.data) setEvent(evRes.data)
-      if (crewRes?.data) setCrew(crewRes.data)
-      if (deptRes?.data) setDepartments(deptRes.data)
-    } catch (err) {
+      const kioskRes = await getKioskData(eventId, pin || undefined)
+      if (kioskRes.requiresPin) {
+        setIsPinLocked(true)
+        if (kioskRes.eventName) {
+          setEvent((prev) => ({
+            ...(prev || {}),
+            id: eventId,
+            eventId,
+            name: kioskRes.eventName || "Live Event Roster",
+            venue: kioskRes.venue || "Production Stage",
+            startDate: kioskRes.startDate || "",
+            status: "live",
+            type: "production",
+          } as any))
+        }
+        return
+      }
+
+      if (kioskRes.data) {
+        setEvent(kioskRes.data.event as any)
+        setCrew(kioskRes.data.crew)
+        setDepartments(kioskRes.data.departments)
+        setIsStaff(kioskRes.data.isStaff)
+        setIsPinLocked(false)
+        if (pin) {
+          setActivePin(pin)
+          sessionStorage.setItem(`kiosk_pin_${eventId}`, pin)
+        }
+      }
+    } catch (err: any) {
       console.warn("Error loading crew kiosk data:", err)
-      toast.error("Failed to load kiosk roster")
+      if (err?.status === 401 || err?.message?.includes("PIN")) {
+        setIsPinLocked(true)
+      } else {
+        // Fallback to legacy endpoints if available
+        try {
+          const [evRes, crewRes, deptRes] = await Promise.all([
+            getEvent(eventId).catch(() => ({ data: null })),
+            listCrew(eventId).catch(() => ({ data: [] })),
+            listDepartments(eventId).catch(() => ({ data: [] })),
+          ])
+          if (evRes?.data) setEvent(evRes.data)
+          if (crewRes?.data) setCrew(crewRes.data)
+          if (deptRes?.data) setDepartments(deptRes.data)
+          setIsPinLocked(false)
+        } catch (_) {
+          setIsPinLocked(true)
+        }
+      }
     } finally {
       setLoading(false)
     }
-  }, [eventId])
+  }, [eventId, activePin])
 
   useEffect(() => {
     void loadData()
   }, [loadData])
+
+  // PIN Verification handler
+  const handleVerifyPin = async (enteredPin: string) => {
+    if (!enteredPin || enteredPin.length < 4 || pinValidating || !eventId) return
+    setPinValidating(true)
+    setPinError(null)
+
+    try {
+      const res = await getKioskData(eventId, enteredPin)
+      if (res.requiresPin || !res.success) {
+        setPinError("Incorrect Event PIN. Please check with the stage manager.")
+        setPinInput("")
+        playFeedbackSound("error")
+        return
+      }
+
+      if (res.data) {
+        setEvent(res.data.event as any)
+        setCrew(res.data.crew)
+        setDepartments(res.data.departments)
+        setIsStaff(res.data.isStaff)
+        setActivePin(enteredPin)
+        sessionStorage.setItem(`kiosk_pin_${eventId}`, enteredPin)
+        setIsPinLocked(false)
+        setPinInput("")
+        playFeedbackSound("checkin")
+        toast.success("Kiosk Unlocked", { icon: "🔓" })
+      }
+    } catch (err: any) {
+      setPinError(err?.message || "Invalid Event PIN")
+      setPinInput("")
+      playFeedbackSound("error")
+    } finally {
+      setPinValidating(false)
+    }
+  }
+
+  const handlePinDigit = (digit: string) => {
+    if (pinValidating) return
+    setPinError(null)
+    if (pinInput.length < 4) {
+      const next = pinInput + digit
+      setPinInput(next)
+      if (next.length === 4) {
+        void handleVerifyPin(next)
+      }
+    }
+  }
+
+  const handlePinBackspace = () => {
+    if (pinValidating) return
+    setPinInput((prev) => prev.slice(0, -1))
+    setPinError(null)
+  }
+
+  const handlePinClear = () => {
+    if (pinValidating) return
+    setPinInput("")
+    setPinError(null)
+  }
+
+  const handleLockKiosk = () => {
+    sessionStorage.removeItem(`kiosk_pin_${eventId}`)
+    setActivePin("")
+    setPinInput("")
+    setIsPinLocked(true)
+    toast.info("Kiosk is now locked")
+  }
+
+  // Keyboard navigation when PIN pad is active
+  useEffect(() => {
+    if (!isPinLocked) return
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key >= "0" && e.key <= "9") {
+        handlePinDigit(e.key)
+      } else if (e.key === "Backspace") {
+        handlePinBackspace()
+      } else if (e.key === "Escape" || e.key === "c" || e.key === "C") {
+        handlePinClear()
+      }
+    }
+    window.addEventListener("keydown", onKeyDown)
+    return () => window.removeEventListener("keydown", onKeyDown)
+  }, [isPinLocked, pinInput, pinValidating])
 
   // Real-time live sync
   const handleWsEvent = useCallback(
@@ -184,8 +338,6 @@ export function CrewKioskPage() {
             icon: "🏁",
           })
         }
-      } else if (wsEvent.type === "CREW_PRESENCE_UPDATE") {
-        // Refresh crew if needed
       }
     },
     [],
@@ -196,15 +348,22 @@ export function CrewKioskPage() {
     onEvent: handleWsEvent,
   })
 
-  // Check In Handler
+  // Check In Handler (supports both authenticated staff and PIN-gated kiosk)
   const handleCheckIn = async (member: CrewMember) => {
     const id = member.crewId || member.id
     if (!id || !eventId) return
 
     setActionBusyId(id)
     try {
-      const res = await checkInCrew(eventId, id)
-      const updated = res.data
+      let updated: any
+      if (activePin) {
+        const res = await kioskCheckInCrew(eventId, id, activePin)
+        updated = (res as any)?.data || res
+      } else {
+        const res = await checkInCrew(eventId, id)
+        updated = (res as any)?.data || res
+      }
+
       setCrew((prev) =>
         prev.map((c) =>
           (c.crewId === id || c.id === id)
@@ -229,8 +388,15 @@ export function CrewKioskPage() {
 
     setActionBusyId(id)
     try {
-      const res = await checkOutCrew(eventId, id)
-      const updated = res.data
+      let updated: any
+      if (activePin) {
+        const res = await kioskCheckOutCrew(eventId, id, activePin)
+        updated = (res as any)?.data || res
+      } else {
+        const res = await checkOutCrew(eventId, id)
+        updated = (res as any)?.data || res
+      }
+
       setCrew((prev) =>
         prev.map((c) =>
           (c.crewId === id || c.id === id)
@@ -351,6 +517,132 @@ export function CrewKioskPage() {
     })
   }, [crew, searchQuery, selectedDeptId, statusFilter])
 
+  // 0. Locked PIN Pad Screen
+  if (isPinLocked) {
+    return (
+      <div className="min-h-screen bg-[#07090e] text-zinc-100 flex flex-col items-center justify-center p-4 relative overflow-hidden select-none font-sans">
+        {/* Ambient neon backdrop */}
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-emerald-900/20 via-zinc-950 to-black pointer-events-none" />
+        <div className="absolute -top-40 -left-40 size-96 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />
+        <div className="absolute -bottom-40 -right-40 size-96 bg-blue-500/10 rounded-full blur-3xl pointer-events-none" />
+
+        <div className="relative z-10 w-full max-w-md flex flex-col items-center space-y-6">
+          {/* Brand & Event Header */}
+          <div className="text-center space-y-2">
+            <div className="inline-flex items-center justify-center size-14 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 shadow-xl shadow-emerald-950/50 mb-1">
+              <LockIcon className="size-7 animate-pulse" />
+            </div>
+            <div>
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                <span className="size-2 rounded-full bg-emerald-400 animate-ping" />
+                Live Check-in Kiosk
+              </span>
+            </div>
+            <h1 className="text-2xl sm:text-3xl font-black text-white tracking-tight">
+              {event?.name || "Event Check-In"}
+            </h1>
+            <p className="text-xs sm:text-sm text-zinc-400 max-w-xs mx-auto">
+              {event?.venue || event?.location || "Main Production Venue"} · Enter 4-digit Event PIN to access roster
+            </p>
+          </div>
+
+          {/* PIN Digit Indicators */}
+          <div className="flex items-center gap-4 py-2">
+            {[0, 1, 2, 3].map((idx) => {
+              const isFilled = pinInput.length > idx
+              return (
+                <div
+                  key={idx}
+                  className={cn(
+                    "size-12 sm:size-14 rounded-xl border-2 flex items-center justify-center transition-all duration-200 text-2xl font-black font-mono",
+                    isFilled
+                      ? "border-emerald-500 bg-emerald-500/20 text-emerald-400 shadow-lg shadow-emerald-500/20 scale-105"
+                      : "border-zinc-800 bg-zinc-900/80 text-zinc-600",
+                    pinError && "border-destructive text-destructive"
+                  )}
+                >
+                  {isFilled ? "●" : "○"}
+                </div>
+              )
+            })}
+          </div>
+
+          {/* Error Message or Default Hint */}
+          {pinError ? (
+            <div className="flex items-center gap-1.5 text-xs text-destructive font-semibold bg-destructive/10 border border-destructive/30 px-3.5 py-2 rounded-lg text-center">
+              <AlertCircleIcon className="size-4 shrink-0" />
+              <span>{pinError}</span>
+            </div>
+          ) : (
+            <div className="text-[11px] text-zinc-500 text-center font-mono">
+              Default event PIN is <span className="text-zinc-300 font-bold">1234</span> unless customized
+            </div>
+          )}
+
+          {/* Touch Numeric Keypad */}
+          <div className="grid grid-cols-3 gap-3 w-full max-w-xs">
+            {["1", "2", "3", "4", "5", "6", "7", "8", "9"].map((digit) => (
+              <Button
+                key={digit}
+                type="button"
+                variant="outline"
+                onClick={() => handlePinDigit(digit)}
+                disabled={pinValidating}
+                className="h-14 text-2xl font-black font-mono bg-zinc-900/90 hover:bg-zinc-800 border-zinc-800 hover:border-zinc-700 text-white rounded-xl active:scale-95 transition-all shadow-md"
+              >
+                {digit}
+              </Button>
+            ))}
+            <Button
+              type="button"
+              variant="outline"
+              onClick={handlePinClear}
+              disabled={pinValidating || pinInput.length === 0}
+              className="h-14 text-xs font-bold uppercase tracking-wider bg-zinc-900/60 hover:bg-zinc-800 border-zinc-800 hover:border-zinc-700 text-zinc-400 rounded-xl active:scale-95 transition-all"
+            >
+              Clear
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => handlePinDigit("0")}
+              disabled={pinValidating}
+              className="h-14 text-2xl font-black font-mono bg-zinc-900/90 hover:bg-zinc-800 border-zinc-800 hover:border-zinc-700 text-white rounded-xl active:scale-95 transition-all shadow-md"
+            >
+              0
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={handlePinBackspace}
+              disabled={pinValidating || pinInput.length === 0}
+              className="h-14 text-sm font-bold bg-zinc-900/60 hover:bg-zinc-800 border-zinc-800 hover:border-zinc-700 text-zinc-400 rounded-xl active:scale-95 transition-all"
+            >
+              ⌫
+            </Button>
+          </div>
+
+          {/* Footer Navigation */}
+          <div className="flex flex-wrap items-center justify-center gap-4 text-xs text-zinc-400 pt-2">
+            <Link
+              to={`/login?redirect=/events/${eventId}/checkin`}
+              className="hover:text-emerald-400 underline underline-offset-4 transition-colors"
+            >
+              Agency Staff Login
+            </Link>
+            <span>•</span>
+            <Link
+              to={`/events/${eventId}`}
+              className="hover:text-zinc-200 transition-colors"
+            >
+              Back to Event Hub
+            </Link>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="min-h-screen bg-zinc-950 text-zinc-100 flex flex-col select-none font-sans">
       {/* 1. Kiosk High-Contrast Header Bar */}
@@ -404,6 +696,18 @@ export function CrewKioskPage() {
             >
               <QrCodeIcon className="size-4" />
               <span className="hidden md:inline">Scan Badge / QR</span>
+            </Button>
+
+            {/* Lock Kiosk Button */}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleLockKiosk}
+              title="Lock Kiosk Desk"
+              className="h-10 px-3 border-zinc-700 bg-zinc-800 text-zinc-300 hover:text-white hover:bg-zinc-700 gap-1.5 hidden sm:flex"
+            >
+              <LockIcon className="size-3.5 text-zinc-400" />
+              <span className="text-xs font-semibold">Lock</span>
             </Button>
 
             {/* Audio Toggle */}

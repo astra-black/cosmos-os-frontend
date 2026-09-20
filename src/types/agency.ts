@@ -49,6 +49,7 @@ export type Event = {
   expectedAttendees?: number
   budget?: number
   actualCost?: number
+  metadata?: Record<string, any>
   createdAt?: string
   updatedAt?: string
 }
