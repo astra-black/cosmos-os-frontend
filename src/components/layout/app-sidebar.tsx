@@ -16,6 +16,7 @@ import {
   FolderKanbanIcon,
   GitBranchIcon,
   ImagesIcon,
+  LayersIcon,
   LayoutDashboardIcon,
   ListTodoIcon,
   FlagIcon,
@@ -108,6 +109,7 @@ const navTree: NavNode[] = [
     label: "Live ops",
     icon: RadioIcon,
     children: [
+      { kind: "leaf", to: "/spatial-stage", label: "Spatial Stage", icon: LayersIcon },
       { kind: "leaf", to: "/cues", label: "Cues & Timeline", icon: ClipboardListIcon },
       { kind: "leaf", to: "/crew", label: "Crew", icon: UsersIcon },
       { kind: "leaf", to: "/incidents", label: "Incidents", icon: AlertTriangleIcon },

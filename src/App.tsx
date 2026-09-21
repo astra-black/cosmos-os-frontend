@@ -37,7 +37,8 @@ import {
   LandingPage,
   AcceptInvitePage,
   StageDisplayPage,
-  CrewKioskPage
+  CrewKioskPage,
+  SpatialStagePage
 } from "@/pages"
 
 function AccessDenied() {
@@ -92,6 +93,8 @@ export default function App() {
           <Route path="events" element={<EventsPage />} />
           <Route path="events/:eventId" element={<EventDetailPage />} />
           <Route path="events/:eventId/finance" element={<EventDetailPage defaultTab="finance" />} />
+          <Route path="events/:eventId/spatial-stage" element={<SpatialStagePage />} />
+          <Route path="spatial-stage" element={<SpatialStagePage />} />
           <Route path="activity" element={<ActivityPage />} />
           <Route path="crm" element={<CrmPipelinePage />} />
           <Route path="clients" element={<ClientsPage />} />

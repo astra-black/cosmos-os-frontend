@@ -12,6 +12,7 @@ const ROLE_ROUTES: Record<string, string[]> = {
     "/",
     "/dashboard",
     "/events",
+    "/spatial-stage",
     "/activity",
     "/crm",
     "/clients",
@@ -35,6 +36,7 @@ const ROLE_ROUTES: Record<string, string[]> = {
     "/",
     "/dashboard",
     "/events",
+    "/spatial-stage",
     "/activity",
     "/projects",
     "/tasks",
@@ -51,6 +53,7 @@ const ROLE_ROUTES: Record<string, string[]> = {
     "/",
     "/dashboard",
     "/events",
+    "/spatial-stage",
     "/activity",
     "/cues",
     "/crew",
@@ -60,7 +63,7 @@ const ROLE_ROUTES: Record<string, string[]> = {
     "/ai",
     "/settings",
   ],
-  creative: ["/", "/dashboard", "/projects", "/tasks", "/milestones", "/assets", "/approvals", "/activity", "/ai", "/settings"],
+  creative: ["/", "/dashboard", "/events", "/spatial-stage", "/projects", "/tasks", "/milestones", "/assets", "/approvals", "/activity", "/ai", "/settings"],
   client: ["/portal"],
 }
 

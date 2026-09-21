@@ -14,6 +14,7 @@ export { CrewPage } from "./events/crew-page"
 export { IncidentsPage } from "./events/incidents-page"
 export { StageDisplayPage } from "./events/stage-display-page"
 export { CrewKioskPage } from "./events/crew-kiosk-page"
+export { SpatialStagePage } from "./events/spatial-stage-page"
 
 // Projects
 export { ProjectsPage } from "./projects/projects-page"

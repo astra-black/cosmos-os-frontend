@@ -12,6 +12,7 @@ import {
   ExternalLinkIcon,
   FlameIcon,
   KeyRoundIcon,
+  LayersIcon,
   Loader2Icon,
   LogInIcon,
   LogOutIcon,
@@ -448,6 +449,15 @@ export function EventDetailPage({ defaultTab }: { defaultTab?: HubTab } = {}) {
 
             {/* Jump into live desks scoped to this event */}
             <div className="flex flex-wrap gap-1.5">
+              <Button
+                size="sm"
+                variant="outline"
+                className="gap-1.5 border-indigo-500/30 text-indigo-400 hover:bg-indigo-500/10 hover:text-indigo-300"
+                render={<Link to={`/events/${eventId}/spatial-stage`} />}
+              >
+                <LayersIcon className="size-3.5 text-indigo-400" />
+                Spatial Stage
+              </Button>
               <Button
                 size="sm"
                 variant="outline"
