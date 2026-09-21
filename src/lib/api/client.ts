@@ -49,14 +49,18 @@ export class ApiError extends Error {
 type RequestOptions = RequestInit & {
   auth?: boolean
   apiKey?: boolean
+  skipAuthRedirect?: boolean
 }
 
 function baseUrl() {
-  return (import.meta.env.VITE_API_BASE_URL as string | undefined)?.replace(/\/$/, "") ?? ""
+  return (
+    (import.meta.env.VITE_API_BASE_URL as string | undefined) ||
+    (import.meta.env.VITE_API_URL as string | undefined)
+  )?.replace(/\/$/, "") ?? ""
 }
 
 export async function apiRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
-  const { auth = true, apiKey = false, headers, ...rest } = options
+  const { auth = true, apiKey = false, skipAuthRedirect = false, headers, ...rest } = options
   const requestHeaders = new Headers(headers)
 
   // FormData must set its own multipart boundary — do not force JSON
@@ -83,7 +87,7 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
   const payload = await response.json().catch(() => ({}))
 
   if (!response.ok) {
-    if (response.status === 401) {
+    if (response.status === 401 && !skipAuthRedirect) {
       if (typeof window !== "undefined") {
         window.dispatchEvent(new CustomEvent("cosmos-unauthorized"))
       }

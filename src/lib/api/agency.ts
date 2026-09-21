@@ -464,6 +464,7 @@ export async function getKioskData(eventId: string, pin?: string) {
   }>(`/api/v1/agency/events/${eventId}/kiosk-data${suffix}`, {
     headers,
     auth: true, // will attach Bearer if available, but doesn't fail if guest
+    skipAuthRedirect: true,
   })
 }
 
@@ -477,6 +478,7 @@ export async function kioskCheckInCrew(eventId: string, crewId: string, pin?: st
       method: "POST",
       headers,
       body: JSON.stringify({ pin }),
+      skipAuthRedirect: true,
     },
   )
 }
@@ -491,6 +493,7 @@ export async function kioskCheckOutCrew(eventId: string, crewId: string, pin?: s
       method: "POST",
       headers,
       body: JSON.stringify({ pin }),
+      skipAuthRedirect: true,
     },
   )
 }

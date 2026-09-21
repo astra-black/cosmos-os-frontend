@@ -25,6 +25,34 @@ export type UseLiveOpsWsOptions = {
   enabled?: boolean
 }
 
+function resolveWsUrl(token: string, eventId?: string): string {
+  const query = new URLSearchParams({ token })
+  if (eventId) query.set("eventId", eventId)
+
+  // 1. Explicit WS URL override
+  const envWs = (import.meta.env.VITE_WS_URL as string | undefined)?.trim()
+  if (envWs) {
+    const clean = envWs.replace(/\/$/, "")
+    return `${clean}/api/v1/liveops/ws?${query.toString()}`
+  }
+
+  // 2. Derive from API Base URL if configured (e.g. https://cosmos-os-backend1.onrender.com)
+  const envApi = (
+    (import.meta.env.VITE_API_BASE_URL as string | undefined) ||
+    (import.meta.env.VITE_API_URL as string | undefined)
+  )?.trim()
+
+  if (envApi && (envApi.startsWith("http://") || envApi.startsWith("https://"))) {
+    const wsBase = envApi.replace(/^http:/i, "ws:").replace(/^https:/i, "wss:").replace(/\/$/, "")
+    return `${wsBase}/api/v1/liveops/ws?${query.toString()}`
+  }
+
+  // 3. Fallback for local proxy dev
+  const protocol = window.location.protocol === "https:" ? "wss:" : "ws:"
+  const host = window.location.host
+  return `${protocol}//${host}/api/v1/liveops/ws?${query.toString()}`
+}
+
 export function useLiveOpsWs({ eventId, onEvent, enabled = true }: UseLiveOpsWsOptions = {}) {
   const [isConnected, setIsConnected] = useState(false)
   const [lastMessageTime, setLastMessageTime] = useState<Date | null>(null)
@@ -42,14 +70,7 @@ export function useLiveOpsWs({ eventId, onEvent, enabled = true }: UseLiveOpsWsO
       return
     }
 
-    // Determine WS protocol based on current window location
-    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:"
-    // In dev / Vite proxy, connect to current host or API host
-    const host = window.location.host
-    const query = new URLSearchParams({ token })
-    if (eventId) query.set("eventId", eventId)
-
-    const wsUrl = `${protocol}//${host}/api/v1/liveops/ws?${query.toString()}`
+    const wsUrl = resolveWsUrl(token, eventId)
 
     try {
       const ws = new WebSocket(wsUrl)
