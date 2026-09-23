@@ -36,7 +36,7 @@ function resolveWsUrl(token: string, eventId?: string): string {
     return `${clean}/api/v1/liveops/ws?${query.toString()}`
   }
 
-  // 2. Derive from API Base URL if configured (e.g. https://cosmos-os-backend1.onrender.com)
+  // 2. Derive from API Base URL if configured (e.g. https://cosmos-os-backend1-krp3.onrender.com)
   const envApi = (
     (import.meta.env.VITE_API_BASE_URL as string | undefined) ||
     (import.meta.env.VITE_API_URL as string | undefined)
