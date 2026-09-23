@@ -200,24 +200,7 @@ export function CrewKioskPage() {
       }
     } catch (err: any) {
       console.warn("Error loading crew kiosk data:", err)
-      if (err?.status === 401 || err?.message?.includes("PIN")) {
-        setIsPinLocked(true)
-      } else {
-        // Fallback to legacy endpoints if available
-        try {
-          const [evRes, crewRes, deptRes] = await Promise.all([
-            getEvent(eventId).catch(() => ({ data: null })),
-            listCrew(eventId).catch(() => ({ data: [] })),
-            listDepartments(eventId).catch(() => ({ data: [] })),
-          ])
-          if (evRes?.data) setEvent(evRes.data)
-          if (crewRes?.data) setCrew(crewRes.data)
-          if (deptRes?.data) setDepartments(deptRes.data)
-          setIsPinLocked(false)
-        } catch (_) {
-          setIsPinLocked(true)
-        }
-      }
+      setIsPinLocked(true)
     } finally {
       setLoading(false)
     }
