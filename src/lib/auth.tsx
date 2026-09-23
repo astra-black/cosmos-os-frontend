@@ -47,12 +47,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!response.success || !response.data?.accessToken) {
       throw new ApiError(response.error || "Login failed", 401)
     }
+    const loggedInUser = response.data.user
+    if (loggedInUser?.id) {
+      const isLocallyCompleted = localStorage.getItem(`cosmos.onboarding_completed_${loggedInUser.id}`) === "true"
+      if (isLocallyCompleted && !loggedInUser.onboardingCompletedAt) {
+        loggedInUser.onboardingCompletedAt = new Date().toISOString()
+      }
+    }
     setSession({
       accessToken: response.data.accessToken,
       refreshToken: response.data.refreshToken,
-      user: response.data.user,
+      user: loggedInUser,
     })
-    setUser(response.data.user)
+    setUser(loggedInUser)
     setToken(response.data.accessToken)
   }, [])
 

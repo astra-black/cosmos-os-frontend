@@ -34,9 +34,13 @@ export function OnboardingProfileModal() {
       return
     }
 
-    // Modal triggers when onboardingCompletedAt is null / not set
-    const isCompleted = Boolean(user.onboardingCompletedAt)
-    const sessionDismissed = sessionStorage.getItem(`cosmos.onboarding_dismissed_${user.id}`) === "true"
+    // Modal triggers only when onboardingCompletedAt is null AND not in localStorage
+    const isCompleted =
+      Boolean(user.onboardingCompletedAt) ||
+      localStorage.getItem(`cosmos.onboarding_completed_${user.id}`) === "true"
+    const sessionDismissed =
+      sessionStorage.getItem(`cosmos.onboarding_dismissed_${user.id}`) === "true" ||
+      localStorage.getItem(`cosmos.onboarding_dismissed_${user.id}`) === "true"
 
     if (!isCompleted && !sessionDismissed) {
       setName(user.name || (user.email ? user.email.split("@")[0] : ""))
@@ -52,6 +56,7 @@ export function OnboardingProfileModal() {
 
   const handleDismiss = async () => {
     if (user?.id) {
+      localStorage.setItem(`cosmos.onboarding_completed_${user.id}`, "true")
       sessionStorage.setItem(`cosmos.onboarding_dismissed_${user.id}`, "true")
       try {
         await dismissOnboarding()
@@ -78,6 +83,10 @@ export function OnboardingProfileModal() {
       }
 
       const res = await completeOnboarding(payload)
+      const now = new Date().toISOString()
+
+      localStorage.setItem(`cosmos.onboarding_completed_${user.id}`, "true")
+      sessionStorage.setItem(`cosmos.onboarding_dismissed_${user.id}`, "true")
 
       updateUser({
         ...(res.data?.user || {}),
@@ -86,7 +95,7 @@ export function OnboardingProfileModal() {
         title: payload.jobTitle,
         phone: payload.phone,
         jobFunction: payload.primaryRoleFocus,
-        onboardingCompletedAt: new Date().toISOString(),
+        onboardingCompletedAt: now,
       })
 
       toast.success("Profile setup complete! Welcome to Cosmos OS.")
