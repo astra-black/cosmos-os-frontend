@@ -6,7 +6,8 @@ type StatisticsCardProps = {
   icon: ReactNode
   value: string
   title: string
-  changePercentage: string
+  changePercentage?: string
+  periodLabel?: string
   className?: string
 }
 
@@ -15,6 +16,7 @@ export function StatisticsCard({
   value,
   title,
   changePercentage,
+  periodLabel,
   className,
 }: StatisticsCardProps) {
   return (
@@ -23,15 +25,18 @@ export function StatisticsCard({
         <div className="bg-primary/10 text-primary flex size-8 shrink-0 items-center justify-center rounded-sm">
           {icon}
         </div>
-        <span className="text-2xl">{value}</span>
+        <span className="text-2xl font-bold">{value}</span>
       </CardHeader>
-      <CardContent className="flex flex-col gap-2">
-        <span className="text-base font-semibold">{title}</span>
-        <p className="flex gap-2">
-          <span>{changePercentage}</span>
-          <span className="text-muted-foreground">vs prior window</span>
-        </p>
+      <CardContent className="flex flex-col gap-1">
+        <span className="text-sm font-medium text-muted-foreground">{title}</span>
+        {changePercentage ? (
+          <p className="flex items-center gap-1.5 text-xs">
+            <span className="font-semibold text-foreground/80">{changePercentage}</span>
+            {periodLabel ? <span className="text-muted-foreground">{periodLabel}</span> : null}
+          </p>
+        ) : null}
       </CardContent>
     </Card>
   )
 }
+
