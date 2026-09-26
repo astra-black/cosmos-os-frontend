@@ -412,9 +412,9 @@ export function SpatialStagePage() {
       {/* ------------------------------------------------------------- */}
       {/* Top Header Toolstrip & Actions Bar */}
       {/* ------------------------------------------------------------- */}
-      <header className="min-h-14 border-b border-zinc-800/80 bg-zinc-950/90 px-3 sm:px-4 flex items-center justify-between gap-2 shrink-0 z-20 backdrop-blur-md py-2 overflow-x-auto no-scrollbar">
+      <header className="min-h-14 border-b border-zinc-800/80 bg-zinc-950/95 px-2.5 sm:px-4 flex items-center justify-between gap-2 shrink-0 z-20 backdrop-blur-md py-2 w-full overflow-hidden">
         {/* Left: Event & Venue Title */}
-        <div className="flex items-center gap-2.5 shrink-0 min-w-0">
+        <div className="flex items-center gap-2 shrink-0 min-w-0">
           <Button
             variant="ghost"
             size="icon"
@@ -425,8 +425,8 @@ export function SpatialStagePage() {
             <ArrowLeftIcon className="w-4 h-4" />
           </Button>
 
-          <div className="flex items-center gap-2 min-w-0">
-            <div className="p-1.5 rounded-lg bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 shrink-0">
+          <div className="flex items-center gap-1.5 min-w-0">
+            <div className="p-1.5 rounded-lg bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 shrink-0 hidden sm:block">
               <LayersIcon className="w-4 h-4" />
             </div>
             <div className="min-w-0">
@@ -435,132 +435,134 @@ export function SpatialStagePage() {
                   type="text"
                   value={layout.title}
                   onChange={(e) => pushState({ ...layout, title: e.target.value })}
-                  className="bg-transparent font-bold text-sm text-white focus:bg-zinc-900 px-1.5 py-0.5 rounded border border-transparent focus:border-zinc-700 outline-none w-36 sm:w-56 truncate"
+                  className="bg-transparent font-bold text-xs sm:text-sm text-white focus:bg-zinc-900 px-1 py-0.5 rounded border border-transparent focus:border-zinc-700 outline-none w-28 sm:w-44 lg:w-56 truncate"
                   placeholder="Stage Layout Name"
                 />
                 <span className="text-[10px] px-1.5 py-0.5 rounded bg-cyan-500/20 text-cyan-300 font-mono font-medium shrink-0">
                   {layout.revision}
                 </span>
               </div>
-              <div className="text-[10px] text-zinc-400 font-mono pl-1.5 truncate max-w-[14rem] sm:max-w-xs">
+              <div className="text-[10px] text-zinc-400 font-mono pl-1 truncate max-w-[10rem] sm:max-w-xs">
                 {layout.venueName} • {layout.roomWidth}m × {layout.roomHeight}m
               </div>
             </div>
           </div>
         </div>
 
-        {/* Center: Tools, Snapping, Cables & Views */}
-        <div className="flex items-center gap-1 bg-zinc-900/90 border border-zinc-800/90 p-1 rounded-xl shrink-0 overflow-x-auto no-scrollbar">
-          <Button
-            size="sm"
-            variant={cableDrawingMode === null ? 'secondary' : 'ghost'}
-            onClick={() => setCableDrawingMode(null)}
-            className="h-7 text-xs px-2 font-medium shrink-0"
-          >
-            <Maximize2Icon className="w-3.5 h-3.5 mr-1 text-zinc-400" />
-            Select & Move
-          </Button>
+        {/* Center: Tools, Snapping, Cables & Views (Scrollable if viewport is tight) */}
+        <div className="flex-1 flex items-center justify-center min-w-0 overflow-x-auto no-scrollbar py-0.5 mx-1">
+          <div className="flex items-center gap-1 bg-zinc-900/90 border border-zinc-800/90 p-1 rounded-xl shrink-0">
+            <Button
+              size="sm"
+              variant={cableDrawingMode === null ? 'secondary' : 'ghost'}
+              onClick={() => setCableDrawingMode(null)}
+              className="h-7 text-xs px-2 font-medium shrink-0"
+            >
+              <Maximize2Icon className="w-3.5 h-3.5 mr-1 text-zinc-400" />
+              Select & Move
+            </Button>
 
-          {/* Cable Draw Signal Trigger */}
-          <Button
-            size="sm"
-            variant={cableDrawingMode ? 'default' : 'ghost'}
-            onClick={() => setCableDrawingMode((prev) => (prev ? null : 'power'))}
-            className={`h-7 text-xs px-2 font-medium shrink-0 ${
-              cableDrawingMode ? 'bg-amber-600 hover:bg-amber-500 text-white' : 'text-zinc-400'
-            }`}
-          >
-            <CableIcon className="w-3.5 h-3.5 mr-1" />
-            {cableDrawingMode ? `Routing ${SIGNAL_CONFIG[cableDrawingMode].label}` : 'Draw Cables'}
-          </Button>
+            {/* Cable Draw Signal Trigger */}
+            <Button
+              size="sm"
+              variant={cableDrawingMode ? 'default' : 'ghost'}
+              onClick={() => setCableDrawingMode((prev) => (prev ? null : 'power'))}
+              className={`h-7 text-xs px-2 font-medium shrink-0 ${
+                cableDrawingMode ? 'bg-amber-600 hover:bg-amber-500 text-white' : 'text-zinc-400'
+              }`}
+            >
+              <CableIcon className="w-3.5 h-3.5 mr-1" />
+              {cableDrawingMode ? `Routing ${SIGNAL_CONFIG[cableDrawingMode].label}` : 'Draw Cables'}
+            </Button>
 
-          <div className="w-px h-4 bg-zinc-800 mx-0.5 shrink-0" />
+            <div className="w-px h-4 bg-zinc-800 mx-0.5 shrink-0" />
 
-          {/* Snap to Grid Toggle */}
-          <Button
-            size="sm"
-            variant={snapToGrid ? 'secondary' : 'ghost'}
-            onClick={() => setSnapToGrid(!snapToGrid)}
-            className="h-7 text-xs px-1.5 text-zinc-300 shrink-0"
-            title="Toggle Snap to Grid (1m)"
-          >
-            <GridIcon className="w-3.5 h-3.5 mr-1 text-cyan-400" />
-            Snap {snapToGrid ? 'ON' : 'OFF'}
-          </Button>
+            {/* Snap to Grid Toggle */}
+            <Button
+              size="sm"
+              variant={snapToGrid ? 'secondary' : 'ghost'}
+              onClick={() => setSnapToGrid(!snapToGrid)}
+              className="h-7 text-xs px-1.5 text-zinc-300 shrink-0"
+              title="Toggle Snap to Grid (1m)"
+            >
+              <GridIcon className="w-3.5 h-3.5 mr-1 text-cyan-400" />
+              Snap {snapToGrid ? 'ON' : 'OFF'}
+            </Button>
 
-          <Button
-            size="sm"
-            variant={showGrid ? 'secondary' : 'ghost'}
-            onClick={() => setShowGrid(!showGrid)}
-            className="h-7 text-xs px-1.5 text-zinc-300 shrink-0"
-            title="Toggle Grid"
-          >
-            <GridIcon className="w-3.5 h-3.5 mr-1 text-zinc-400" />
-            Grid
-          </Button>
+            <Button
+              size="sm"
+              variant={showGrid ? 'secondary' : 'ghost'}
+              onClick={() => setShowGrid(!showGrid)}
+              className="h-7 text-xs px-1.5 text-zinc-300 shrink-0"
+              title="Toggle Grid"
+            >
+              <GridIcon className="w-3.5 h-3.5 mr-1 text-zinc-400" />
+              Grid
+            </Button>
 
-          <Button
-            size="sm"
-            variant={showRulers ? 'secondary' : 'ghost'}
-            onClick={() => setShowRulers(!showRulers)}
-            className="h-7 text-xs px-1.5 text-zinc-300 shrink-0"
-            title="Toggle Rulers"
-          >
-            <RulerIcon className="w-3.5 h-3.5 mr-1 text-zinc-400" />
-            Rulers
-          </Button>
+            <Button
+              size="sm"
+              variant={showRulers ? 'secondary' : 'ghost'}
+              onClick={() => setShowRulers(!showRulers)}
+              className="h-7 text-xs px-1.5 text-zinc-300 shrink-0"
+              title="Toggle Rulers"
+            >
+              <RulerIcon className="w-3.5 h-3.5 mr-1 text-zinc-400" />
+              Rulers
+            </Button>
 
-          {/* Camera FOV Toggle */}
-          <Button
-            size="sm"
-            variant={showFov ? 'secondary' : 'ghost'}
-            onClick={() => setShowFov(!showFov)}
-            className="h-7 text-xs px-1.5 text-zinc-300 shrink-0"
-            title="Toggle Camera FOV Cones"
-          >
-            <EyeIcon className="w-3.5 h-3.5 mr-1 text-teal-400" />
-            FOV
-          </Button>
+            {/* Camera FOV Toggle */}
+            <Button
+              size="sm"
+              variant={showFov ? 'secondary' : 'ghost'}
+              onClick={() => setShowFov(!showFov)}
+              className="h-7 text-xs px-1.5 text-zinc-300 shrink-0"
+              title="Toggle Camera FOV Cones"
+            >
+              <EyeIcon className="w-3.5 h-3.5 mr-1 text-teal-400" />
+              FOV
+            </Button>
 
-          {/* Cables View Toggle */}
-          <Button
-            size="sm"
-            variant={showCables ? 'secondary' : 'ghost'}
-            onClick={() => setShowCables(!showCables)}
-            className="h-7 text-xs px-1.5 text-zinc-300 shrink-0"
-            title="Toggle Cable Layer"
-          >
-            <ZapIcon className="w-3.5 h-3.5 mr-1 text-amber-400" />
-            Runs ({layout.cables.length})
-          </Button>
+            {/* Cables View Toggle */}
+            <Button
+              size="sm"
+              variant={showCables ? 'secondary' : 'ghost'}
+              onClick={() => setShowCables(!showCables)}
+              className="h-7 text-xs px-1.5 text-zinc-300 shrink-0"
+              title="Toggle Cable Layer"
+            >
+              <ZapIcon className="w-3.5 h-3.5 mr-1 text-amber-400" />
+              Runs ({layout.cables.length})
+            </Button>
 
-          <div className="w-px h-4 bg-zinc-800 mx-0.5 shrink-0" />
+            <div className="w-px h-4 bg-zinc-800 mx-0.5 shrink-0" />
 
-          {/* Undo / Redo */}
-          <Button
-            size="icon"
-            variant="ghost"
-            disabled={historyIndex <= 0}
-            onClick={handleUndo}
-            className="h-7 w-7 text-zinc-400 disabled:opacity-30 shrink-0"
-            title="Undo (Ctrl+Z)"
-          >
-            <Undo2Icon className="w-3.5 h-3.5" />
-          </Button>
-          <Button
-            size="icon"
-            variant="ghost"
-            disabled={historyIndex >= history.length - 1}
-            onClick={handleRedo}
-            className="h-7 w-7 text-zinc-400 disabled:opacity-30 shrink-0"
-            title="Redo (Ctrl+Shift+Z)"
-          >
-            <Redo2Icon className="w-3.5 h-3.5" />
-          </Button>
+            {/* Undo / Redo */}
+            <Button
+              size="icon"
+              variant="ghost"
+              disabled={historyIndex <= 0}
+              onClick={handleUndo}
+              className="h-7 w-7 text-zinc-400 disabled:opacity-30 shrink-0"
+              title="Undo (Ctrl+Z)"
+            >
+              <Undo2Icon className="w-3.5 h-3.5" />
+            </Button>
+            <Button
+              size="icon"
+              variant="ghost"
+              disabled={historyIndex >= history.length - 1}
+              onClick={handleRedo}
+              className="h-7 w-7 text-zinc-400 disabled:opacity-30 shrink-0"
+              title="Redo (Ctrl+Shift+Z)"
+            >
+              <Redo2Icon className="w-3.5 h-3.5" />
+            </Button>
+          </div>
         </div>
 
-        {/* Right: Venue Template, Specs & Export */}
-        <div className="flex items-center gap-1.5 shrink-0 justify-end">
+        {/* Right: Venue Template, Specs & Export (Anchored to right edge) */}
+        <div className="flex items-center gap-1.5 shrink-0 justify-end z-10 bg-zinc-950/95 pl-1">
           {/* Link layout to an event when opened from /spatial-stage */}
           {!eventId && eventsList.length > 0 ? (
             <select
@@ -576,7 +578,7 @@ export function SpatialStagePage() {
                 });
                 if (nextId) navigate(`/events/${nextId}/spatial-stage`);
               }}
-              className="bg-zinc-900 border border-zinc-700 text-zinc-300 text-xs rounded-lg px-2 py-1 outline-none focus:border-indigo-500 font-medium max-w-[9.5rem] shrink-0 truncate"
+              className="bg-zinc-900 border border-zinc-700 text-zinc-300 text-xs rounded-lg px-2 py-1 outline-none focus:border-indigo-500 font-medium max-w-[7.5rem] sm:max-w-[9.5rem] shrink-0 truncate"
             >
               <option value="">Link to event…</option>
               {eventsList.map((ev) => (
@@ -591,10 +593,10 @@ export function SpatialStagePage() {
           <select
             onChange={(e) => e.target.value && handleApplyTemplate(e.target.value)}
             defaultValue=""
-            className="bg-zinc-900 border border-zinc-700 text-zinc-300 text-xs rounded-lg px-2 py-1 outline-none focus:border-indigo-500 font-medium max-w-[9.5rem] shrink-0 truncate"
+            className="bg-zinc-900 border border-zinc-700 text-zinc-300 text-xs rounded-lg px-2 py-1 outline-none focus:border-indigo-500 font-medium max-w-[7.5rem] sm:max-w-[9.5rem] shrink-0 truncate"
           >
             <option value="" disabled>
-              Venue Templates
+              Templates
             </option>
             {VENUE_TEMPLATES.map((t) => (
               <option key={t.id} value={t.id}>
@@ -610,8 +612,8 @@ export function SpatialStagePage() {
             onClick={() => setIsBoqOpen(!isBoqOpen)}
             className={`border-zinc-700 text-xs h-7 px-2 shrink-0 ${isBoqOpen ? 'bg-indigo-600/30 text-indigo-300 border-indigo-500' : 'bg-zinc-900 text-zinc-300'}`}
           >
-            <SlidersHorizontalIcon className="w-3.5 h-3.5 mr-1 text-indigo-400" />
-            BoQ Specs
+            <SlidersHorizontalIcon className="w-3.5 h-3.5 sm:mr-1 text-indigo-400" />
+            <span className="hidden sm:inline">BoQ Specs</span>
           </Button>
 
           {/* Save Button */}
@@ -620,7 +622,7 @@ export function SpatialStagePage() {
             variant="outline"
             onClick={handleSave}
             disabled={saving}
-            className="border-zinc-700 bg-zinc-900 text-zinc-300 hover:text-white text-xs h-7 px-2.5 shrink-0"
+            className="border-zinc-700 bg-zinc-900 text-zinc-300 hover:text-white text-xs h-7 px-2.5 shrink-0 font-medium"
           >
             <SaveIcon className="w-3.5 h-3.5 mr-1 text-emerald-400" />
             {saving ? 'Saving…' : 'Save'}
@@ -633,7 +635,8 @@ export function SpatialStagePage() {
             className="bg-cyan-600 hover:bg-cyan-500 text-white font-medium text-xs h-7 px-2.5 shrink-0 shadow-lg shadow-cyan-600/20"
           >
             <FileCheckIcon className="w-3.5 h-3.5 mr-1" />
-            Export Blueprint
+            <span className="hidden sm:inline">Export Blueprint</span>
+            <span className="sm:hidden">Export</span>
           </Button>
         </div>
       </header>
