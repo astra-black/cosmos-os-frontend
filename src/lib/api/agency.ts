@@ -1059,8 +1059,38 @@ export function normalizeMonitoringStats(
   if ("data" in payload && payload.data) {
     return payload.data as MonitoringStats
   }
-  if ("enabled" in payload) {
-    return payload as MonitoringStats
-  }
   return null
 }
+
+export type ConflictItem = {
+  id: string
+  type: string
+  severity: "CRITICAL" | "WARNING"
+  entityName: string
+  role?: string
+  email?: string
+  phone?: string
+  overlapDays: number
+  conflictingEvents: {
+    id: string
+    name: string
+    startDate?: string
+    endDate?: string
+    venue?: string
+    role?: string
+    crewId?: string
+  }[]
+  recommendation: string
+}
+
+export async function getAgencyConflicts(eventId?: string) {
+  const query = eventId ? `?eventId=${encodeURIComponent(eventId)}` : ""
+  return apiRequest<
+    ApiEnvelope<{
+      count: number
+      criticalCount: number
+      conflicts: ConflictItem[]
+    }>
+  >(`/api/v1/agency/conflicts${query}`)
+}
+

@@ -21,6 +21,7 @@ import {
 } from "recharts"
 
 import { PageHeader } from "@/components/shared/page-header"
+import { ConflictDetectorBanner } from "@/components/widgets/conflict-detector-banner"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
@@ -337,6 +338,8 @@ export function DashboardPage() {
       {error ? (
         <Card className="border-destructive/40 text-destructive px-4 py-3 text-sm">{error}</Card>
       ) : null}
+
+      <ConflictDetectorBanner />
 
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(340px,420px)]">
         <div className="flex min-w-0 flex-col gap-4">

@@ -8,6 +8,7 @@ import {
 } from "lucide-react"
 import { toast } from "sonner"
 
+import { ConflictDetectorBanner } from "@/components/widgets/conflict-detector-banner"
 import { CreateEventModal } from "@/components/modals"
 import { PageHeader } from "@/components/shared/page-header"
 import { ConfirmationDialog } from "@/components/shared/confirmation-dialog"
@@ -273,6 +274,8 @@ export function EventsPage() {
           {error}
         </Card>
       ) : null}
+
+      <ConflictDetectorBanner />
 
       <div className="grid grid-cols-2 gap-6 lg:grid-cols-3">
         <div className="col-span-full grid gap-6 sm:grid-cols-2 xl:grid-cols-4">
