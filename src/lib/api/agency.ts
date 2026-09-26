@@ -904,6 +904,80 @@ export async function convertOpportunity(opportunityId: string) {
   })
 }
 
+/** Spawn Show Desk event + draft cues from project milestones. */
+export async function spawnEventFromProject(
+  projectId: string,
+  body: { force?: boolean; name?: string; type?: string } = {},
+) {
+  return apiRequest<
+    ApiEnvelope<{
+      success: boolean
+      reused?: boolean
+      event?: Event
+      cues?: Cue[]
+      projectId?: string
+      message?: string
+    }>
+  >(`/api/v1/agency/projects/${projectId}/spawn-event`, {
+    method: "POST",
+    body: JSON.stringify(body),
+  })
+}
+
+/** Prefill event crew from linked project vendors. */
+export async function prefillCrewFromProject(
+  eventId: string,
+  body: { projectId?: string } = {},
+) {
+  return apiRequest<
+    ApiEnvelope<{
+      createdCount?: number
+      skippedCount?: number
+      created?: CrewMember[]
+      skipped?: Array<{ vendorId?: string; name?: string; reason?: string }>
+      message?: string
+      projectId?: string
+    }>
+  >(`/api/v1/agency/events/${eventId}/crew/prefill-from-project`, {
+    method: "POST",
+    body: JSON.stringify(body),
+  })
+}
+
+/** Load spatial layout persisted on the event (Postgres metadata). */
+export async function getSpatialLayout(eventId: string) {
+  return apiRequest<
+    ApiEnvelope<{
+      layout?: Record<string, unknown> | null
+      boqSnapshot?: Record<string, unknown> | null
+      spatialUpdatedAt?: string | null
+      projectId?: string | null
+    }>
+  >(`/api/v1/agency/events/${eventId}/spatial`)
+}
+
+/** Persist spatial layout (+ optional BoQ snapshot → event/project budget). */
+export async function saveSpatialLayout(
+  eventId: string,
+  body: {
+    layout: Record<string, unknown>
+    boqSnapshot?: Record<string, unknown>
+    projectId?: string
+  },
+) {
+  return apiRequest<
+    ApiEnvelope<{
+      layout?: Record<string, unknown>
+      boqSnapshot?: Record<string, unknown> | null
+      budget?: { id: string; projectId: string; planned: number } | null
+      message?: string
+    }>
+  >(`/api/v1/agency/events/${eventId}/spatial`, {
+    method: "PUT",
+    body: JSON.stringify(body),
+  })
+}
+
 export async function listCrmContacts(params: { clientId?: string; search?: string } = {}) {
   const q = new URLSearchParams()
   if (params.clientId) q.set("clientId", params.clientId)

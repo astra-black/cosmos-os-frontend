@@ -16,7 +16,7 @@ import { Select } from "@/components/ui/select"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Textarea } from "@/components/ui/textarea"
 import { useEventScope } from "@/hooks/use-event-scope"
-import { createDepartment, deleteCrew, deleteDepartment, listCrew, listDepartments, updateCrew, updateCrewStatus, updateDepartment } from "@/lib/api/agency"
+import { createDepartment, deleteCrew, deleteDepartment, getEvent, listCrew, listDepartments, prefillCrewFromProject, updateCrew, updateCrewStatus, updateDepartment } from "@/lib/api/agency"
 import { ApiError } from "@/lib/api/client"
 import { useAuth } from "@/lib/auth"
 import { canPerform } from "@/lib/rbac"
@@ -85,6 +85,8 @@ export function CrewPage() {
   const [crewForm, setCrewForm] = useState<CrewFormData>(emptyCrewForm)
   const [pendingId, setPendingId] = useState<string | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<{ type: "crew" | "department"; id: string; name: string } | null>(null)
+  const [prefillBusy, setPrefillBusy] = useState(false)
+  const [linkedProjectId, setLinkedProjectId] = useState<string | null>(null)
 
   const reload = useCallback(async () => {
     if (!eventId) return
@@ -103,6 +105,50 @@ export function CrewPage() {
         c.crewId === updated.crewId || c.id === updated.id ? { ...c, ...updated } : c,
       ),
     )
+  }
+
+  useEffect(() => {
+    if (!eventId) {
+      setLinkedProjectId(null)
+      return
+    }
+    let cancelled = false
+    getEvent(eventId)
+      .then((res) => {
+        if (cancelled) return
+        const pid = res.data?.metadata?.projectId
+        setLinkedProjectId(typeof pid === "string" ? pid : null)
+      })
+      .catch(() => {
+        if (!cancelled) setLinkedProjectId(null)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [eventId])
+
+  async function handlePrefillFromVendors() {
+    if (!eventId || !canWrite) return
+    setPrefillBusy(true)
+    try {
+      const res = await withMutationFeedback(
+        prefillCrewFromProject(eventId, linkedProjectId ? { projectId: linkedProjectId } : {}),
+        {
+          loading: "Importing vendors into crew roster...",
+          success: "Crew roster updated from project vendors",
+          error: (err) =>
+            err instanceof ApiError ? err.message : "Could not prefill crew from vendors",
+        },
+      )
+      await reload()
+      if ((res.data?.createdCount ?? 0) === 0) {
+        toast.info(res.data?.message || "No new crew members added")
+      }
+    } catch {
+      // withMutationFeedback already toasted
+    } finally {
+      setPrefillBusy(false)
+    }
   }
 
   useEffect(() => {
@@ -273,7 +319,7 @@ export function CrewPage() {
         loading={loadingEvents}
         selectedEvent={selectedEvent}
         compact
-         trailing={canWrite ? <div className="flex gap-2"><Button size="sm" variant="outline" onClick={openCreateDepartment}>New department</Button><Button size="sm" onClick={openCreateCrew}>Add crew</Button></div> : undefined}
+         trailing={canWrite ? <div className="flex gap-2"><Button size="sm" variant="outline" onClick={openCreateDepartment}>New department</Button><Button size="sm" variant="outline" disabled={prefillBusy} onClick={handlePrefillFromVendors}>{prefillBusy ? "Importing…" : "Import project vendors"}</Button><Button size="sm" onClick={openCreateCrew}>Add crew</Button></div> : undefined}
       />
 
       {!canWrite ? (

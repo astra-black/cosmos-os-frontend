@@ -54,18 +54,25 @@ const titles: Record<string, string> = {
   "/teams": "Teams & roles",
   "/monitoring": "Monitoring",
   "/settings": "Settings",
+  "/spatial-stage": "Spatial Stage",
 }
 
 function resolveTitle(pathname: string) {
   if (titles[pathname]) return titles[pathname]
+  if (pathname.includes("/spatial-stage") || pathname === "/spatial-stage") return "Spatial Stage"
   if (pathname.startsWith("/events/")) return "Event detail"
   return "Cosmos OS"
+}
+
+function isSpatialStagePath(pathname: string) {
+  return pathname === "/spatial-stage" || pathname.includes("/spatial-stage")
 }
 
 export function AppShell({ incidentCount }: { incidentCount?: number }) {
   const { user, logout } = useAuth()
   const location = useLocation()
   const pageTitle = resolveTitle(location.pathname)
+  const fullBleed = isSpatialStagePath(location.pathname)
   const initials = (user?.name || user?.email || "CO")
     .split(/\s+/)
     .map((part) => part[0])
@@ -74,13 +81,13 @@ export function AppShell({ incidentCount }: { incidentCount?: number }) {
     .toUpperCase()
 
   return (
-    <div className="flex min-h-dvh w-full relative">
+    <div className={cn("flex w-full relative", fullBleed ? "h-dvh overflow-hidden" : "min-h-dvh")}>
       {/* Ambient background glow for authenticated portal */}
       <div className="glow" aria-hidden="true" />
-      <SidebarProvider>
+      <SidebarProvider className={fullBleed ? "h-full min-h-0 overflow-hidden" : undefined}>
         <AppSidebar incidentCount={incidentCount} />
-        <div className="flex flex-1 flex-col">
-          <header className="bg-card sticky top-0 z-50 border-b">
+        <div className={cn("flex min-h-0 flex-1 flex-col", fullBleed && "h-full overflow-hidden")}>
+          <header className="bg-card sticky top-0 z-50 border-b shrink-0">
             <div className="mx-auto flex max-w-7xl items-center justify-between gap-6 px-4 py-2 sm:px-6">
               <div className="flex items-center gap-4">
                 <SidebarTrigger className="[&_svg]:size-5!" />
@@ -140,10 +147,10 @@ export function AppShell({ incidentCount }: { incidentCount?: number }) {
               </div>
             </div>
           </header>
-          <ShellMain>
+          <ShellMain fullBleed={fullBleed}>
             <Outlet />
           </ShellMain>
-          <AppDock />
+          {!fullBleed ? <AppDock /> : null}
         </div>
         <OnboardingProfileModal />
       </SidebarProvider>
@@ -152,9 +159,23 @@ export function AppShell({ incidentCount }: { incidentCount?: number }) {
 }
 
 /** Extra bottom padding only when the dock is visible (sidebar closed). */
-function ShellMain({ children }: { children: React.ReactNode }) {
+function ShellMain({
+  children,
+  fullBleed = false,
+}: {
+  children: React.ReactNode
+  fullBleed?: boolean
+}) {
   const { state, isMobile, openMobile } = useSidebar()
   const dockVisible = isMobile ? !openMobile : state === "collapsed"
+
+  if (fullBleed) {
+    return (
+      <main className="relative min-h-0 flex-1 overflow-hidden p-0">
+        {children}
+      </main>
+    )
+  }
 
   return (
     <main

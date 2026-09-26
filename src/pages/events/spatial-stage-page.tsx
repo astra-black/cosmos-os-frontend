@@ -19,12 +19,10 @@ import { toast } from 'sonner';
 import {
   LayersIcon,
   Maximize2Icon,
-  RotateCwIcon,
   Trash2Icon,
   CopyIcon,
   LockIcon,
   UnlockIcon,
-  DownloadIcon,
   SaveIcon,
   Undo2Icon,
   Redo2Icon,
@@ -33,47 +31,49 @@ import {
   GridIcon,
   EyeIcon,
   ZapIcon,
-  RadioIcon,
   UsersIcon,
   TvIcon,
-  SparklesIcon,
   ChevronRightIcon,
   ChevronLeftIcon,
   SlidersHorizontalIcon,
   FileCheckIcon,
   CableIcon,
   ArrowLeftIcon,
+  RulerIcon,
 } from 'lucide-react';
-import { listEvents } from '@/lib/api/agency';
+import { getEvent, getSpatialLayout, listEvents, saveSpatialLayout } from '@/lib/api/agency';
 import { Event } from '@/types/agency';
+
+function defaultLayout(eventId?: string): SpatialLayoutData {
+  return {
+    id: `layout_${Date.now()}`,
+    eventId,
+    title: 'Grand Ballroom Production Layout',
+    venueName: 'Metropolitan Convention Center',
+    revision: 'Rev 1.0',
+    roomWidth: 36,
+    roomHeight: 24,
+    unit: 'metric',
+    gridSize: 1.0,
+    elements: VENUE_TEMPLATES[0].data.elements || [],
+    cables: VENUE_TEMPLATES[0].data.cables || [],
+  };
+}
 
 export function SpatialStagePage() {
   const { eventId } = useParams<{ eventId?: string }>();
   const navigate = useNavigate();
+  const [saving, setSaving] = useState(false);
 
-  // Active Layout State
+  // Active Layout State — localStorage as instant cache; Postgres wins on load
   const [layout, setLayout] = useState<SpatialLayoutData>(() => {
-    // Check if eventId or local cache exists
     const cached = localStorage.getItem(`cosmos_spatial_${eventId || 'default'}`);
     if (cached) {
       try {
         return JSON.parse(cached);
       } catch (_) {}
     }
-    // Default to Keynote Ballroom A Template
-    return {
-      id: `layout_${Date.now()}`,
-      eventId,
-      title: 'Grand Ballroom Production Layout',
-      venueName: 'Metropolitan Convention Center',
-      revision: 'Rev 1.0',
-      roomWidth: 36,
-      roomHeight: 24,
-      unit: 'metric',
-      gridSize: 1.0,
-      elements: VENUE_TEMPLATES[0].data.elements || [],
-      cables: VENUE_TEMPLATES[0].data.cables || [],
-    };
+    return defaultLayout(eventId);
   });
 
   // History Stack for Undo/Redo
@@ -101,7 +101,7 @@ export function SpatialStagePage() {
   const [eventsList, setEventsList] = useState<Event[]>([]);
   const svgRef = useRef<SVGSVGElement | null>(null);
 
-  // Load Agency Events for Linkage
+  // Load Agency Events for Linkage + hydrate layout from Postgres when linked
   useEffect(() => {
     async function fetchEvents() {
       try {
@@ -109,11 +109,11 @@ export function SpatialStagePage() {
         if (res?.data) {
           setEventsList(res.data);
           if (eventId) {
-            const matched = res.data.find((e) => e.id === eventId);
+            const matched = res.data.find((e) => e.id === eventId || e.eventId === eventId);
             if (matched) {
               setLayout((prev) => ({
                 ...prev,
-                title: `${matched.name} - Stage Layout`,
+                title: prev.title?.includes(matched.name) ? prev.title : `${matched.name} - Stage Layout`,
                 venueName: matched.location || prev.venueName,
                 eventId: matched.id,
               }));
@@ -123,6 +123,39 @@ export function SpatialStagePage() {
       } catch (_) {}
     }
     fetchEvents();
+  }, [eventId]);
+
+  useEffect(() => {
+    if (!eventId) return;
+    let cancelled = false;
+    async function hydrateFromServer() {
+      try {
+        const res = await getSpatialLayout(eventId);
+        const serverLayout = res.data?.layout as SpatialLayoutData | null | undefined;
+        if (!cancelled && serverLayout && typeof serverLayout === 'object' && Array.isArray(serverLayout.elements)) {
+          setLayout(serverLayout);
+          setHistory([serverLayout]);
+          setHistoryIndex(0);
+          localStorage.setItem(`cosmos_spatial_${eventId}`, JSON.stringify(serverLayout));
+          return;
+        }
+        // Fallback: event metadata may already carry layout via getEvent
+        const eventRes = await getEvent(eventId);
+        const metaLayout = eventRes.data?.metadata?.spatialLayout as SpatialLayoutData | undefined;
+        if (!cancelled && metaLayout && Array.isArray(metaLayout.elements)) {
+          setLayout(metaLayout);
+          setHistory([metaLayout]);
+          setHistoryIndex(0);
+          localStorage.setItem(`cosmos_spatial_${eventId}`, JSON.stringify(metaLayout));
+        }
+      } catch (_) {
+        // Keep localStorage / template layout
+      }
+    }
+    void hydrateFromServer();
+    return () => {
+      cancelled = true;
+    };
   }, [eventId]);
 
   // Push to History Stack
@@ -273,26 +306,6 @@ export function SpatialStagePage() {
     });
   };
 
-  // Save Layout to Local Storage
-  const handleSave = () => {
-    localStorage.setItem(`cosmos_spatial_${layout.eventId || 'default'}`, JSON.stringify(layout));
-    toast.success('Layout Saved', {
-      description: 'Stage floorplan and cable schematics persisted to workspace.',
-    });
-  };
-
-  // Filter Catalog
-  const filteredCatalog = useMemo(() => {
-    return EQUIPMENT_CATALOG.filter((item) => {
-      const matchesCat = categoryFilter === 'all' || item.category === categoryFilter;
-      const matchesSearch =
-        searchQuery === '' ||
-        item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        item.tags.some((t) => t.toLowerCase().includes(searchQuery.toLowerCase()));
-      return matchesCat && matchesSearch;
-    });
-  }, [categoryFilter, searchQuery]);
-
   // Technical Calculations (BoQ)
   const totalStageDecks = useMemo(() => {
     return layout.elements.reduce((acc, el) => {
@@ -325,44 +338,110 @@ export function SpatialStagePage() {
     return layout.cables.reduce((acc, c) => acc + (c.lengthMeters || 0), 0);
   }, [layout.cables]);
 
+  const estimatedBoqCost = useMemo(() => {
+    // Rough production estimate for budget handoff (decks, LED, power, cable, seats)
+    return Math.round(
+      totalStageDecks * 150 +
+        totalLedAreaSqMeters * 800 +
+        totalPowerWatts * 0.35 +
+        totalCableMeters * 8 +
+        totalSeats * 12,
+    );
+  }, [totalStageDecks, totalLedAreaSqMeters, totalPowerWatts, totalCableMeters, totalSeats]);
+
+  const filteredCatalog = useMemo(() => {
+    return EQUIPMENT_CATALOG.filter((item) => {
+      const matchesCat = categoryFilter === 'all' || item.category === categoryFilter;
+      const matchesSearch =
+        searchQuery === '' ||
+        item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        item.tags.some((t) => t.toLowerCase().includes(searchQuery.toLowerCase()));
+      return matchesCat && matchesSearch;
+    });
+  }, [categoryFilter, searchQuery]);
+
+  // Save Layout to Postgres (localStorage as offline cache)
+  const handleSave = async () => {
+    const targetEventId = layout.eventId || eventId;
+    const boqSnapshot = {
+      totalStageDecks,
+      totalLedAreaSqMeters: Number(totalLedAreaSqMeters.toFixed(2)),
+      totalPowerWatts,
+      totalSeats,
+      totalCableMeters: Number(totalCableMeters.toFixed(1)),
+      estimatedCost: estimatedBoqCost,
+      currency: 'USD',
+      computedAt: new Date().toISOString(),
+    };
+
+    localStorage.setItem(`cosmos_spatial_${targetEventId || 'default'}`, JSON.stringify(layout));
+
+    if (!targetEventId) {
+      toast.success('Layout Saved Locally', {
+        description: 'Link this layout to an event to persist BoQ to Postgres.',
+      });
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const res = await saveSpatialLayout(targetEventId, {
+        layout: layout as unknown as Record<string, unknown>,
+        boqSnapshot,
+      });
+      const budgetNote = res.data?.budget?.planned
+        ? ` · Project budget synced to $${res.data.budget.planned.toLocaleString()}`
+        : '';
+      toast.success('Layout Saved', {
+        description: `Stage floorplan + BoQ persisted to Postgres${budgetNote}`,
+      });
+    } catch (err) {
+      toast.error('Saved locally only', {
+        description: err instanceof Error ? err.message : 'Could not reach server — retry when online.',
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const primarySelected = selectedIds.length === 1 ? layout.elements.find((e) => e.id === selectedIds[0]) : null;
 
   return (
-    <div className="flex flex-col h-[calc(100vh-4rem)] w-full bg-[#090d16] text-zinc-100 overflow-hidden select-none font-sans">
+    <div className="flex flex-col h-full min-h-0 w-full bg-[#090d16] text-zinc-100 overflow-hidden select-none font-sans">
       {/* ------------------------------------------------------------- */}
       {/* Top Header Toolstrip & Actions Bar */}
       {/* ------------------------------------------------------------- */}
-      <header className="h-14 border-b border-zinc-800/80 bg-zinc-950/90 px-4 flex items-center justify-between gap-3 shrink-0 z-20 backdrop-blur-md">
+      <header className="min-h-14 border-b border-zinc-800/80 bg-zinc-950/90 px-3 sm:px-4 flex flex-wrap items-center justify-between gap-2 sm:gap-3 shrink-0 z-20 backdrop-blur-md py-2">
         {/* Left: Event & Venue Title */}
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 min-w-0">
           <Button
             variant="ghost"
             size="icon"
             onClick={() => navigate(eventId ? `/events/${eventId}` : '/events')}
-            className="text-zinc-400 hover:text-white hover:bg-zinc-800/60 h-8 w-8"
+            className="text-zinc-400 hover:text-white hover:bg-zinc-800/60 h-8 w-8 shrink-0"
             title="Back to Event"
           >
             <ArrowLeftIcon className="w-4 h-4" />
           </Button>
 
-          <div className="flex items-center gap-2">
-            <div className="p-1.5 rounded-lg bg-indigo-500/10 border border-indigo-500/20 text-indigo-400">
+          <div className="flex items-center gap-2 min-w-0">
+            <div className="p-1.5 rounded-lg bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 shrink-0">
               <LayersIcon className="w-4 h-4" />
             </div>
-            <div>
+            <div className="min-w-0">
               <div className="flex items-center gap-2">
                 <input
                   type="text"
                   value={layout.title}
                   onChange={(e) => pushState({ ...layout, title: e.target.value })}
-                  className="bg-transparent font-bold text-sm text-white focus:bg-zinc-900 px-1.5 py-0.5 rounded border border-transparent focus:border-zinc-700 outline-none w-48 sm:w-64 truncate"
+                  className="bg-transparent font-bold text-sm text-white focus:bg-zinc-900 px-1.5 py-0.5 rounded border border-transparent focus:border-zinc-700 outline-none w-40 sm:w-64 truncate"
                   placeholder="Stage Layout Name"
                 />
-                <span className="text-[10px] px-1.5 py-0.5 rounded bg-cyan-500/20 text-cyan-300 font-mono font-medium">
+                <span className="text-[10px] px-1.5 py-0.5 rounded bg-cyan-500/20 text-cyan-300 font-mono font-medium shrink-0">
                   {layout.revision}
                 </span>
               </div>
-              <div className="text-[10px] text-zinc-400 font-mono pl-1.5">
+              <div className="text-[10px] text-zinc-400 font-mono pl-1.5 truncate">
                 {layout.venueName} • {layout.roomWidth}m × {layout.roomHeight}m
               </div>
             </div>
@@ -370,12 +449,12 @@ export function SpatialStagePage() {
         </div>
 
         {/* Center: Tools, Snapping, Cables & Views */}
-        <div className="hidden lg:flex items-center gap-1.5 bg-zinc-900/80 border border-zinc-800 p-1 rounded-xl">
+        <div className="flex items-center gap-1.5 bg-zinc-900/80 border border-zinc-800 p-1 rounded-xl overflow-x-auto max-w-full order-3 lg:order-none basis-full lg:basis-auto">
           <Button
             size="sm"
             variant={cableDrawingMode === null ? 'secondary' : 'ghost'}
             onClick={() => setCableDrawingMode(null)}
-            className="h-7 text-xs px-2.5 font-medium"
+            className="h-7 text-xs px-2.5 font-medium shrink-0"
           >
             <Maximize2Icon className="w-3.5 h-3.5 mr-1 text-zinc-400" />
             Select & Move
@@ -386,7 +465,7 @@ export function SpatialStagePage() {
             size="sm"
             variant={cableDrawingMode ? 'default' : 'ghost'}
             onClick={() => setCableDrawingMode((prev) => (prev ? null : 'power'))}
-            className={`h-7 text-xs px-2.5 font-medium ${
+            className={`h-7 text-xs px-2.5 font-medium shrink-0 ${
               cableDrawingMode ? 'bg-amber-600 hover:bg-amber-500 text-white' : 'text-zinc-400'
             }`}
           >
@@ -394,18 +473,40 @@ export function SpatialStagePage() {
             {cableDrawingMode ? `Routing ${SIGNAL_CONFIG[cableDrawingMode].label}` : 'Draw Cables'}
           </Button>
 
-          <div className="w-px h-4 bg-zinc-800 mx-1" />
+          <div className="w-px h-4 bg-zinc-800 mx-1 shrink-0" />
 
           {/* Snap to Grid Toggle */}
           <Button
             size="sm"
             variant={snapToGrid ? 'secondary' : 'ghost'}
             onClick={() => setSnapToGrid(!snapToGrid)}
-            className="h-7 text-xs px-2 text-zinc-300"
+            className="h-7 text-xs px-2 text-zinc-300 shrink-0"
             title="Toggle Snap to Grid (1m)"
           >
             <GridIcon className="w-3.5 h-3.5 mr-1 text-cyan-400" />
             Snap {snapToGrid ? 'ON' : 'OFF'}
+          </Button>
+
+          <Button
+            size="sm"
+            variant={showGrid ? 'secondary' : 'ghost'}
+            onClick={() => setShowGrid(!showGrid)}
+            className="h-7 text-xs px-2 text-zinc-300 shrink-0"
+            title="Toggle Grid"
+          >
+            <GridIcon className="w-3.5 h-3.5 mr-1 text-zinc-400" />
+            Grid
+          </Button>
+
+          <Button
+            size="sm"
+            variant={showRulers ? 'secondary' : 'ghost'}
+            onClick={() => setShowRulers(!showRulers)}
+            className="h-7 text-xs px-2 text-zinc-300 shrink-0"
+            title="Toggle Rulers"
+          >
+            <RulerIcon className="w-3.5 h-3.5 mr-1 text-zinc-400" />
+            Rulers
           </Button>
 
           {/* Camera FOV Toggle */}
@@ -413,7 +514,7 @@ export function SpatialStagePage() {
             size="sm"
             variant={showFov ? 'secondary' : 'ghost'}
             onClick={() => setShowFov(!showFov)}
-            className="h-7 text-xs px-2 text-zinc-300"
+            className="h-7 text-xs px-2 text-zinc-300 shrink-0"
             title="Toggle Camera FOV Cones"
           >
             <EyeIcon className="w-3.5 h-3.5 mr-1 text-teal-400" />
@@ -425,14 +526,14 @@ export function SpatialStagePage() {
             size="sm"
             variant={showCables ? 'secondary' : 'ghost'}
             onClick={() => setShowCables(!showCables)}
-            className="h-7 text-xs px-2 text-zinc-300"
+            className="h-7 text-xs px-2 text-zinc-300 shrink-0"
             title="Toggle Cable Layer"
           >
             <ZapIcon className="w-3.5 h-3.5 mr-1 text-amber-400" />
             Runs ({layout.cables.length})
           </Button>
 
-          <div className="w-px h-4 bg-zinc-800 mx-1" />
+          <div className="w-px h-4 bg-zinc-800 mx-1 shrink-0" />
 
           {/* Undo / Redo */}
           <Button
@@ -440,7 +541,7 @@ export function SpatialStagePage() {
             variant="ghost"
             disabled={historyIndex <= 0}
             onClick={handleUndo}
-            className="h-7 w-7 text-zinc-400 disabled:opacity-30"
+            className="h-7 w-7 text-zinc-400 disabled:opacity-30 shrink-0"
             title="Undo (Ctrl+Z)"
           >
             <Undo2Icon className="w-3.5 h-3.5" />
@@ -450,7 +551,7 @@ export function SpatialStagePage() {
             variant="ghost"
             disabled={historyIndex >= history.length - 1}
             onClick={handleRedo}
-            className="h-7 w-7 text-zinc-400 disabled:opacity-30"
+            className="h-7 w-7 text-zinc-400 disabled:opacity-30 shrink-0"
             title="Redo (Ctrl+Shift+Z)"
           >
             <Redo2Icon className="w-3.5 h-3.5" />
@@ -458,7 +559,33 @@ export function SpatialStagePage() {
         </div>
 
         {/* Right: Venue Template, Specs & Export */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap justify-end">
+          {/* Link layout to an event when opened from /spatial-stage */}
+          {!eventId && eventsList.length > 0 ? (
+            <select
+              value={layout.eventId || ''}
+              onChange={(e) => {
+                const nextId = e.target.value || undefined;
+                const matched = eventsList.find((ev) => ev.id === nextId || ev.eventId === nextId);
+                pushState({
+                  ...layout,
+                  eventId: nextId,
+                  title: matched ? `${matched.name} - Stage Layout` : layout.title,
+                  venueName: matched?.location || layout.venueName,
+                });
+                if (nextId) navigate(`/events/${nextId}/spatial-stage`);
+              }}
+              className="bg-zinc-900 border border-zinc-700 text-zinc-300 text-xs rounded-lg px-2.5 py-1 outline-none focus:border-indigo-500 font-medium max-w-[11rem]"
+            >
+              <option value="">Link to event…</option>
+              {eventsList.map((ev) => (
+                <option key={ev.eventId || ev.id} value={ev.id || ev.eventId}>
+                  {ev.name}
+                </option>
+              ))}
+            </select>
+          ) : null}
+
           {/* Preset Venue Template Loader */}
           <select
             onChange={(e) => e.target.value && handleApplyTemplate(e.target.value)}
@@ -491,10 +618,11 @@ export function SpatialStagePage() {
             size="sm"
             variant="outline"
             onClick={handleSave}
+            disabled={saving}
             className="border-zinc-700 bg-zinc-900 text-zinc-300 hover:text-white text-xs h-8"
           >
             <SaveIcon className="w-3.5 h-3.5 mr-1.5 text-emerald-400" />
-            Save
+            {saving ? 'Saving…' : 'Save'}
           </Button>
 
           {/* Export Blueprint */}
@@ -512,15 +640,15 @@ export function SpatialStagePage() {
       {/* ------------------------------------------------------------- */}
       {/* Studio Workspace Layout (3-Column Shell) */}
       {/* ------------------------------------------------------------- */}
-      <div className="flex flex-1 relative overflow-hidden">
+      <div className="flex flex-1 relative min-h-0 overflow-hidden">
         {/* Left: Equipment Library Catalog Sidebar */}
         <aside
           className={`${
-            isCatalogOpen ? 'w-72' : 'w-0'
+            isCatalogOpen ? 'w-72' : 'w-10'
           } border-r border-zinc-800 bg-zinc-950 flex flex-col transition-all duration-200 relative shrink-0 z-10`}
         >
-          {isCatalogOpen && (
-            <div className="flex flex-col h-full w-72">
+          {isCatalogOpen ? (
+            <div className="flex flex-col h-full min-h-0 w-72">
               {/* Catalog Search & Category Tabs */}
               <div className="p-3 border-b border-zinc-800/80 space-y-2.5">
                 <div className="flex items-center justify-between">
@@ -607,19 +735,31 @@ export function SpatialStagePage() {
                 ))}
               </div>
             </div>
+          ) : (
+            <div className="flex h-full w-10 flex-col items-center pt-3">
+              <button
+                onClick={() => setIsCatalogOpen(true)}
+                className="w-7 h-10 rounded-md border border-zinc-700 bg-zinc-900 text-zinc-400 hover:text-white flex items-center justify-center"
+                title="Open equipment catalog"
+              >
+                <ChevronRightIcon className="w-4 h-4" />
+              </button>
+            </div>
           )}
 
-          {/* Toggle Sidebar Collapse */}
-          <button
-            onClick={() => setIsCatalogOpen(!isCatalogOpen)}
-            className="absolute -right-3.5 top-1/2 -translate-y-1/2 w-7 h-12 bg-zinc-900 border border-zinc-700 rounded-r-lg flex items-center justify-center text-zinc-400 hover:text-white z-30 shadow-xl"
-          >
-            {isCatalogOpen ? <ChevronLeftIcon className="w-4 h-4" /> : <ChevronRightIcon className="w-4 h-4" />}
-          </button>
+          {isCatalogOpen ? (
+            <button
+              onClick={() => setIsCatalogOpen(false)}
+              className="absolute right-1.5 top-1/2 -translate-y-1/2 w-6 h-10 rounded-md border border-zinc-700 bg-zinc-900/90 text-zinc-400 hover:text-white z-30 flex items-center justify-center"
+              title="Collapse catalog"
+            >
+              <ChevronLeftIcon className="w-4 h-4" />
+            </button>
+          ) : null}
         </aside>
 
         {/* Center: Interactive 2D Vector Canvas */}
-        <main className="flex-1 relative h-full">
+        <main className="flex-1 relative min-h-0 h-full overflow-hidden">
           <SpatialStageCanvas
             elements={layout.elements}
             cables={layout.cables}
@@ -646,11 +786,11 @@ export function SpatialStagePage() {
         {/* Right: Property Inspector Sidebar */}
         <aside
           className={`${
-            isInspectorOpen ? 'w-80' : 'w-0'
+            isInspectorOpen ? 'w-80' : 'w-10'
           } border-l border-zinc-800 bg-zinc-950 flex flex-col transition-all duration-200 relative shrink-0 z-10`}
         >
-          {isInspectorOpen && (
-            <div className="flex flex-col h-full w-80">
+          {isInspectorOpen ? (
+            <div className="flex flex-col h-full min-h-0 w-80">
               <div className="p-3 border-b border-zinc-800/80 flex items-center justify-between">
                 <span className="text-xs font-bold uppercase tracking-wider text-zinc-400 font-mono flex items-center gap-1.5">
                   <SlidersHorizontalIcon className="w-3.5 h-3.5 text-cyan-400" /> Properties & Inspector
@@ -844,15 +984,27 @@ export function SpatialStagePage() {
                 </div>
               )}
             </div>
+          ) : (
+            <div className="flex h-full w-10 flex-col items-center pt-3">
+              <button
+                onClick={() => setIsInspectorOpen(true)}
+                className="w-7 h-10 rounded-md border border-zinc-700 bg-zinc-900 text-zinc-400 hover:text-white flex items-center justify-center"
+                title="Open inspector"
+              >
+                <ChevronLeftIcon className="w-4 h-4" />
+              </button>
+            </div>
           )}
 
-          {/* Toggle Inspector Collapse */}
-          <button
-            onClick={() => setIsInspectorOpen(!isInspectorOpen)}
-            className="absolute -left-3.5 top-1/2 -translate-y-1/2 w-7 h-12 bg-zinc-900 border border-zinc-700 rounded-l-lg flex items-center justify-center text-zinc-400 hover:text-white z-30 shadow-xl"
-          >
-            {isInspectorOpen ? <ChevronRightIcon className="w-4 h-4" /> : <ChevronLeftIcon className="w-4 h-4" />}
-          </button>
+          {isInspectorOpen ? (
+            <button
+              onClick={() => setIsInspectorOpen(false)}
+              className="absolute left-1.5 top-1/2 -translate-y-1/2 w-6 h-10 rounded-md border border-zinc-700 bg-zinc-900/90 text-zinc-400 hover:text-white z-30 flex items-center justify-center"
+              title="Collapse inspector"
+            >
+              <ChevronRightIcon className="w-4 h-4" />
+            </button>
+          ) : null}
         </aside>
       </div>
 
@@ -860,15 +1012,18 @@ export function SpatialStagePage() {
       {/* Bottom Technical Spec & Bill of Quantities Drawer */}
       {/* ------------------------------------------------------------- */}
       {isBoqOpen && (
-        <div className="h-44 border-t border-zinc-800 bg-zinc-950/95 p-4 shrink-0 flex flex-col justify-between z-20 shadow-2xl">
-          <div className="flex justify-between items-center pb-2 border-b border-zinc-800">
+        <div className="h-48 border-t border-zinc-800 bg-zinc-950/95 p-4 shrink-0 flex flex-col justify-between z-20 shadow-2xl overflow-y-auto">
+          <div className="flex justify-between items-center pb-2 border-b border-zinc-800 gap-2">
             <span className="text-xs font-bold uppercase tracking-wider text-indigo-400 font-mono flex items-center gap-2">
-              <SlidersHorizontalIcon className="w-4 h-4" /> Live Technical Bill of Quantities (BoQ) & Production Specs
+              <SlidersHorizontalIcon className="w-4 h-4" /> Live Technical Bill of Quantities (BoQ)
             </span>
-            <span className="text-xs font-mono text-zinc-400">Total Placed Assets: {layout.elements.length}</span>
+            <div className="flex items-center gap-3 text-xs font-mono text-zinc-400 shrink-0">
+              <span>Assets: {layout.elements.length}</span>
+              <span className="text-emerald-400 font-bold">Est. ${estimatedBoqCost.toLocaleString()}</span>
+            </div>
           </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 py-2">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 py-2">
             <div className="p-2.5 rounded-xl bg-zinc-900/80 border border-zinc-800 text-center">
               <div className="text-[10px] uppercase font-mono text-zinc-400 flex items-center justify-center gap-1">
                 <LayersIcon className="w-3.5 h-3.5 text-indigo-400" /> Stage Decks

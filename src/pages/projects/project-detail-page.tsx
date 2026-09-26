@@ -10,6 +10,7 @@ import {
   Loader2Icon,
   PencilIcon,
   PlusIcon,
+  RadioIcon,
 } from "lucide-react"
 import { toast } from "sonner"
 
@@ -33,6 +34,7 @@ import {
   listAssets,
   listTasks,
   normalizeAssets,
+  spawnEventFromProject,
   updateProject,
   updateTask,
 } from "@/lib/api/agency"
@@ -117,6 +119,7 @@ export function ProjectDetailPage() {
   const [projectSaving, setProjectSaving] = useState(false)
   const [projectForm, setProjectForm] = useState<ProjectEditForm>(emptyProjectForm)
   const [createTaskOpen, setCreateTaskOpen] = useState(false)
+  const [spawnBusy, setSpawnBusy] = useState(false)
 
   const load = useCallback(async () => {
     if (!projectId) return
@@ -270,6 +273,27 @@ export function ProjectDetailPage() {
     }
   }
 
+  async function startShowDesk() {
+    if (!project || !canWrite) return
+    setSpawnBusy(true)
+    try {
+      const res = await spawnEventFromProject(project.projectId)
+      const payload = res.data
+      const eventId = payload?.event?.eventId || payload?.event?.id
+      const cueCount = payload?.cues?.length ?? 0
+      toast.success(payload?.reused ? "Opened existing Show Desk event" : "Show Desk event spawned", {
+        description: eventId
+          ? `${cueCount} draft cue(s) ready · ${eventId.slice(0, 8)}…`
+          : payload?.message,
+      })
+      if (eventId) navigate(`/events/${eventId}`)
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Could not spawn Show Desk event")
+    } finally {
+      setSpawnBusy(false)
+    }
+  }
+
   const tabs: { id: Tab; label: string }[] = [
     { id: "overview", label: "Overview" },
     { id: "tasks", label: `Tasks (${tasks.length})` },
@@ -321,6 +345,14 @@ export function ProjectDetailPage() {
           actions={
             canWrite ? (
               <div className="flex flex-wrap gap-2">
+                <Button size="sm" onClick={startShowDesk} disabled={spawnBusy}>
+                  {spawnBusy ? (
+                    <Loader2Icon className="size-3.5 animate-spin" />
+                  ) : (
+                    <RadioIcon className="size-3.5" />
+                  )}
+                  Start Show Desk
+                </Button>
                 <Button size="sm" variant="outline" onClick={openProjectEditor}>
                   <PencilIcon className="size-3.5" />
                   Edit project

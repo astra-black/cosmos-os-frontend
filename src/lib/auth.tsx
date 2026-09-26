@@ -72,25 +72,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const handleUnauthorized = () => {
       logout()
-      if (typeof window === "undefined") return
-
-      const path = window.location.pathname
-      const isPublicDesk =
-        path.includes("/checkin") ||
-        path.includes("/crew-kiosk") ||
-        path.includes("/stage") ||
-        path.includes("/display") ||
-        path.startsWith("/invite") ||
-        path.startsWith("/join") ||
-        path === "/" ||
-        path === "/landing" ||
-        path === "/login"
-
-      if (isPublicDesk) {
-        return
-      }
-
-      const isPortal = path.startsWith("/portal")
+      const isPortal = window.location.pathname.startsWith("/portal")
       window.location.href = isPortal ? "/portal/login" : "/login"
     }
     window.addEventListener("cosmos-unauthorized", handleUnauthorized)
