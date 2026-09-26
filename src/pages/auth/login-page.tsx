@@ -3,7 +3,7 @@ import { Navigate, useLocation, useNavigate } from "react-router-dom"
 import { SignInPage, Testimonial } from "@/components/ui/sign-in"
 import { ApiError } from "@/lib/api/client"
 import { useAuth } from "@/lib/auth"
-import { signup } from "@/lib/api/agency"
+import { signup, forgotPassword } from "@/lib/api/agency"
 
 const testimonials: Testimonial[] = [
   {
@@ -82,6 +82,23 @@ export function LoginPage() {
     }
   }
 
+  const handleResetPassword = async () => {
+    const email = window.prompt("Enter your email address to receive password reset instructions:")
+    if (!email || !email.trim()) return
+
+    setPending(true)
+    setError(null)
+    setSuccessMessage(null)
+    try {
+      await forgotPassword(email.trim())
+      setSuccessMessage("Password reset instructions have been sent to your email address!")
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : "Could not send reset instructions")
+    } finally {
+      setPending(false)
+    }
+  }
+
   return (
     <SignInPage
       heroImageSrc="/astra_portal.jpeg"
@@ -89,7 +106,7 @@ export function LoginPage() {
       onSignIn={handleSignIn}
       onSignUp={handleSignUp}
       onGoogleSignIn={() => {}}
-      onResetPassword={() => {}}
+      onResetPassword={handleResetPassword}
       error={error}
       successMessage={successMessage}
       pending={pending}
@@ -101,3 +118,4 @@ export function LoginPage() {
     />
   )
 }
+
