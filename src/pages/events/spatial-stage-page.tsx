@@ -127,26 +127,27 @@ export function SpatialStagePage() {
 
   useEffect(() => {
     if (!eventId) return;
+    const activeId: string = eventId;
     let cancelled = false;
     async function hydrateFromServer() {
       try {
-        const res = await getSpatialLayout(eventId);
+        const res = await getSpatialLayout(activeId);
         const serverLayout = res.data?.layout as SpatialLayoutData | null | undefined;
         if (!cancelled && serverLayout && typeof serverLayout === 'object' && Array.isArray(serverLayout.elements)) {
           setLayout(serverLayout);
           setHistory([serverLayout]);
           setHistoryIndex(0);
-          localStorage.setItem(`cosmos_spatial_${eventId}`, JSON.stringify(serverLayout));
+          localStorage.setItem(`cosmos_spatial_${activeId}`, JSON.stringify(serverLayout));
           return;
         }
         // Fallback: event metadata may already carry layout via getEvent
-        const eventRes = await getEvent(eventId);
+        const eventRes = await getEvent(activeId);
         const metaLayout = eventRes.data?.metadata?.spatialLayout as SpatialLayoutData | undefined;
         if (!cancelled && metaLayout && Array.isArray(metaLayout.elements)) {
           setLayout(metaLayout);
           setHistory([metaLayout]);
           setHistoryIndex(0);
-          localStorage.setItem(`cosmos_spatial_${eventId}`, JSON.stringify(metaLayout));
+          localStorage.setItem(`cosmos_spatial_${activeId}`, JSON.stringify(metaLayout));
         }
       } catch (_) {
         // Keep localStorage / template layout
@@ -411,9 +412,9 @@ export function SpatialStagePage() {
       {/* ------------------------------------------------------------- */}
       {/* Top Header Toolstrip & Actions Bar */}
       {/* ------------------------------------------------------------- */}
-      <header className="min-h-14 border-b border-zinc-800/80 bg-zinc-950/90 px-3 sm:px-4 flex flex-wrap items-center justify-between gap-2 sm:gap-3 shrink-0 z-20 backdrop-blur-md py-2">
+      <header className="min-h-14 border-b border-zinc-800/80 bg-zinc-950/90 px-3 sm:px-4 flex items-center justify-between gap-2 shrink-0 z-20 backdrop-blur-md py-2 overflow-x-auto no-scrollbar">
         {/* Left: Event & Venue Title */}
-        <div className="flex items-center gap-3 min-w-0">
+        <div className="flex items-center gap-2.5 shrink-0 min-w-0">
           <Button
             variant="ghost"
             size="icon"
@@ -429,19 +430,19 @@ export function SpatialStagePage() {
               <LayersIcon className="w-4 h-4" />
             </div>
             <div className="min-w-0">
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1.5">
                 <input
                   type="text"
                   value={layout.title}
                   onChange={(e) => pushState({ ...layout, title: e.target.value })}
-                  className="bg-transparent font-bold text-sm text-white focus:bg-zinc-900 px-1.5 py-0.5 rounded border border-transparent focus:border-zinc-700 outline-none w-40 sm:w-64 truncate"
+                  className="bg-transparent font-bold text-sm text-white focus:bg-zinc-900 px-1.5 py-0.5 rounded border border-transparent focus:border-zinc-700 outline-none w-36 sm:w-56 truncate"
                   placeholder="Stage Layout Name"
                 />
                 <span className="text-[10px] px-1.5 py-0.5 rounded bg-cyan-500/20 text-cyan-300 font-mono font-medium shrink-0">
                   {layout.revision}
                 </span>
               </div>
-              <div className="text-[10px] text-zinc-400 font-mono pl-1.5 truncate">
+              <div className="text-[10px] text-zinc-400 font-mono pl-1.5 truncate max-w-[14rem] sm:max-w-xs">
                 {layout.venueName} • {layout.roomWidth}m × {layout.roomHeight}m
               </div>
             </div>
@@ -449,12 +450,12 @@ export function SpatialStagePage() {
         </div>
 
         {/* Center: Tools, Snapping, Cables & Views */}
-        <div className="flex items-center gap-1.5 bg-zinc-900/80 border border-zinc-800 p-1 rounded-xl overflow-x-auto max-w-full order-3 lg:order-none basis-full lg:basis-auto">
+        <div className="flex items-center gap-1 bg-zinc-900/90 border border-zinc-800/90 p-1 rounded-xl shrink-0 overflow-x-auto no-scrollbar">
           <Button
             size="sm"
             variant={cableDrawingMode === null ? 'secondary' : 'ghost'}
             onClick={() => setCableDrawingMode(null)}
-            className="h-7 text-xs px-2.5 font-medium shrink-0"
+            className="h-7 text-xs px-2 font-medium shrink-0"
           >
             <Maximize2Icon className="w-3.5 h-3.5 mr-1 text-zinc-400" />
             Select & Move
@@ -465,7 +466,7 @@ export function SpatialStagePage() {
             size="sm"
             variant={cableDrawingMode ? 'default' : 'ghost'}
             onClick={() => setCableDrawingMode((prev) => (prev ? null : 'power'))}
-            className={`h-7 text-xs px-2.5 font-medium shrink-0 ${
+            className={`h-7 text-xs px-2 font-medium shrink-0 ${
               cableDrawingMode ? 'bg-amber-600 hover:bg-amber-500 text-white' : 'text-zinc-400'
             }`}
           >
@@ -473,14 +474,14 @@ export function SpatialStagePage() {
             {cableDrawingMode ? `Routing ${SIGNAL_CONFIG[cableDrawingMode].label}` : 'Draw Cables'}
           </Button>
 
-          <div className="w-px h-4 bg-zinc-800 mx-1 shrink-0" />
+          <div className="w-px h-4 bg-zinc-800 mx-0.5 shrink-0" />
 
           {/* Snap to Grid Toggle */}
           <Button
             size="sm"
             variant={snapToGrid ? 'secondary' : 'ghost'}
             onClick={() => setSnapToGrid(!snapToGrid)}
-            className="h-7 text-xs px-2 text-zinc-300 shrink-0"
+            className="h-7 text-xs px-1.5 text-zinc-300 shrink-0"
             title="Toggle Snap to Grid (1m)"
           >
             <GridIcon className="w-3.5 h-3.5 mr-1 text-cyan-400" />
@@ -491,7 +492,7 @@ export function SpatialStagePage() {
             size="sm"
             variant={showGrid ? 'secondary' : 'ghost'}
             onClick={() => setShowGrid(!showGrid)}
-            className="h-7 text-xs px-2 text-zinc-300 shrink-0"
+            className="h-7 text-xs px-1.5 text-zinc-300 shrink-0"
             title="Toggle Grid"
           >
             <GridIcon className="w-3.5 h-3.5 mr-1 text-zinc-400" />
@@ -502,7 +503,7 @@ export function SpatialStagePage() {
             size="sm"
             variant={showRulers ? 'secondary' : 'ghost'}
             onClick={() => setShowRulers(!showRulers)}
-            className="h-7 text-xs px-2 text-zinc-300 shrink-0"
+            className="h-7 text-xs px-1.5 text-zinc-300 shrink-0"
             title="Toggle Rulers"
           >
             <RulerIcon className="w-3.5 h-3.5 mr-1 text-zinc-400" />
@@ -514,7 +515,7 @@ export function SpatialStagePage() {
             size="sm"
             variant={showFov ? 'secondary' : 'ghost'}
             onClick={() => setShowFov(!showFov)}
-            className="h-7 text-xs px-2 text-zinc-300 shrink-0"
+            className="h-7 text-xs px-1.5 text-zinc-300 shrink-0"
             title="Toggle Camera FOV Cones"
           >
             <EyeIcon className="w-3.5 h-3.5 mr-1 text-teal-400" />
@@ -526,14 +527,14 @@ export function SpatialStagePage() {
             size="sm"
             variant={showCables ? 'secondary' : 'ghost'}
             onClick={() => setShowCables(!showCables)}
-            className="h-7 text-xs px-2 text-zinc-300 shrink-0"
+            className="h-7 text-xs px-1.5 text-zinc-300 shrink-0"
             title="Toggle Cable Layer"
           >
             <ZapIcon className="w-3.5 h-3.5 mr-1 text-amber-400" />
             Runs ({layout.cables.length})
           </Button>
 
-          <div className="w-px h-4 bg-zinc-800 mx-1 shrink-0" />
+          <div className="w-px h-4 bg-zinc-800 mx-0.5 shrink-0" />
 
           {/* Undo / Redo */}
           <Button
@@ -559,7 +560,7 @@ export function SpatialStagePage() {
         </div>
 
         {/* Right: Venue Template, Specs & Export */}
-        <div className="flex items-center gap-2 flex-wrap justify-end">
+        <div className="flex items-center gap-1.5 shrink-0 justify-end">
           {/* Link layout to an event when opened from /spatial-stage */}
           {!eventId && eventsList.length > 0 ? (
             <select
@@ -575,7 +576,7 @@ export function SpatialStagePage() {
                 });
                 if (nextId) navigate(`/events/${nextId}/spatial-stage`);
               }}
-              className="bg-zinc-900 border border-zinc-700 text-zinc-300 text-xs rounded-lg px-2.5 py-1 outline-none focus:border-indigo-500 font-medium max-w-[11rem]"
+              className="bg-zinc-900 border border-zinc-700 text-zinc-300 text-xs rounded-lg px-2 py-1 outline-none focus:border-indigo-500 font-medium max-w-[9.5rem] shrink-0 truncate"
             >
               <option value="">Link to event…</option>
               {eventsList.map((ev) => (
@@ -590,10 +591,10 @@ export function SpatialStagePage() {
           <select
             onChange={(e) => e.target.value && handleApplyTemplate(e.target.value)}
             defaultValue=""
-            className="bg-zinc-900 border border-zinc-700 text-zinc-300 text-xs rounded-lg px-2.5 py-1 outline-none focus:border-indigo-500 font-medium"
+            className="bg-zinc-900 border border-zinc-700 text-zinc-300 text-xs rounded-lg px-2 py-1 outline-none focus:border-indigo-500 font-medium max-w-[9.5rem] shrink-0 truncate"
           >
             <option value="" disabled>
-              Load Venue Template...
+              Venue Templates
             </option>
             {VENUE_TEMPLATES.map((t) => (
               <option key={t.id} value={t.id}>
@@ -607,9 +608,9 @@ export function SpatialStagePage() {
             size="sm"
             variant="outline"
             onClick={() => setIsBoqOpen(!isBoqOpen)}
-            className={`border-zinc-700 text-xs h-8 ${isBoqOpen ? 'bg-indigo-600/30 text-indigo-300 border-indigo-500' : 'bg-zinc-900 text-zinc-300'}`}
+            className={`border-zinc-700 text-xs h-7 px-2 shrink-0 ${isBoqOpen ? 'bg-indigo-600/30 text-indigo-300 border-indigo-500' : 'bg-zinc-900 text-zinc-300'}`}
           >
-            <SlidersHorizontalIcon className="w-3.5 h-3.5 mr-1.5 text-indigo-400" />
+            <SlidersHorizontalIcon className="w-3.5 h-3.5 mr-1 text-indigo-400" />
             BoQ Specs
           </Button>
 
@@ -619,9 +620,9 @@ export function SpatialStagePage() {
             variant="outline"
             onClick={handleSave}
             disabled={saving}
-            className="border-zinc-700 bg-zinc-900 text-zinc-300 hover:text-white text-xs h-8"
+            className="border-zinc-700 bg-zinc-900 text-zinc-300 hover:text-white text-xs h-7 px-2.5 shrink-0"
           >
-            <SaveIcon className="w-3.5 h-3.5 mr-1.5 text-emerald-400" />
+            <SaveIcon className="w-3.5 h-3.5 mr-1 text-emerald-400" />
             {saving ? 'Saving…' : 'Save'}
           </Button>
 
@@ -629,9 +630,9 @@ export function SpatialStagePage() {
           <Button
             size="sm"
             onClick={() => setIsExportModalOpen(true)}
-            className="bg-cyan-600 hover:bg-cyan-500 text-white font-medium text-xs h-8 shadow-lg shadow-cyan-600/20"
+            className="bg-cyan-600 hover:bg-cyan-500 text-white font-medium text-xs h-7 px-2.5 shrink-0 shadow-lg shadow-cyan-600/20"
           >
-            <FileCheckIcon className="w-3.5 h-3.5 mr-1.5" />
+            <FileCheckIcon className="w-3.5 h-3.5 mr-1" />
             Export Blueprint
           </Button>
         </div>

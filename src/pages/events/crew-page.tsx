@@ -141,8 +141,9 @@ export function CrewPage() {
         },
       )
       await reload()
-      if ((res.data?.createdCount ?? 0) === 0) {
-        toast.info(res.data?.message || "No new crew members added")
+      const data = (res as any)?.data
+      if ((data?.createdCount ?? 0) === 0) {
+        toast.info(data?.message || "No new crew members added")
       }
     } catch {
       // withMutationFeedback already toasted
