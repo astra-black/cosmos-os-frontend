@@ -82,20 +82,13 @@ export function LoginPage() {
     }
   }
 
-  const handleResetPassword = async () => {
-    const email = window.prompt("Enter your email address to receive password reset instructions:")
-    if (!email || !email.trim()) return
-
-    setPending(true)
-    setError(null)
-    setSuccessMessage(null)
+  const handleRequestPasswordReset = async (email: string) => {
     try {
       await forgotPassword(email.trim())
-      setSuccessMessage("Password reset instructions have been sent to your email address!")
+      return { success: true }
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Could not send reset instructions")
-    } finally {
-      setPending(false)
+      const msg = err instanceof ApiError ? err.message : "Could not send reset instructions"
+      return { success: false, message: msg }
     }
   }
 
@@ -106,7 +99,7 @@ export function LoginPage() {
       onSignIn={handleSignIn}
       onSignUp={handleSignUp}
       onGoogleSignIn={() => {}}
-      onResetPassword={handleResetPassword}
+      onRequestPasswordReset={handleRequestPasswordReset}
       error={error}
       successMessage={successMessage}
       pending={pending}

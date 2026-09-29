@@ -1,5 +1,5 @@
 import React, { useState } from "react"
-import { Eye, EyeOff } from "lucide-react"
+import { Eye, EyeOff, KeyRound, Mail, X, Loader2, CheckCircle2, AlertCircle } from "lucide-react"
 import { Link } from "react-router-dom"
 import { ArrowLeft } from "lucide-react"
 import { cn } from "@/lib/utils"
@@ -30,6 +30,7 @@ interface SignInPageProps {
   onSignUp?: (event: React.FormEvent<HTMLFormElement>) => void
   onGoogleSignIn?: () => void
   onResetPassword?: () => void
+  onRequestPasswordReset?: (email: string) => Promise<{ success: boolean; message?: string } | void>
   error?: string | null
   successMessage?: string | null
   pending?: boolean
@@ -63,6 +64,7 @@ export const SignInPage: React.FC<SignInPageProps> = ({
   onSignUp,
   onGoogleSignIn,
   onResetPassword,
+  onRequestPasswordReset,
   error,
   successMessage,
   pending,
@@ -79,8 +81,51 @@ export const SignInPage: React.FC<SignInPageProps> = ({
   const [showPassword, setShowPassword] = useState(false)
   const canSignUp = !!onSignUp
 
+  // Modal State for Forgot / Reset Password
+  const [showResetModal, setShowResetModal] = useState(false)
+  const [resetEmail, setResetEmail] = useState("")
+  const [resetPending, setResetPending] = useState(false)
+  const [resetError, setResetError] = useState<string | null>(null)
+  const [resetSuccess, setResetSuccess] = useState<string | null>(null)
+
+  const handleOpenResetModal = () => {
+    setResetError(null)
+    setResetSuccess(null)
+    setShowResetModal(true)
+  }
+
+  const handleResetSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!resetEmail || !resetEmail.trim() || !resetEmail.includes("@")) {
+      setResetError("Please enter a valid email address.")
+      return
+    }
+
+    setResetPending(true)
+    setResetError(null)
+    setResetSuccess(null)
+
+    try {
+      if (onRequestPasswordReset) {
+        const result = await onRequestPasswordReset(resetEmail.trim())
+        if (result && !result.success) {
+          setResetError(result.message || "Unable to send reset instructions.")
+        } else {
+          setResetSuccess("If an account is associated with this email, we've sent password reset instructions! Check your inbox and spam folder.")
+        }
+      } else if (onResetPassword) {
+        onResetPassword()
+        setResetSuccess("Password reset instructions dispatched.")
+      }
+    } catch (err: any) {
+      setResetError(err?.message || "Failed to dispatch password reset. Please verify connection.")
+    } finally {
+      setResetPending(false)
+    }
+  }
+
   return (
-    <div className="h-dvh w-dvw font-sans overflow-hidden bg-background text-foreground">
+    <div className="h-dvh w-dvw font-sans overflow-hidden bg-background text-foreground relative">
       <div className="relative flex h-full">
 
         {/* ── Left Panel: Sign Up Form ── */}
@@ -184,7 +229,14 @@ export const SignInPage: React.FC<SignInPageProps> = ({
                 <div>
                   <label className="text-sm font-medium text-muted-foreground">Email Address</label>
                   <GlassInputWrapper>
-                    <input name="email" type="email" placeholder="Enter your email address" className="w-full bg-transparent text-sm p-4 rounded-2xl focus:outline-none" required />
+                    <input
+                      name="email"
+                      type="email"
+                      placeholder="Enter your email address"
+                      className="w-full bg-transparent text-sm p-4 rounded-2xl focus:outline-none"
+                      onChange={(e) => setResetEmail(e.target.value)}
+                      required
+                    />
                   </GlassInputWrapper>
                 </div>
 
@@ -209,18 +261,23 @@ export const SignInPage: React.FC<SignInPageProps> = ({
                     <input type="checkbox" name="rememberMe" className="rounded border-border" />
                     <span className="text-foreground/90">Keep me signed in</span>
                   </label>
-                  <button type="button" onClick={onResetPassword} className="hover:underline text-violet-400 transition-colors">Reset password</button>
+                  <button type="button" onClick={handleOpenResetModal} className="hover:underline text-violet-400 transition-colors font-medium">
+                    Forgot password?
+                  </button>
                 </div>
 
                 {!isSignUp && successMessage && (
                   <div className="text-sm text-emerald-400 border border-emerald-500/20 bg-emerald-500/10 px-4 py-3 rounded-2xl flex items-center gap-2">
-                    <span className="font-semibold">✓</span>
+                    <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
                     <span>{successMessage}</span>
                   </div>
                 )}
 
                 {!isSignUp && error && (
-                  <div className="text-sm text-destructive border border-destructive/20 bg-destructive/5 px-4 py-3 rounded-2xl">{error}</div>
+                  <div className="text-sm text-destructive border border-destructive/20 bg-destructive/5 px-4 py-3 rounded-2xl flex items-center gap-2">
+                    <AlertCircle className="w-4 h-4 text-destructive shrink-0" />
+                    <span>{error}</span>
+                  </div>
                 )}
 
                 <button type="submit" disabled={pending} className="w-full rounded-2xl bg-primary py-4 font-medium text-primary-foreground hover:bg-primary/90 transition-colors disabled:opacity-50">
@@ -280,6 +337,99 @@ export const SignInPage: React.FC<SignInPageProps> = ({
           </div>
         </div>
       </div>
+
+      {/* ── Sleek Glassmorphic Forgot Password Modal ── */}
+      {showResetModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-md animate-in fade-in duration-200">
+          <div className="relative w-full max-w-md bg-zinc-950/95 border border-white/15 rounded-3xl p-6 md:p-8 shadow-2xl overflow-hidden">
+            {/* Ambient Violet Glow */}
+            <div className="absolute -top-16 -left-16 w-36 h-36 bg-violet-600/30 rounded-full blur-3xl pointer-events-none" />
+
+            {/* Close Button */}
+            <button
+              type="button"
+              onClick={() => setShowResetModal(false)}
+              className="absolute top-5 right-5 p-2 rounded-full text-zinc-400 hover:text-white hover:bg-white/10 transition-colors"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            {/* Modal Header */}
+            <div className="flex items-center gap-3 mb-4">
+              <div className="p-3 rounded-2xl bg-violet-600/20 border border-violet-500/30 text-violet-400">
+                <KeyRound className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="text-xl font-bold text-white tracking-tight">Reset Password</h3>
+                <p className="text-xs text-zinc-400">Astrablack &bull; Cosmos OS Security</p>
+              </div>
+            </div>
+
+            <p className="text-sm text-zinc-300 mb-6 leading-relaxed">
+              Enter your registered account email address. We will send a secure, 1-hour valid link to reset your password.
+            </p>
+
+            <form onSubmit={handleResetSubmit} className="space-y-4">
+              <div>
+                <label className="text-xs font-semibold uppercase tracking-wider text-zinc-400 mb-1.5 block">
+                  Email Address
+                </label>
+                <div className="relative rounded-2xl border border-white/15 bg-white/5 focus-within:border-violet-500 focus-within:ring-1 focus-within:ring-violet-500 transition-all">
+                  <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
+                  <input
+                    type="email"
+                    value={resetEmail}
+                    onChange={(e) => setResetEmail(e.target.value)}
+                    placeholder="name@company.com"
+                    autoFocus
+                    required
+                    className="w-full bg-transparent pl-11 pr-4 py-3.5 text-sm text-white placeholder:text-zinc-500 rounded-2xl focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              {resetSuccess && (
+                <div className="p-3.5 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs flex items-start gap-2.5">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                  <div className="leading-relaxed">{resetSuccess}</div>
+                </div>
+              )}
+
+              {resetError && (
+                <div className="p-3.5 rounded-2xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs flex items-start gap-2.5">
+                  <AlertCircle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+                  <div className="leading-relaxed">{resetError}</div>
+                </div>
+              )}
+
+              <div className="pt-2 flex flex-col gap-2.5">
+                <button
+                  type="submit"
+                  disabled={resetPending}
+                  className="w-full py-3.5 rounded-2xl bg-violet-600 hover:bg-violet-500 text-white font-semibold text-sm shadow-lg shadow-violet-600/30 disabled:opacity-50 transition-all flex items-center justify-center gap-2"
+                >
+                  {resetPending ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>Sending link...</span>
+                    </>
+                  ) : (
+                    "Send Reset Link"
+                  )}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setShowResetModal(false)}
+                  className="w-full py-2.5 rounded-2xl text-xs text-zinc-400 hover:text-zinc-200 hover:bg-white/5 transition-colors"
+                >
+                  Back to Sign In
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
