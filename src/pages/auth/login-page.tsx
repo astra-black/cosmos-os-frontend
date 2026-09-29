@@ -5,7 +5,7 @@ import { ApiError } from "@/lib/api/client"
 import { useAuth } from "@/lib/auth"
 import { signup, forgotPassword } from "@/lib/api/agency"
 
-const testimonials: Testimonial[] = [
+/* const testimonials: Testimonial[] = [
   {
     avatarSrc: "https://randomuser.me/api/portraits/women/57.jpg",
     name: "Sarah Chen",
@@ -24,7 +24,7 @@ const testimonials: Testimonial[] = [
     handle: "@davidcreates",
     text: "I've tried many platforms, but this one stands out. Intuitive, reliable, and genuinely helpful for productivity.",
   },
-]
+] */
 
 export function LoginPage() {
   const { login, isAuthenticated } = useAuth()
@@ -102,7 +102,7 @@ export function LoginPage() {
   return (
     <SignInPage
       heroImageSrc="/astra_portal.jpeg"
-      testimonials={testimonials}
+      testimonials={[]}
       onSignIn={handleSignIn}
       onSignUp={handleSignUp}
       onGoogleSignIn={() => {}}
