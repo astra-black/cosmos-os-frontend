@@ -23,6 +23,7 @@ import {
   FinancePage,
   IncidentsPage,
   LoginPage,
+  ResetPasswordPage,
   MilestonesPage,
   PortalHomePage,
   PortalLoginPage,
@@ -75,6 +76,7 @@ export default function App() {
       <Route path="/" element={<PublicRoute />} />
       <Route path="/landing" element={<LandingPage />} />
       <Route path="/login" element={<LoginPage />} />
+      <Route path="/reset-password" element={<ResetPasswordPage />} />
       <Route path="/invite/:token" element={<AcceptInvitePage />} />
       <Route path="/join/:token" element={<AcceptInvitePage />} />
       <Route path="/portal/login" element={<PortalLoginPage />} />

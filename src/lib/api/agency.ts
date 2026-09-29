@@ -119,6 +119,17 @@ export async function forgotPassword(email: string) {
   })
 }
 
+export async function resetPassword(token: string, newPassword: string) {
+  return apiRequest<
+    ApiEnvelope<{ success: boolean; message: string }>
+  >("/api/v1/auth/reset-password", {
+    method: "POST",
+    auth: false,
+    body: JSON.stringify({ token, newPassword }),
+  })
+}
+
+
 export async function listEvents(params: { page?: number; limit?: number; status?: string } = {}) {
   const query = new URLSearchParams()
   if (params.page != null) query.set("page", String(params.page))

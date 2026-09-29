@@ -1,5 +1,6 @@
 // Auth
 export { LoginPage } from "./auth/login-page"
+export { ResetPasswordPage } from "./auth/reset-password-page"
 export { PortalLoginPage, getPortalUser, clearPortalUser } from "./auth/portal-login-page"
 export { AcceptInvitePage } from "./auth/accept-invite-page"
 
