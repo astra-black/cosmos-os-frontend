@@ -3,9 +3,12 @@ export { LoginPage } from "./auth/login-page"
 export { ResetPasswordPage } from "./auth/reset-password-page"
 export { PortalLoginPage, getPortalUser, clearPortalUser } from "./auth/portal-login-page"
 export { AcceptInvitePage } from "./auth/accept-invite-page"
+export { PortalJoinPage } from "./auth/portal-join-page"
 
 // Portal
 export { PortalHomePage } from "./portal/portal-home-page"
+export { PortalDirectReviewPage } from "./portal/portal-direct-review-page"
+
 
 // Events
 export { EventsPage } from "./events/events-page"

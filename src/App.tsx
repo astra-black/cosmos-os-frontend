@@ -27,6 +27,8 @@ import {
   MilestonesPage,
   PortalHomePage,
   PortalLoginPage,
+  PortalJoinPage,
+  PortalDirectReviewPage,
   PortfolioPage,
   ProjectDetailPage,
   ProjectsPage,
@@ -80,6 +82,8 @@ export default function App() {
       <Route path="/invite/:token" element={<AcceptInvitePage />} />
       <Route path="/join/:token" element={<AcceptInvitePage />} />
       <Route path="/portal/login" element={<PortalLoginPage />} />
+      <Route path="/portal/join" element={<PortalJoinPage />} />
+      <Route path="/portal/review" element={<PortalDirectReviewPage />} />
       <Route path="/portal" element={<PortalRoute />} />
 
       {/* Public / PIN-Gated Event Desks (auto-bypasses for authenticated staff) */}

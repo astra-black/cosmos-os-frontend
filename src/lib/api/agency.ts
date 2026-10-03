@@ -43,7 +43,6 @@ export async function login(email: string, password: string) {
     body: JSON.stringify({ email, password }),
   })
 }
-
 export async function signup(
   emailOrName: string,
   passwordOrEmail: string,
@@ -1103,5 +1102,69 @@ export async function getAgencyConflicts(eventId?: string) {
       conflicts: ConflictItem[]
     }>
   >(`/api/v1/agency/conflicts${query}`)
+}
+
+// ── Client Portal & Stakeholder Access Management ────────────────
+
+export type ClientPortalUser = {
+  id: string
+  email: string
+  name: string
+  title?: string
+  role: "EXECUTIVE" | "APPROVER" | "VIEWER"
+  status: "ACTIVE" | "PENDING" | "INACTIVE"
+  clientId: string
+  clientName?: string
+}
+
+export async function listClientPortalUsers(clientId: string) {
+  return apiRequest<ApiEnvelope<ClientPortalUser[]>>(
+    `/api/v1/agency/clients/${clientId}/portal-users`,
+  )
+}
+
+export async function inviteClientPortalUser(
+  clientId: string,
+  data: { email: string; name?: string; title?: string; role?: string },
+) {
+  return apiRequest<ApiEnvelope<ClientPortalUser>>(
+    `/api/v1/agency/clients/${clientId}/portal-users/invite`,
+    {
+      method: "POST",
+      body: JSON.stringify(data),
+    },
+  )
+}
+
+export async function resendClientPortalInvite(clientId: string, userId: string) {
+  return apiRequest<ApiEnvelope<unknown>>(
+    `/api/v1/agency/clients/${clientId}/portal-users/${userId}/resend`,
+    { method: "POST" },
+  )
+}
+
+export async function revokeClientPortalUser(clientId: string, userId: string) {
+  return apiRequest<ApiEnvelope<unknown>>(
+    `/api/v1/agency/clients/${clientId}/portal-users/${userId}`,
+    { method: "DELETE" },
+  )
+}
+
+export async function createDirectShareToken(
+  clientId: string,
+  data: { entityType: string; entityId: string; entityTitle?: string; expiresInHours?: number },
+) {
+  return apiRequest<
+    ApiEnvelope<{
+      token: string
+      shareUrl: string
+      expiresAt: string
+      entityTitle: string
+      entityType: string
+    }>
+  >(`/api/v1/agency/clients/${clientId}/direct-share-token`, {
+    method: "POST",
+    body: JSON.stringify(data),
+  })
 }
 

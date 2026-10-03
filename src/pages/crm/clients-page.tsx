@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react"
 import { useNavigate, useParams } from "react-router-dom"
 import {
   Building2Icon,
+  KeyRoundIcon,
   MailIcon,
   PhoneIcon,
   PlusIcon,
@@ -12,7 +13,7 @@ import {
 } from "lucide-react"
 import { toast } from "sonner"
 
-import { CreateClientModal } from "@/components/modals"
+import { CreateClientModal, ClientPortalAccessModal } from "@/components/modals"
 import { CommentsPanel } from "@/components/shared/comments-panel"
 import { ConfirmationDialog } from "@/components/shared/confirmation-dialog"
 import { EntityFormDialog } from "@/components/shared/entity-form-dialog"
@@ -240,6 +241,7 @@ export function ClientsPage() {
   const [dealCreateOpen, setDealCreateOpen] = useState(false)
   const [dealCreateBusy, setDealCreateBusy] = useState(false)
   const [dealCreateForm, setDealCreateForm] = useState<DealCreateForm>(emptyDealCreateForm)
+  const [portalModalOpen, setPortalModalOpen] = useState(false)
 
   const selectClient = useCallback(
     (id: string, replace = false) => {
@@ -693,7 +695,16 @@ export function ClientsPage() {
                        ) : null}
                        {canWriteCrm ? (
                          <>
-                           <Button size="icon" variant="ghost" className="size-8" onClick={() => openEditClient(selected)} aria-label={`Edit ${selected.name}`}>
+                           <Button
+                           size="sm"
+                           variant="outline"
+                           className="gap-1.5 border-sky-700/50 bg-sky-950/30 text-sky-400 hover:bg-sky-900/40"
+                           onClick={() => setPortalModalOpen(true)}
+                         >
+                           <KeyRoundIcon className="size-3.5" />
+                           Portal & Access
+                         </Button>
+                         <Button size="icon" variant="ghost" className="size-8" onClick={() => openEditClient(selected)} aria-label={`Edit ${selected.name}`}>
                              <PencilIcon className="size-3.5" />
                            </Button>
                            <Button size="icon" variant="ghost" className="size-8 text-destructive" disabled={deleting} onClick={() => handleDelete(selected)} aria-label={`Delete ${selected.name}`}>
@@ -1152,6 +1163,14 @@ export function ClientsPage() {
         pending={deleteActivityTarget ? pendingActivityId === `delete:${deleteActivityTarget.crmActivityId}` : false}
         onConfirm={deleteActivity}
       />
+      {selected && (
+        <ClientPortalAccessModal
+          open={portalModalOpen}
+          onOpenChange={setPortalModalOpen}
+          client={selected}
+          contacts={contacts}
+        />
+      )}
     </div>
       )}
     </div>

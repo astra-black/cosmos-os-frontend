@@ -202,6 +202,36 @@ export async function aiAssist(prompt: string, context = "general") {
   )
 }
 
+export type PortalOverviewData = {
+  client: {
+    id: string
+    name: string
+    industry?: string
+    accountLead?: { name?: string; title?: string; phone?: string }
+    agency?: { name?: string; logoUrl?: string }
+  }
+  stats: {
+    activeProjectsCount: number
+    pendingApprovalsCount: number
+    sharedAssetsCount: number
+    upcomingEventsCount: number
+  }
+  projects: any[]
+  campaigns: any[]
+  approvals: any[]
+  assets: any[]
+  upcomingEvents: any[]
+}
+
+export type DirectReviewData = {
+  token: string
+  clientId: string
+  entityType: string
+  entityId: string
+  entityTitle: string
+  expiresAt: string
+}
+
 export async function portalLogin(email: string, password: string) {
   return apiRequest<
     ApiEnvelope<{
@@ -211,11 +241,77 @@ export async function portalLogin(email: string, password: string) {
       clientId: string
       clientName: string
       role: string
-    }>
+      portalRole?: string
+    }> & { token?: string }
   >("/api/v1/portal/login", {
     method: "POST",
     auth: false,
     body: JSON.stringify({ email, password }),
+  })
+}
+
+export async function validatePortalInviteToken(token: string) {
+  return apiRequest<
+    ApiEnvelope<{
+      valid: boolean
+      email: string
+      name: string
+      clientId: string
+      clientName: string
+      agencyName?: string
+      role?: string
+    }>
+  >(`/api/v1/portal/validate-token?token=${encodeURIComponent(token)}`, { auth: false })
+}
+
+export async function acceptPortalInvite(data: { token: string; password: string; name?: string }) {
+  return apiRequest<
+    ApiEnvelope<{
+      id: string
+      email: string
+      name: string
+      clientId: string
+      clientName: string
+      role: string
+      portalRole?: string
+    }> & { token?: string }
+  >("/api/v1/portal/accept-invite", {
+    method: "POST",
+    auth: false,
+    body: JSON.stringify(data),
+  })
+}
+
+export async function getPortalOverview(clientId: string) {
+  return apiRequest<ApiEnvelope<PortalOverviewData>>(
+    `/api/v1/portal/overview?clientId=${encodeURIComponent(clientId)}`,
+    { auth: false, headers: { "x-client-id": clientId } },
+  )
+}
+
+export async function getPortalEventRundown(eventId: string, clientId: string) {
+  return apiRequest<
+    ApiEnvelope<{
+      event: { id: string; title: string; startAt?: string; endAt?: string; venue?: string }
+      cues: any[]
+    }>
+  >(`/api/v1/portal/events/${eventId}/rundown?clientId=${encodeURIComponent(clientId)}`, {
+    auth: false,
+    headers: { "x-client-id": clientId },
+  })
+}
+
+export async function validateDirectReviewToken(token: string) {
+  return apiRequest<ApiEnvelope<DirectReviewData>>(`/api/v1/portal/direct-review/${token}`, {
+    auth: false,
+  })
+}
+
+export async function decideDirectReview(token: string, decision: string, notes?: string) {
+  return apiRequest(`/api/v1/portal/direct-review/${encodeURIComponent(token)}/decide`, {
+    method: "POST",
+    auth: false,
+    body: JSON.stringify({ decision, notes }),
   })
 }
 
@@ -237,13 +333,15 @@ export async function portalDecide(
   approvalId: string,
   decision: string,
   notes?: string,
+  signatureSvg?: string,
+  clientId?: string,
+  portalUserId?: string,
 ) {
   return apiRequest(`/api/v1/portal/approvals/${approvalId}/decide`, {
     method: "POST",
     auth: false,
-    body: JSON.stringify({ decision, notes }),
+    body: JSON.stringify({ decision, notes, signatureSvg, clientId, portalUserId }),
   })
 }
 
 export { checkInCrew, checkOutCrew } from "@/lib/api/agency"
-
