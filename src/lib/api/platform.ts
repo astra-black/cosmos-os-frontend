@@ -285,7 +285,7 @@ export async function acceptPortalInvite(data: { token: string; password: string
 export async function getPortalOverview(clientId: string) {
   return apiRequest<ApiEnvelope<PortalOverviewData>>(
     `/api/v1/portal/overview?clientId=${encodeURIComponent(clientId)}`,
-    { auth: false, headers: { "x-client-id": clientId } },
+    { auth: false, portalAuth: true },
   )
 }
 
@@ -297,7 +297,7 @@ export async function getPortalEventRundown(eventId: string, clientId: string) {
     }>
   >(`/api/v1/portal/events/${eventId}/rundown?clientId=${encodeURIComponent(clientId)}`, {
     auth: false,
-    headers: { "x-client-id": clientId },
+    portalAuth: true,
   })
 }
 
@@ -340,6 +340,7 @@ export async function portalDecide(
   return apiRequest(`/api/v1/portal/approvals/${approvalId}/decide`, {
     method: "POST",
     auth: false,
+    portalAuth: true,
     body: JSON.stringify({ decision, notes, signatureSvg, clientId, portalUserId }),
   })
 }

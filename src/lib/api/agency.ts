@@ -1168,3 +1168,27 @@ export async function createDirectShareToken(
   })
 }
 
+export type ClientShareableItem = {
+  id: string
+  name?: string
+  title?: string
+  subtitle?: string
+  entityType: "PROJECT" | "ASSET" | "APPROVAL" | "EVENT" | "CUE"
+  clientVisible: boolean
+  status?: string
+}
+
+export async function listClientShareableItems(clientId: string) {
+  return apiRequest<ApiEnvelope<ClientShareableItem[]>>(`/api/v1/agency/clients/${clientId}/client-sharing`)
+}
+
+export async function setClientItemVisibility(
+  clientId: string,
+  item: Pick<ClientShareableItem, "id" | "entityType">,
+  clientVisible: boolean,
+) {
+  return apiRequest<ApiEnvelope<ClientShareableItem>>(
+    `/api/v1/agency/clients/${clientId}/client-sharing/${item.entityType}/${item.id}`,
+    { method: "PATCH", body: JSON.stringify({ clientVisible }) },
+  )
+}

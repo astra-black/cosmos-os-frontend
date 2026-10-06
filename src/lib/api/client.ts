@@ -48,6 +48,7 @@ export class ApiError extends Error {
 
 type RequestOptions = RequestInit & {
   auth?: boolean
+  portalAuth?: boolean
   apiKey?: boolean
   skipAuthRedirect?: boolean
 }
@@ -60,7 +61,7 @@ function baseUrl() {
 }
 
 export async function apiRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
-  const { auth = true, apiKey = false, skipAuthRedirect = false, headers, ...rest } = options
+  const { auth = true, portalAuth = false, apiKey = false, skipAuthRedirect = false, headers, ...rest } = options
   const requestHeaders = new Headers(headers)
 
   // FormData must set its own multipart boundary — do not force JSON
@@ -72,6 +73,15 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
   if (auth) {
     const token = getAccessToken()
     if (token) requestHeaders.set("Authorization", `Bearer ${token}`)
+  }
+
+  if (portalAuth) {
+    try {
+      const portalUser = JSON.parse(localStorage.getItem("cosmos.portalUser") ?? "{}") as { token?: string }
+      if (portalUser.token) requestHeaders.set("Authorization", `Bearer ${portalUser.token}`)
+    } catch {
+      // An absent or malformed portal session is handled by the API as unauthorized.
+    }
   }
 
   if (apiKey) {

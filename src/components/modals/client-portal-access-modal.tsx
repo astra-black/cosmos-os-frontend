@@ -27,6 +27,9 @@ import {
   listClientPortalUsers,
   resendClientPortalInvite,
   revokeClientPortalUser,
+  listClientShareableItems,
+  setClientItemVisibility,
+  type ClientShareableItem,
   type ClientPortalUser,
 } from "@/lib/api/agency"
 import { ApiError } from "@/lib/api/client"
@@ -45,7 +48,7 @@ export function ClientPortalAccessModal({
   client,
   contacts = [],
 }: ClientPortalAccessModalProps) {
-  const [activeTab, setActiveTab] = useState<"users" | "direct-link">("users")
+  const [activeTab, setActiveTab] = useState<"users" | "direct-link" | "sharing">("users")
   const [users, setUsers] = useState<ClientPortalUser[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -63,6 +66,9 @@ export function ClientPortalAccessModal({
   const [generatedLink, setGeneratedLink] = useState<{ url: string; expiresAt: string } | null>(null)
   const [linkBusy, setLinkBusy] = useState(false)
   const [copiedLink, setCopiedLink] = useState(false)
+  const [shareableItems, setShareableItems] = useState<ClientShareableItem[]>([])
+  const [sharingLoading, setSharingLoading] = useState(false)
+  const [sharingBusyId, setSharingBusyId] = useState<string | null>(null)
 
   const loadUsers = async () => {
     if (!client?.clientId) return
@@ -77,12 +83,38 @@ export function ClientPortalAccessModal({
     }
   }
 
+  const loadShareableItems = async () => {
+    setSharingLoading(true)
+    try {
+      const res = await listClientShareableItems(client.clientId)
+      setShareableItems(res.data ?? [])
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Failed to load client-sharing controls")
+    } finally {
+      setSharingLoading(false)
+    }
+  }
+
   useEffect(() => {
     if (open && client?.clientId) {
       void loadUsers()
+      void loadShareableItems()
       setGeneratedLink(null)
     }
   }, [open, client?.clientId])
+
+  const toggleVisibility = async (item: ClientShareableItem) => {
+    setSharingBusyId(item.id)
+    try {
+      await setClientItemVisibility(client.clientId, item, !item.clientVisible)
+      setShareableItems((current) => current.map((entry) => entry.id === item.id ? { ...entry, clientVisible: !entry.clientVisible } : entry))
+      toast.success(item.clientVisible ? "Hidden from client portal" : "Shared with client portal")
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Could not update sharing")
+    } finally {
+      setSharingBusyId(null)
+    }
+  }
 
   const handleInvite = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -219,6 +251,16 @@ export function ClientPortalAccessModal({
           >
             <Link2Icon className="size-3.5" />
             1-Click Direct Sign-off Link
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab("sharing")}
+            className={`flex flex-1 items-center justify-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold transition-all ${
+              activeTab === "sharing" ? "bg-sky-600 text-white shadow-md shadow-sky-600/30" : "text-zinc-400 hover:text-zinc-200"
+            }`}
+          >
+            <UsersIcon className="size-3.5" />
+            Client Sharing
           </button>
         </div>
 
@@ -377,7 +419,7 @@ export function ClientPortalAccessModal({
               )}
             </div>
           </div>
-        ) : (
+        ) : activeTab === "direct-link" ? (
           /* Direct Review Link Generator */
           <div className="mt-4 space-y-5">
             <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-3 text-xs text-amber-300">
@@ -471,6 +513,31 @@ export function ClientPortalAccessModal({
                   </Button>
                 </div>
               </Card>
+            )}
+          </div>
+        ) : (
+          <div className="mt-4 space-y-3">
+            <div className="rounded-xl border border-sky-500/20 bg-sky-500/5 p-3 text-xs text-sky-200">
+              Items are private by default. Turn sharing on only for material the client should see.
+            </div>
+            {sharingLoading ? (
+              <div className="flex h-24 items-center justify-center text-xs text-zinc-500"><Loader2Icon className="size-4 animate-spin" /></div>
+            ) : shareableItems.length === 0 ? (
+              <div className="rounded-xl border border-dashed border-zinc-800 p-6 text-center text-xs text-zinc-500">No client-linked projects, assets, approvals, events, or cues yet.</div>
+            ) : (
+              <div className="max-h-[360px] space-y-2 overflow-y-auto pr-1">
+                {shareableItems.map((item) => (
+                  <div key={`${item.entityType}-${item.id}`} className="flex items-center justify-between gap-3 rounded-xl border border-zinc-800 bg-zinc-900/40 p-3">
+                    <div className="min-w-0">
+                      <div className="truncate text-sm font-medium text-zinc-100">{item.name || item.title}</div>
+                      <div className="text-[11px] uppercase tracking-wide text-zinc-500">{item.entityType.replace("_", " ")}{item.subtitle ? ` · ${item.subtitle}` : ""}</div>
+                    </div>
+                    <Button size="sm" variant={item.clientVisible ? "default" : "outline"} disabled={sharingBusyId === item.id} onClick={() => void toggleVisibility(item)} className={item.clientVisible ? "bg-emerald-700 hover:bg-emerald-600" : "border-zinc-700"}>
+                      {item.clientVisible ? "Shared" : "Private"}
+                    </Button>
+                  </div>
+                ))}
+              </div>
             )}
           </div>
         )}
