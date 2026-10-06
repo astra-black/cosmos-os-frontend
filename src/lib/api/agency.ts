@@ -1173,7 +1173,7 @@ export type ClientShareableItem = {
   name?: string
   title?: string
   subtitle?: string
-  entityType: "PROJECT" | "ASSET" | "APPROVAL" | "EVENT" | "CUE"
+  entityType: "PROJECT" | "ASSET" | "APPROVAL" | "EVENT" | "CUE" | "MILESTONE"
   clientVisible: boolean
   status?: string
 }

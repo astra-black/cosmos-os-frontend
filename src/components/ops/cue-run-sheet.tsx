@@ -19,6 +19,7 @@ import {
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { ShareWithClientToggle } from "@/components/shared/share-with-client-toggle"
 import { cn } from "@/lib/utils"
 import type { Cue } from "@/types/agency"
 
@@ -64,6 +65,7 @@ function statusMeta(status: string) {
 
 export function CueRunSheet({
   cues,
+  clientId,
   className,
   busyCueId,
   advancing,
@@ -77,6 +79,7 @@ export function CueRunSheet({
   onDelete,
 }: {
   cues: Cue[]
+  clientId?: string
   className?: string
   busyCueId?: string | null
   advancing?: boolean
@@ -491,6 +494,15 @@ export function CueRunSheet({
                           ) : null}
                           {onEdit ? <Button size="sm" variant="ghost" disabled={anyBusy} onClick={() => onEdit(cue)}><PencilIcon className="size-3.5" /> Edit</Button> : null}
                           {onDelete ? <Button size="sm" variant="ghost" disabled={anyBusy} onClick={() => onDelete(cue)}><Trash2Icon className="size-3.5 text-destructive" /> Delete</Button> : null}
+                          {(cue.clientId || clientId) ? (
+                            <ShareWithClientToggle
+                              clientId={(cue.clientId || clientId)!}
+                              entityType="cue"
+                              entityId={cue.cueId}
+                              clientVisible={cue.clientVisible}
+                              size="sm"
+                            />
+                          ) : null}
                         </div>
                       ) : null}
                     </div>

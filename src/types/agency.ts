@@ -88,6 +88,9 @@ export type Asset = {
   originalFileName?: string | null
   createdAt?: string
   updatedAt?: string
+  /** Agency-controlled: whether this asset is visible in the client portal */
+  clientVisible?: boolean
+  clientId?: string | null
 }
 
 export type PortfolioClient = {
@@ -211,6 +214,9 @@ export type Cue = {
   description?: string
   location?: string
   assignedTo?: string
+  /** Agency-controlled: whether this cue is visible in the client portal rundown */
+  clientVisible?: boolean
+  clientId?: string | null
 }
 
 export type CueTimeline = {
@@ -354,6 +360,9 @@ export type Milestone = {
   notes?: string
   projectId?: string | null
   project?: string | string[] | null
+  /** Agency-controlled: whether this milestone is visible in the client portal */
+  clientVisible?: boolean
+  clientId?: string | null
 }
 
 export type Vendor = {
@@ -386,6 +395,8 @@ export type Approval = {
   notes?: string
   decidedAt?: string
   createdAt?: string
+  /** Agency-controlled: whether this approval is visible in the client portal */
+  clientVisible?: boolean
 }
 
 export type ActivityItem = {

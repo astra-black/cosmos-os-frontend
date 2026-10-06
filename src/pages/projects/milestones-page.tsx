@@ -15,6 +15,7 @@ import { Select } from "@/components/ui/select"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useMilestones, useProjects } from "@/hooks/use-agency-data"
 import { createMilestone, deleteMilestone, updateMilestone } from "@/lib/api/agency"
+import { ShareWithClientToggle } from "@/components/shared/share-with-client-toggle"
 import { ApiError } from "@/lib/api/client"
 import { useAuth } from "@/lib/auth"
 import { canPerform } from "@/lib/rbac"
@@ -185,6 +186,15 @@ export function MilestonesPage() {
               {canWrite ? <div className="flex flex-wrap gap-2">
                 <Button className="self-start" size="sm" variant="ghost" disabled={Boolean(pendingMilestoneId)} onClick={() => startEdit(milestone)}><PencilIcon className="size-3.5" />Edit</Button>
                 <Button className="self-start" size="sm" variant="ghost" disabled={Boolean(pendingMilestoneId)} onClick={() => setDeleteTarget(milestone)}><Trash2Icon className="size-3.5 text-destructive" />Delete</Button>
+                {milestone.clientId ? (
+                  <ShareWithClientToggle
+                    clientId={milestone.clientId}
+                    entityType="milestone"
+                    entityId={milestone.milestoneId}
+                    clientVisible={milestone.clientVisible}
+                    size="sm"
+                  />
+                ) : null}
               </div> : null}
             </Card>
           })}

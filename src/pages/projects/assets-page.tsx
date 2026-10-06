@@ -25,6 +25,7 @@ import { Select } from "@/components/ui/select"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useAssets, useProjects } from "@/hooks/use-agency-data"
 import { createApproval, deleteAsset, updateAsset, uploadAsset } from "@/lib/api/agency"
+import { ShareWithClientToggle } from "@/components/shared/share-with-client-toggle"
 import { ApiError } from "@/lib/api/client"
 import { useAuth } from "@/lib/auth"
 import { canPerform } from "@/lib/rbac"
@@ -584,6 +585,18 @@ export function AssetsPage() {
                          <Trash2Icon className="size-3.5" />Delete
                        </Button>
                      </div>
+                  ) : null}
+                  {canRequest && selectedAsset.clientId ? (
+                    <ShareWithClientToggle
+                      clientId={selectedAsset.clientId}
+                      entityType="ASSET"
+                      entityId={assetId(selectedAsset)}
+                      clientVisible={selectedAsset.clientVisible}
+                      onChange={(v) => {
+                        selectedAsset.clientVisible = v
+                        void reloadAssets()
+                      }}
+                    />
                   ) : null}
                   {canRequest ? (
                     <p className="text-muted-foreground text-xs">

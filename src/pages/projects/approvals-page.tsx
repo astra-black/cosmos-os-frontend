@@ -15,6 +15,7 @@ import { Label } from "@/components/ui/label"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Textarea } from "@/components/ui/textarea"
 import { createApproval, decideApproval, listApprovals } from "@/lib/api/agency"
+import { ShareWithClientToggle } from "@/components/shared/share-with-client-toggle"
 import { ApiError } from "@/lib/api/client"
 import { useAuth } from "@/lib/auth"
 import { canPerform } from "@/lib/rbac"
@@ -329,6 +330,15 @@ export function ApprovalsPage() {
                           <XIcon className="size-3.5" />
                           Reject
                         </Button>
+                        {approval.clientId ? (
+                          <ShareWithClientToggle
+                            clientId={approval.clientId}
+                            entityType="approval"
+                            entityId={approval.approvalId}
+                            clientVisible={approval.clientVisible}
+                            size="sm"
+                          />
+                        ) : null}
                       </div>
                     ) : open && !canDecide ? (
                       <p className="text-muted-foreground text-xs">View only — need PM/Producer</p>

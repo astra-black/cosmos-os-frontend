@@ -9,7 +9,7 @@ import { cn } from "@/lib/utils"
 
 type ShareWithClientToggleProps = {
   clientId: string
-  entityType: ClientShareableItem["entityType"]
+  entityType: string
   entityId: string
   clientVisible?: boolean
   onChange?: (clientVisible: boolean) => void
@@ -35,7 +35,8 @@ export function ShareWithClientToggle({
     setBusy(true)
     const next = !visible
     try {
-      await setClientItemVisibility(clientId, { id: entityId, entityType }, next)
+      const normalizedType = entityType.toUpperCase() as ClientShareableItem["entityType"]
+      await setClientItemVisibility(clientId, { id: entityId, entityType: normalizedType }, next)
       setVisible(next)
       onChange?.(next)
       toast.success(next ? "Shared with client portal" : "Hidden from client portal")
