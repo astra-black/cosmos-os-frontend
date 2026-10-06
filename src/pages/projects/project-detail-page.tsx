@@ -11,10 +11,13 @@ import {
   PencilIcon,
   PlusIcon,
   RadioIcon,
+  FileTextIcon,
 } from "lucide-react"
 import { toast } from "sonner"
 
 import { CreateTaskModal } from "@/components/modals"
+import { ChangeOrderModal } from "@/components/finance/change-order-modal"
+import { ChangeOrdersList } from "@/components/finance/change-orders-list"
 import { CommentsPanel } from "@/components/shared/comments-panel"
 import { EmptyState } from "@/components/shared/empty-state"
 import { EntityFormDialog } from "@/components/shared/entity-form-dialog"
@@ -32,11 +35,13 @@ import {
   getProject,
   listApprovals,
   listAssets,
+  listChangeOrders,
   listTasks,
   normalizeAssets,
   spawnEventFromProject,
   updateProject,
   updateTask,
+  type ChangeOrder,
 } from "@/lib/api/agency"
 import { ApiError } from "@/lib/api/client"
 import { useAuth } from "@/lib/auth"
@@ -44,7 +49,7 @@ import { canPerform } from "@/lib/rbac"
 import type { Approval, Asset, Project, Task } from "@/types/agency"
 import { cn } from "@/lib/utils"
 
-type Tab = "overview" | "tasks" | "assets" | "approvals" | "comments"
+type Tab = "overview" | "tasks" | "assets" | "approvals" | "change_orders" | "comments"
 
 type ProjectEditForm = {
   projectName: string
@@ -120,18 +125,22 @@ export function ProjectDetailPage() {
   const [projectForm, setProjectForm] = useState<ProjectEditForm>(emptyProjectForm)
   const [createTaskOpen, setCreateTaskOpen] = useState(false)
   const [spawnBusy, setSpawnBusy] = useState(false)
+  const [changeOrders, setChangeOrders] = useState<ChangeOrder[]>([])
+  const [createCoOpen, setCreateCoOpen] = useState(false)
 
   const load = useCallback(async () => {
     if (!projectId) return
-    const [projRes, taskRes, assetRes, apprRes] = await Promise.all([
+    const [projRes, taskRes, assetRes, apprRes, coRes] = await Promise.all([
       getProject(projectId),
       listTasks({ projectId }),
       listAssets({ projectId }).catch(() => ({ data: [] as Asset[] })),
       listApprovals().catch(() => ({ data: [] as Approval[] })),
+      listChangeOrders(projectId).catch(() => ({ data: [] as ChangeOrder[] })),
     ])
     setProject(projRes.data ?? null)
     setTasks(taskRes.data ?? [])
     setAssets(normalizeAssets(assetRes as Parameters<typeof normalizeAssets>[0]))
+    setChangeOrders(coRes.data ?? [])
     const allAppr = apprRes.data ?? []
     setApprovals(
       allAppr.filter(
@@ -299,6 +308,7 @@ export function ProjectDetailPage() {
     { id: "tasks", label: `Tasks (${tasks.length})` },
     { id: "assets", label: `Assets (${assets.length})` },
     { id: "approvals", label: `Approvals (${approvals.length})` },
+    { id: "change_orders", label: `Change Orders (${changeOrders.length})` },
     { id: "comments", label: "Comments" },
   ]
 
@@ -360,6 +370,15 @@ export function ProjectDetailPage() {
                 <Button size="sm" variant="outline" onClick={() => setCreateTaskOpen(true)}>
                   <PlusIcon className="size-3.5" />
                   Add task
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="border-amber-700/40 text-amber-400 hover:bg-amber-950/40"
+                  onClick={() => setCreateCoOpen(true)}
+                >
+                  <FileTextIcon className="size-3.5" />
+                  Issue Change Order
                 </Button>
                 <Button
                   size="sm"
@@ -695,9 +714,38 @@ export function ProjectDetailPage() {
         </div>
       ) : null}
 
+      {tab === "change_orders" ? (
+        <div className="flex flex-col gap-4">
+          {canWrite ? (
+            <div className="flex justify-end">
+              <Button
+                size="sm"
+                className="bg-amber-600 hover:bg-amber-500 text-white gap-1.5"
+                onClick={() => setCreateCoOpen(true)}
+              >
+                <FileTextIcon className="size-3.5" />
+                Issue Change Order
+              </Button>
+            </div>
+          ) : null}
+          <ChangeOrdersList changeOrders={changeOrders} onRefresh={load} />
+        </div>
+      ) : null}
+
       {tab === "comments" ? (
         <CommentsPanel entityType="project" entityId={project.projectId} />
       ) : null}
+
+      {project && (
+        <ChangeOrderModal
+          open={createCoOpen}
+          onOpenChange={setCreateCoOpen}
+          projectId={project.projectId}
+          clientId={project.clientId ?? undefined}
+          currentPlannedBudget={project.budget ?? 0}
+          onSuccess={() => void load()}
+        />
+      )}
 
       <EntityFormDialog
         open={projectDialogOpen}

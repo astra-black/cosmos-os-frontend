@@ -1255,3 +1255,68 @@ export async function nudgeApprovalClient(approvalId: string, to?: string) {
     { method: "POST", body: JSON.stringify({ to }) },
   )
 }
+
+// —— Change Orders & Scope Deltas ——
+export type ChangeOrder = {
+  id: string
+  changeOrderId: string
+  projectId: string
+  projectName?: string
+  clientId: string
+  clientName?: string
+  agencyName?: string
+  title: string
+  description: string
+  scopeDelta: string
+  costDelta: number
+  baselineAmount: number
+  newTotalAmount: number
+  requestedBy: string
+  status: "PENDING" | "APPROVED" | "REJECTED" | "CHANGES_REQUESTED"
+  approvalId?: string
+  shareUrl?: string
+  expiresAt?: string
+  createdAt: string
+  updatedAt: string
+  signatureSvg?: string | null
+  decidedAt?: string | null
+  decidedBy?: string | null
+  decisionNotes?: string | null
+  clientIp?: string | null
+}
+
+export async function listChangeOrders(projectId: string) {
+  return apiRequest<ApiEnvelope<ChangeOrder[]>>(
+    `/api/v1/agency/projects/${projectId}/change-orders`,
+  )
+}
+
+export async function createChangeOrder(
+  projectId: string,
+  data: {
+    clientId?: string
+    title: string
+    description: string
+    scopeDelta?: string
+    costDelta: number
+  },
+) {
+  return apiRequest<ApiEnvelope<ChangeOrder>>(
+    `/api/v1/agency/projects/${projectId}/change-orders`,
+    { method: "POST", body: JSON.stringify(data) },
+  )
+}
+
+export async function decideChangeOrder(
+  changeOrderId: string,
+  data: {
+    decision: "APPROVED" | "REJECTED" | "CHANGES_REQUESTED"
+    notes?: string
+    signatureSvg?: string
+  },
+) {
+  return apiRequest<ApiEnvelope<ChangeOrder>>(
+    `/api/v1/agency/change-orders/${changeOrderId}/decide`,
+    { method: "POST", body: JSON.stringify(data) },
+  )
+}
