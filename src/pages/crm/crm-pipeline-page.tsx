@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { useNavigate } from "react-router-dom"
-import { Loader2Icon, PencilIcon, PlusIcon, RocketIcon, Trash2Icon, TrendingUpIcon } from "lucide-react"
+import { Loader2Icon, PencilIcon, PlusIcon, RocketIcon, SparklesIcon, Trash2Icon, TrendingUpIcon } from "lucide-react"
 import { toast } from "sonner"
 
 import { EmptyState } from "@/components/shared/empty-state"
 import { ConfirmationDialog } from "@/components/shared/confirmation-dialog"
 import { EntityFormDialog } from "@/components/shared/entity-form-dialog"
+import { AiOutreachModal } from "@/components/modals"
 import { PageHeader } from "@/components/shared/page-header"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -168,6 +169,9 @@ export function CrmPipelinePage() {
   const [editingDeal, setEditingDeal] = useState<Opportunity | null>(null)
   const [form, setForm] = useState<OpportunityForm>(emptyOpportunityForm)
   const [deleteTarget, setDeleteTarget] = useState<Opportunity | null>(null)
+  const [aiModalOpen, setAiModalOpen] = useState(false)
+  const [aiModalMode, setAiModalMode] = useState<"proposal" | "followup">("proposal")
+  const [aiTargetDeal, setAiTargetDeal] = useState<Opportunity | null>(null)
 
   const reload = useCallback(async () => {
     setError(null)
@@ -455,6 +459,35 @@ export function CrmPipelinePage() {
                           Next: {deal.nextStep}
                         </p>
                       ) : null}
+                      {canWriteCrm ? (
+                        <div className="mt-2 flex gap-1">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-6 flex-1 gap-1 text-[10px] border-sky-700/40 text-sky-400 hover:bg-sky-950/40"
+                            onClick={() => {
+                              setAiTargetDeal(deal)
+                              setAiModalMode("proposal")
+                              setAiModalOpen(true)
+                            }}
+                          >
+                            <SparklesIcon className="size-2.5" />
+                            Proposal
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-6 flex-1 gap-1 text-[10px]"
+                            onClick={() => {
+                              setAiTargetDeal(deal)
+                              setAiModalMode("followup")
+                              setAiModalOpen(true)
+                            }}
+                          >
+                            Follow-up
+                          </Button>
+                        </div>
+                      ) : null}
                       {canWriteCrm && lane.next ? (
                         <Button
                           size="sm"
@@ -545,6 +578,15 @@ export function CrmPipelinePage() {
         pending={Boolean(deleteTarget && deletingId === deleteTarget.opportunityId)}
         onConfirm={confirmDelete}
       />
+      {aiTargetDeal && (
+        <AiOutreachModal
+          open={aiModalOpen}
+          onOpenChange={setAiModalOpen}
+          mode={aiModalMode}
+          targetId={aiTargetDeal.opportunityId}
+          targetName={aiTargetDeal.name}
+        />
+      )}
     </div>
   )
 }

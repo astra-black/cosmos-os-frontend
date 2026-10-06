@@ -1192,3 +1192,66 @@ export async function setClientItemVisibility(
     { method: "PATCH", body: JSON.stringify({ clientVisible }) },
   )
 }
+
+// —— AI Outreach & Automation ——
+export type AiDraftResult = {
+  opportunityId?: string
+  vendorId?: string
+  kind: string
+  to: string | null
+  toName: string | null
+  clientName?: string
+  vendorName?: string
+  agencyName: string
+  subject: string
+  body: string
+  draft: string
+}
+
+export async function draftOpportunityProposal(opportunityId: string) {
+  return apiRequest<ApiEnvelope<AiDraftResult>>(
+    `/api/v1/agency/crm/opportunities/${opportunityId}/draft-proposal`,
+    { method: "POST" },
+  )
+}
+
+export async function draftOpportunityFollowup(opportunityId: string) {
+  return apiRequest<ApiEnvelope<AiDraftResult>>(
+    `/api/v1/agency/crm/opportunities/${opportunityId}/draft-followup`,
+    { method: "POST" },
+  )
+}
+
+export async function sendOpportunityEmail(
+  opportunityId: string,
+  data: { kind?: string; to?: string; subject?: string; body?: string } = {},
+) {
+  return apiRequest<ApiEnvelope<{ sent: boolean; to: string; subject: string }>>(
+    `/api/v1/agency/crm/opportunities/${opportunityId}/send-email`,
+    { method: "POST", body: JSON.stringify(data) },
+  )
+}
+
+export async function draftVendorOutreach(vendorId: string, projectName?: string) {
+  return apiRequest<ApiEnvelope<AiDraftResult>>(
+    `/api/v1/agency/vendors/${vendorId}/draft-outreach`,
+    { method: "POST", body: JSON.stringify({ projectName }) },
+  )
+}
+
+export async function sendVendorOutreach(
+  vendorId: string,
+  data: { to?: string; subject?: string; body?: string; projectName?: string } = {},
+) {
+  return apiRequest<ApiEnvelope<{ sent: boolean; to: string; subject: string }>>(
+    `/api/v1/agency/vendors/${vendorId}/send-outreach`,
+    { method: "POST", body: JSON.stringify(data) },
+  )
+}
+
+export async function nudgeApprovalClient(approvalId: string, to?: string) {
+  return apiRequest<ApiEnvelope<{ sent: boolean; to: string; shareUrl: string }>>(
+    `/api/v1/agency/approvals/${approvalId}/nudge`,
+    { method: "POST", body: JSON.stringify({ to }) },
+  )
+}

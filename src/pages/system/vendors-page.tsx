@@ -18,6 +18,7 @@ import { toast } from "sonner"
 
 import { ConfirmationDialog } from "@/components/shared/confirmation-dialog"
 import { EmptyState } from "@/components/shared/empty-state"
+import { AiOutreachModal } from "@/components/modals"
 import { PageHeader } from "@/components/shared/page-header"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -128,6 +129,9 @@ export function VendorsPage() {
       return true
     })
   }, [vendors, category, statusFilter, search])
+
+  const [aiModalOpen, setAiModalOpen] = useState(false)
+  const [aiTargetVendor, setAiTargetVendor] = useState<Vendor | null>(null)
 
   const preferred = vendors.filter((v) => v.status === "preferred").length
 
@@ -479,6 +483,20 @@ export function VendorsPage() {
                       {vendor.rateCard}
                     </div>
                   )}
+                  {canWrite ? (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="mt-2.5 w-full gap-1.5 text-xs border-sky-700/40 text-sky-400 hover:bg-sky-950/40"
+                      onClick={() => {
+                        setAiTargetVendor(vendor)
+                        setAiModalOpen(true)
+                      }}
+                    >
+                      <SparklesIcon className="size-3.5" />
+                      AI Outreach Request
+                    </Button>
+                  ) : null}
                 </div>
 
                 {/* Skills tags */}
@@ -677,6 +695,15 @@ export function VendorsPage() {
         destructive
         onConfirm={() => void handleDeleteConfirm()}
       />
+      {aiTargetVendor && (
+        <AiOutreachModal
+          open={aiModalOpen}
+          onOpenChange={setAiModalOpen}
+          mode="vendor"
+          targetId={aiTargetVendor.vendorId}
+          targetName={aiTargetVendor.name}
+        />
+      )}
     </div>
   )
 }

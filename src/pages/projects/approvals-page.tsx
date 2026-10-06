@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { Link, useSearchParams } from "react-router-dom"
-import { CheckIcon, Loader2Icon, MessageSquareWarningIcon, PlusIcon, XIcon } from "lucide-react"
+import { BellIcon, CheckIcon, Loader2Icon, MessageSquareWarningIcon, PlusIcon, XIcon } from "lucide-react"
 import { toast } from "sonner"
 
 import { EmptyState } from "@/components/shared/empty-state"
@@ -14,7 +14,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Textarea } from "@/components/ui/textarea"
-import { createApproval, decideApproval, listApprovals } from "@/lib/api/agency"
+import { createApproval, decideApproval, listApprovals, nudgeApprovalClient } from "@/lib/api/agency"
 import { ShareWithClientToggle } from "@/components/shared/share-with-client-toggle"
 import { ApiError } from "@/lib/api/client"
 import { useAuth } from "@/lib/auth"
@@ -59,6 +59,7 @@ export function ApprovalsPage() {
     priority: "medium",
     notes: "",
   })
+  const [nudgeBusyId, setNudgeBusyId] = useState<string | null>(null)
 
   useEffect(() => {
     if (!scopedProjectId) return
@@ -331,13 +332,39 @@ export function ApprovalsPage() {
                           Reject
                         </Button>
                         {approval.clientId ? (
-                          <ShareWithClientToggle
-                            clientId={approval.clientId}
-                            entityType="approval"
-                            entityId={approval.approvalId}
-                            clientVisible={approval.clientVisible}
-                            size="sm"
-                          />
+                          <>
+                            <ShareWithClientToggle
+                              clientId={approval.clientId}
+                              entityType="approval"
+                              entityId={approval.approvalId}
+                              clientVisible={approval.clientVisible}
+                              size="sm"
+                            />
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              disabled={nudgeBusyId === approval.approvalId}
+                              onClick={async () => {
+                                setNudgeBusyId(approval.approvalId)
+                                try {
+                                  const res = await nudgeApprovalClient(approval.approvalId)
+                                  toast.success(`Nudge sent to ${res.data?.to || "client"}`)
+                                } catch (err) {
+                                  toast.error(err instanceof ApiError ? err.message : "Nudge failed")
+                                } finally {
+                                  setNudgeBusyId(null)
+                                }
+                              }}
+                              className="border-amber-700/40 text-amber-400 hover:bg-amber-950/40 gap-1"
+                            >
+                              {nudgeBusyId === approval.approvalId ? (
+                                <Loader2Icon className="size-3 animate-spin" />
+                              ) : (
+                                <BellIcon className="size-3" />
+                              )}
+                              Nudge
+                            </Button>
+                          </>
                         ) : null}
                       </div>
                     ) : open && !canDecide ? (
