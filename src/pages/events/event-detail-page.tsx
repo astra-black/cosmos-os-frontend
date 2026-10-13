@@ -32,6 +32,7 @@ import {
 } from "lucide-react"
 import { toast } from "sonner"
 
+import { ShareWithClientToggle } from "@/components/shared/share-with-client-toggle"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
@@ -256,11 +257,26 @@ export function EventDetailPage({ defaultTab }: { defaultTab?: HubTab } = {}) {
         const [eventRes, analyticsRes, statsRes, cuesRes, incidentsRes, crewRes] =
           await Promise.all([
             getEvent(eventId),
-            getEventAnalytics(eventId).catch(() => null),
-            getIncidentStats(eventId).catch(() => null),
-            listCues(eventId).catch(() => null),
-            listIncidents(eventId).catch(() => null),
-            listCrew(eventId).catch(() => null),
+            getEventAnalytics(eventId).catch((err) => {
+              console.warn('[EventDetail] Failed to load analytics:', err)
+              return null
+            }),
+            getIncidentStats(eventId).catch((err) => {
+              console.warn('[EventDetail] Failed to load incident stats:', err)
+              return null
+            }),
+            listCues(eventId).catch((err) => {
+              console.warn('[EventDetail] Failed to load cues:', err)
+              return null
+            }),
+            listIncidents(eventId).catch((err) => {
+              console.warn('[EventDetail] Failed to load incidents:', err)
+              return null
+            }),
+            listCrew(eventId).catch((err) => {
+              console.warn('[EventDetail] Failed to load crew:', err)
+              return null
+            }),
           ])
 
         if (cancelled) return
@@ -449,6 +465,15 @@ export function EventDetailPage({ defaultTab }: { defaultTab?: HubTab } = {}) {
 
             {/* Jump into live desks scoped to this event */}
             <div className="flex flex-wrap gap-1.5">
+              {event?.clientId ? (
+                <ShareWithClientToggle
+                  clientId={event.clientId}
+                  entityType="EVENT"
+                  entityId={event.eventId || eventId!}
+                  clientVisible={event.clientVisible}
+                  onChange={(v) => setEvent((prev) => (prev ? { ...prev, clientVisible: v } : prev))}
+                />
+              ) : null}
               <Button
                 size="sm"
                 variant="outline"

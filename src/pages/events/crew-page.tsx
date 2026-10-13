@@ -92,7 +92,10 @@ export function CrewPage() {
     if (!eventId) return
     const [crewRes, deptRes] = await Promise.all([
       listCrew(eventId),
-      listDepartments(eventId).catch(() => null),
+      listDepartments(eventId).catch((err) => {
+        console.warn('[CrewPage] Failed to load departments:', err)
+        return null
+      }),
     ])
     setCrew(crewRes.data ?? [])
     setDepartments(deptRes?.data ?? [])
@@ -119,7 +122,8 @@ export function CrewPage() {
         const pid = res.data?.metadata?.projectId
         setLinkedProjectId(typeof pid === "string" ? pid : null)
       })
-      .catch(() => {
+      .catch((err) => {
+        console.warn('[CrewPage] Failed to load linked project:', err)
         if (!cancelled) setLinkedProjectId(null)
       })
     return () => {
@@ -227,7 +231,10 @@ export function CrewPage() {
   }
 
   async function handleSaveDepartment() {
-    if (!eventId || !canWrite || !departmentForm.name.trim()) return
+    if (!eventId || !canWrite || !departmentForm.name.trim()) {
+      toast.error("Please fill in all required fields")
+      return
+    }
     if (!isOptionalEmail(departmentForm.contactEmail)) {
       toast.error("Enter a valid department contact email")
       return
@@ -277,7 +284,10 @@ export function CrewPage() {
   }
 
   async function handleSaveCrew() {
-    if (!eventId || !canWrite || !crewForm.name.trim() || !crewForm.role.trim() || !crewForm.departmentId || !editingCrew) return
+    if (!eventId || !canWrite || !crewForm.name.trim() || !crewForm.role.trim() || !crewForm.departmentId || !editingCrew) {
+      toast.error("Please fill in all required fields")
+      return
+    }
     if (!isOptionalEmail(crewForm.email)) {
       toast.error("Enter a valid crew email")
       return
@@ -308,7 +318,25 @@ export function CrewPage() {
       setPendingId(null)
     }
   }
-  async function handleDeleteTarget() { if (!deleteTarget) return; setPendingId(deleteTarget.id); try { const mutation = deleteTarget.type === "crew" ? deleteCrew(deleteTarget.id) : deleteDepartment(deleteTarget.id); await withMutationFeedback(mutation, { loading: `Deleting ${deleteTarget.type}...`, success: `${deleteTarget.type === "crew" ? "Crew member" : "Department"} deleted`, error: "Could not delete item" }); await reload() } catch (err) { toast.error(err instanceof ApiError ? err.message : "Could not delete item") } finally { setPendingId(null); setDeleteTarget(null) } }
+  async function handleDeleteTarget() {
+    if (!deleteTarget) return
+    const targetId = deleteTarget.id
+    setPendingId(targetId)
+    try {
+      const mutation = deleteTarget.type === "crew" ? deleteCrew(targetId) : deleteDepartment(targetId)
+      await withMutationFeedback(mutation, {
+        loading: `Deleting ${deleteTarget.type}...`,
+        success: `${deleteTarget.type === "crew" ? "Crew member" : "Department"} deleted`,
+        error: "Could not delete item"
+      })
+      await reload()
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Could not delete item")
+    } finally {
+      setPendingId(null)
+      setDeleteTarget(null)
+    }
+  }
 
   return (
     <div className="flex flex-col gap-5">

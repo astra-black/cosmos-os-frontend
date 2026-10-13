@@ -22,6 +22,7 @@ import { CommentsPanel } from "@/components/shared/comments-panel"
 import { EmptyState } from "@/components/shared/empty-state"
 import { EntityFormDialog } from "@/components/shared/entity-form-dialog"
 import { PageHeader } from "@/components/shared/page-header"
+import { ShareWithClientToggle } from "@/components/shared/share-with-client-toggle"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
@@ -133,9 +134,18 @@ export function ProjectDetailPage() {
     const [projRes, taskRes, assetRes, apprRes, coRes] = await Promise.all([
       getProject(projectId),
       listTasks({ projectId }),
-      listAssets({ projectId }).catch(() => ({ data: [] as Asset[] })),
-      listApprovals().catch(() => ({ data: [] as Approval[] })),
-      listChangeOrders(projectId).catch(() => ({ data: [] as ChangeOrder[] })),
+      listAssets({ projectId }).catch((err) => {
+        console.warn('[ProjectDetail] Failed to load assets:', err)
+        return { data: [] as Asset[] }
+      }),
+      listApprovals().catch((err) => {
+        console.warn('[ProjectDetail] Failed to load approvals:', err)
+        return { data: [] as Approval[] }
+      }),
+      listChangeOrders(projectId).catch((err) => {
+        console.warn('[ProjectDetail] Failed to load change orders:', err)
+        return { data: [] as ChangeOrder[] }
+      }),
     ])
     setProject(projRes.data ?? null)
     setTasks(taskRes.data ?? [])
@@ -419,6 +429,15 @@ export function ProjectDetailPage() {
             >
               {project.clientName || project.clientId}
             </Button>
+          ) : null}
+          {project.clientId ? (
+            <ShareWithClientToggle
+              clientId={project.clientId}
+              entityType="PROJECT"
+              entityId={project.projectId}
+              clientVisible={project.clientVisible}
+              onChange={(v) => setProject((p) => (p ? { ...p, clientVisible: v } : p))}
+            />
           ) : null}
           {project.campaignId ? (
             <Button

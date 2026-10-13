@@ -135,7 +135,10 @@ export function FinancePage() {
       listBudgets(),
       listTimeEntries(),
       listProjects(),
-      getProjectProfitability().catch(() => ({ data: [] as ProjectProfitability[] })),
+      getProjectProfitability().catch((err) => {
+        console.warn('[FinancePage] Failed to load profitability:', err)
+        return { data: [] as ProjectProfitability[] }
+      }),
     ])
     setSummary(s.data ?? null)
     setBudgets(b.data ?? [])

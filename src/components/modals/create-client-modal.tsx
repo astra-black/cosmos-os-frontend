@@ -53,7 +53,9 @@ export function CreateClientModal({
         .then((res) => {
           setTeamMembers(res.data ?? [])
         })
-        .catch(() => {})
+        .catch((err) => {
+          console.warn('[CreateClientModal] Failed to load team members:', err)
+        })
     }
   }, [open])
 

@@ -323,7 +323,7 @@ export async function createIncident(
     assignedTo?: string
     costImpact?: number
     financialImpact?: number
-    metadata?: Record<string, any>
+    metadata?: Record<string, string | number | boolean>
   },
 ) {
   return apiRequest<ApiEnvelope<Incident>>(

@@ -59,14 +59,15 @@ export function useLiveOpsWs({ eventId, onEvent, enabled = true }: UseLiveOpsWsO
   const wsRef = useRef<WebSocket | null>(null)
   const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const onEventRef = useRef(onEvent)
+  const mountedRef = useRef(true)
   onEventRef.current = onEvent
 
   const connect = useCallback(() => {
-    if (!enabled || typeof window === "undefined") return
+    if (!enabled || typeof window === "undefined" || !mountedRef.current) return
 
     const token = getAccessToken()
     if (!token) {
-      setIsConnected(false)
+      if (mountedRef.current) setIsConnected(false)
       return
     }
 
@@ -77,6 +78,7 @@ export function useLiveOpsWs({ eventId, onEvent, enabled = true }: UseLiveOpsWsO
       wsRef.current = ws
 
       ws.onopen = () => {
+        if (!mountedRef.current) return
         setIsConnected(true)
         if (eventId) {
           ws.send(JSON.stringify({ type: "JOIN_EVENT", eventId }))
@@ -84,6 +86,7 @@ export function useLiveOpsWs({ eventId, onEvent, enabled = true }: UseLiveOpsWsO
       }
 
       ws.onmessage = (event) => {
+        if (!mountedRef.current) return
         setLastMessageTime(new Date())
         try {
           const payload = JSON.parse(event.data)
@@ -100,30 +103,34 @@ export function useLiveOpsWs({ eventId, onEvent, enabled = true }: UseLiveOpsWsO
       }
 
       ws.onclose = () => {
+        if (!mountedRef.current) return
         setIsConnected(false)
         wsRef.current = null
-        if (enabled) {
+        if (enabled && mountedRef.current) {
           reconnectTimeoutRef.current = setTimeout(connect, 3000)
         }
       }
 
       ws.onerror = () => {
+        if (!mountedRef.current) return
         setIsConnected(false)
         try {
           ws.close()
         } catch (_) {}
       }
     } catch (_) {
-      setIsConnected(false)
-      if (enabled) {
+      if (mountedRef.current) setIsConnected(false)
+      if (enabled && mountedRef.current) {
         reconnectTimeoutRef.current = setTimeout(connect, 4000)
       }
     }
   }, [enabled, eventId])
 
   useEffect(() => {
+    mountedRef.current = true
     connect()
     return () => {
+      mountedRef.current = false
       if (reconnectTimeoutRef.current) {
         clearTimeout(reconnectTimeoutRef.current)
       }

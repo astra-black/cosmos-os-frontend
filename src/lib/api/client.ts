@@ -3,10 +3,12 @@ const REFRESH_TOKEN_KEY = "cosmos.refreshToken"
 const USER_KEY = "cosmos.user"
 
 export function getAccessToken() {
+  if (typeof window === "undefined") return null
   return localStorage.getItem(ACCESS_TOKEN_KEY)
 }
 
 export function getRefreshToken() {
+  if (typeof window === "undefined") return null
   return localStorage.getItem(REFRESH_TOKEN_KEY)
 }
 
@@ -27,6 +29,7 @@ export function clearSession() {
 }
 
 export function getStoredUser<T>() {
+  if (typeof window === "undefined") return null
   const raw = localStorage.getItem(USER_KEY)
   if (!raw) return null
   try {
@@ -51,6 +54,7 @@ type RequestOptions = RequestInit & {
   portalAuth?: boolean
   apiKey?: boolean
   skipAuthRedirect?: boolean
+  signal?: AbortSignal
 }
 
 function baseUrl() {
@@ -77,8 +81,10 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
 
   if (portalAuth) {
     try {
-      const portalUser = JSON.parse(localStorage.getItem("cosmos.portalUser") ?? "{}") as { token?: string }
-      if (portalUser.token) requestHeaders.set("Authorization", `Bearer ${portalUser.token}`)
+      if (typeof window !== "undefined") {
+        const portalUser = JSON.parse(localStorage.getItem("cosmos.portalUser") ?? "{}") as { token?: string }
+        if (portalUser.token) requestHeaders.set("Authorization", `Bearer ${portalUser.token}`)
+      }
     } catch {
       // An absent or malformed portal session is handled by the API as unauthorized.
     }
@@ -94,7 +100,10 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
     headers: requestHeaders,
   })
 
-  const payload = await response.json().catch(() => ({}))
+  const payload = await response.json().catch((err) => {
+    console.warn('[apiRequest] Failed to parse JSON response:', err)
+    return {}
+  })
 
   if (!response.ok) {
     if (response.status === 401 && !skipAuthRedirect) {

@@ -17,6 +17,7 @@ import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { aiAssist } from "@/lib/api/platform"
+import type { AiAction } from "@/lib/api/platform"
 import { ApiError } from "@/lib/api/client"
 import { cn } from "@/lib/utils"
 
@@ -30,6 +31,7 @@ type Msg = {
   context?: ContextMode
   at: number
   links?: { label: string; href: string }[]
+  proposedAction?: AiAction
 }
 
 const MODES: {
@@ -48,27 +50,27 @@ const MODES: {
 const PROMPTS: Record<ContextMode, string[]> = {
   general: [
     "What should I focus on today across the agency?",
-    "How do I use the client portal for approvals?",
+    "Create a task to send the client deck this week",
     "Give me a 60-second Agency OS rundown",
   ],
   live_ops: [
     "How should I run the show cues tonight?",
-    "Incident triage checklist for critical AV failures",
+    "Log a critical AV incident for tonight's event",
     "When do I advance vs complete a cue?",
   ],
   crm: [
     "What should I prioritize in the CRM pipeline?",
+    "Create a $45k lead opportunity for our top client",
     "Draft a follow-up after a negotiation call",
-    "How do I advance a deal stage cleanly?",
   ],
   delivery: [
-    "Draft a client brief outline for a brand film",
+    "Create an approval request for the latest deliverable",
     "Review checklist before sending assets for approval",
     "How should I structure campaign → project → asset?",
   ],
   finance: [
     "Budget risk flags for delivery this week",
-    "How do I log billable time against a project?",
+    "Log 2 hours billable time on the active project",
     "What utilization % should trigger a scope conversation?",
   ],
 }
@@ -116,7 +118,7 @@ function welcome(mode: ContextMode): Msg {
   return {
     id: uid(),
     role: "assistant",
-    text: `I’m Cosmos AI — scoped to **${labels[mode]}**.\n\nAsk a question, or pick a prompt below. I’ll keep answers short and ops-ready.`,
+    text: `I’m Cosmos AI — scoped to **${labels[mode]}**.\n\nI can answer with structured ops guidance **and** propose real actions (tasks, time, CRM deals, incidents, approvals). Confirm before anything is written.`,
     provider: "cosmos",
     context: mode,
     at: Date.now(),
@@ -205,7 +207,7 @@ export function AiAssistPage() {
     try {
       const res = await aiAssist(q, mode)
       const data = res.data as
-        | { reply?: string; provider?: string; links?: { label: string; href: string }[] }
+        | { reply?: string; provider?: string; links?: { label: string; href: string }[]; proposedAction?: AiAction }
         | undefined
       setMessages((m) => [
         ...m,
@@ -217,6 +219,7 @@ export function AiAssistPage() {
           context: mode,
           at: Date.now(),
           links: data?.links,
+          proposedAction: data?.proposedAction,
         },
       ])
     } catch (err) {
@@ -236,6 +239,36 @@ export function AiAssistPage() {
       setPending(false)
       inputRef.current?.focus()
     }
+  }
+
+  async function confirmAction(messageId: string, action: AiAction) {
+    if (pending) return
+    setPending(true)
+    try {
+      const { summary: _summary, ...payload } = action
+      const res = await aiAssist("Confirm the proposed action", mode, payload as AiAction)
+      const data = res.data
+      setMessages((current) => current.map((message) => message.id === messageId
+        ? {
+            ...message,
+            text: data?.reply || "Action completed.",
+            proposedAction: undefined,
+            links: data?.links?.length ? data.links : message.links,
+            provider: data?.provider || message.provider,
+          }
+        : message))
+      toast.success((data?.reply || "Action completed").split("\n")[0].replace(/\*\*/g, ""))
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Could not complete action")
+    } finally {
+      setPending(false)
+    }
+  }
+
+  function dismissAction(messageId: string) {
+    setMessages((current) => current.map((message) => message.id === messageId
+      ? { ...message, proposedAction: undefined, text: `${message.text}\n\nAction dismissed.` }
+      : message))
   }
 
   function onKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
@@ -388,6 +421,22 @@ export function AiAssistPage() {
                     )}
                   >
                     <div className="whitespace-pre-wrap">{renderText(m.text)}</div>
+                    {m.proposedAction ? (
+                      <div className="mt-3 rounded-xl border bg-background/70 p-3">
+                        <p className="text-xs font-semibold">Ready to do this?</p>
+                        <p className="text-muted-foreground mt-1 text-xs">
+                          {m.proposedAction.summary || actionDescription(m.proposedAction)}
+                        </p>
+                        <div className="mt-2 flex gap-2">
+                          <Button size="sm" disabled={pending} onClick={() => void confirmAction(m.id, m.proposedAction!)}>
+                            Confirm
+                          </Button>
+                          <Button size="sm" variant="outline" disabled={pending} onClick={() => dismissAction(m.id)}>
+                            Dismiss
+                          </Button>
+                        </div>
+                      </div>
+                    ) : null}
                     {m.links && m.links.length > 0 && !isUser ? (
                       <div className="mt-2.5 flex flex-wrap gap-1.5">
                         {m.links.map((l) => (
@@ -534,4 +583,24 @@ export function AiAssistPage() {
       </div>
     </div>
   )
+}
+
+function actionDescription(action: AiAction) {
+  if (action.type === "create_task") {
+    return `Create task “${action.title}” on ${action.projectName || action.projectId || "project"}`
+  }
+  if (action.type === "create_notification") return `Create notification “${action.title}”`
+  if (action.type === "create_time_entry") {
+    return `Log ${action.hours}h on ${action.projectName || action.projectId || "project"} for ${action.date}`
+  }
+  if (action.type === "create_opportunity") {
+    return `Create deal “${action.name}” for ${action.clientName || action.clientId || "client"}`
+  }
+  if (action.type === "create_incident") {
+    return `Log incident “${action.title}” on ${action.eventName || action.eventId || "event"}`
+  }
+  if (action.type === "create_approval") {
+    return `Request approval “${action.title}” on ${action.projectName || action.projectId || "project"}`
+  }
+  return "Perform action"
 }

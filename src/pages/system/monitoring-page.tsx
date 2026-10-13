@@ -17,8 +17,14 @@ export function MonitoringPage() {
     async function load() {
       try {
         const [statsRes, healthRes] = await Promise.all([
-          getMonitoringStats().catch(() => null),
-          getHealth().catch(() => null),
+          getMonitoringStats().catch((err) => {
+            console.warn('[MonitoringPage] Failed to load stats:', err)
+            return null
+          }),
+          getHealth().catch((err) => {
+            console.warn('[MonitoringPage] Failed to load health:', err)
+            return null
+          }),
         ])
         if (cancelled) return
         setStats(statsRes ? normalizeMonitoringStats(statsRes) : null)

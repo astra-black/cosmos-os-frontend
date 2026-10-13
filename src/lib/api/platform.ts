@@ -192,12 +192,28 @@ export async function updateBillingPlan(planId: string) {
   })
 }
 
-export async function aiAssist(prompt: string, context = "general") {
-  return apiRequest<ApiEnvelope<{ reply: string; provider: string }>>(
+export type AiAction =
+  | { type: "create_task"; title: string; projectId?: string; projectName?: string; dueDate?: string; priority?: "low" | "medium" | "high" | "urgent"; description?: string; summary?: string }
+  | { type: "create_notification"; title: string; body?: string; href?: string; summary?: string }
+  | { type: "create_time_entry"; projectId?: string; projectName?: string; hours: number; date: string; note?: string; billable?: boolean; summary?: string }
+  | { type: "create_opportunity"; name: string; clientId?: string; clientName?: string; value?: number; stage?: "lead" | "qualified" | "proposal" | "negotiation" | "won" | "lost"; nextStep?: string; notes?: string; summary?: string }
+  | { type: "create_incident"; title: string; eventId?: string; eventName?: string; severity?: "critical" | "warning" | "info"; description?: string; summary?: string }
+  | { type: "create_approval"; title: string; projectId?: string; projectName?: string; priority?: "low" | "medium" | "high" | "urgent"; notes?: string; summary?: string }
+
+export type AiAssistData = {
+  reply: string
+  provider: string
+  proposedAction?: AiAction
+  actionResult?: unknown
+  links?: { label: string; href: string }[]
+}
+
+export async function aiAssist(prompt: string, context = "general", action?: AiAction) {
+  return apiRequest<ApiEnvelope<AiAssistData>>(
     "/api/v1/agency/ai/assist",
     {
       method: "POST",
-      body: JSON.stringify({ prompt, context }),
+      body: JSON.stringify(action ? { prompt, context, action } : { prompt, context }),
     },
   )
 }
@@ -216,11 +232,11 @@ export type PortalOverviewData = {
     sharedAssetsCount: number
     upcomingEventsCount: number
   }
-  projects: any[]
-  campaigns: any[]
-  approvals: any[]
-  assets: any[]
-  upcomingEvents: any[]
+  projects: Array<{ id: string; name: string; status: string }>
+  campaigns: Array<{ id: string; name: string; status: string }>
+  approvals: Array<{ id: string; title: string; status: string }>
+  assets: Array<{ id: string; name: string; type: string }>
+  upcomingEvents: Array<{ id: string; title: string; startDate: string }>
 }
 
 export type DirectReviewData = {
@@ -293,7 +309,7 @@ export async function getPortalEventRundown(eventId: string, clientId: string) {
   return apiRequest<
     ApiEnvelope<{
       event: { id: string; title: string; startAt?: string; endAt?: string; venue?: string }
-      cues: any[]
+      cues: Array<{ id: string; name: string; status: string; scheduledTime: string }>
     }>
   >(`/api/v1/portal/events/${eventId}/rundown?clientId=${encodeURIComponent(clientId)}`, {
     auth: false,

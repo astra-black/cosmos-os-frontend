@@ -211,8 +211,14 @@ export function StageDisplayPage() {
     if (!eventId) return
     try {
       const [evRes, cuesRes] = await Promise.all([
-        getEvent(eventId).catch(() => ({ data: null })),
-        listCues(eventId).catch(() => ({ data: [] })),
+        getEvent(eventId).catch((err) => {
+          console.warn('[StageDisplay] Failed to load event:', err)
+          return { data: null }
+        }),
+        listCues(eventId).catch((err) => {
+          console.warn('[StageDisplay] Failed to load cues:', err)
+          return { data: [] }
+        }),
       ])
       if (evRes?.data) setEvent(evRes.data)
       if (cuesRes?.data) setCues(cuesRes.data)
@@ -503,9 +509,17 @@ export function StageDisplayPage() {
   // Fullscreen toggle
   const toggleFullscreen = useCallback(() => {
     if (!document.fullscreenElement) {
-      document.documentElement.requestFullscreen().then(() => setIsFullscreen(true)).catch(() => {})
+      document.documentElement.requestFullscreen()
+        .then(() => setIsFullscreen(true))
+        .catch((err) => {
+          console.warn('[StageDisplay] Fullscreen request failed:', err)
+        })
     } else {
-      document.exitFullscreen().then(() => setIsFullscreen(false)).catch(() => {})
+      document.exitFullscreen()
+        .then(() => setIsFullscreen(false))
+        .catch((err) => {
+          console.warn('[StageDisplay] Exit fullscreen failed:', err)
+        })
     }
   }, [])
 

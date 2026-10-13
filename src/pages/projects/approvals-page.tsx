@@ -335,7 +335,7 @@ export function ApprovalsPage() {
                           <>
                             <ShareWithClientToggle
                               clientId={approval.clientId}
-                              entityType="approval"
+                              entityType="APPROVAL"
                               entityId={approval.approvalId}
                               clientVisible={approval.clientVisible}
                               size="sm"

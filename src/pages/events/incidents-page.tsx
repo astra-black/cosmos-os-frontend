@@ -73,7 +73,10 @@ export function IncidentsPage() {
     if (!eventId) return
     const [listRes, departmentsRes] = await Promise.all([
       listIncidents(eventId),
-      listDepartments(eventId).catch(() => null),
+      listDepartments(eventId).catch((err) => {
+        console.warn('[IncidentsPage] Failed to load departments:', err)
+        return null
+      }),
     ])
     setIncidents(listRes.data ?? [])
     setDepartments(departmentsRes?.data ?? [])
@@ -118,6 +121,7 @@ export function IncidentsPage() {
   async function handleResolve(incident: Incident, resolution: string) {
     if (!eventId || !canWrite) return
     setBusyIncidentId(incident.incidentId)
+    const previousIncidents = incidents
     patchLocal({
       ...incident,
       status: "resolved",
@@ -130,8 +134,8 @@ export function IncidentsPage() {
       await reload()
       toast.success(`Resolved ${incident.incidentId}`)
     } catch (err) {
+      setIncidents(previousIncidents)
       toast.error(err instanceof ApiError ? err.message : "Could not resolve incident")
-      await reload().catch(() => undefined)
     } finally {
       setBusyIncidentId(null)
     }
@@ -140,6 +144,7 @@ export function IncidentsPage() {
   async function handleEscalate(incident: Incident) {
     if (!eventId || !canWrite) return
     setBusyIncidentId(incident.incidentId)
+    const previousIncidents = incidents
     const nextSev =
       incident.severity === "info"
         ? "warning"
@@ -153,8 +158,8 @@ export function IncidentsPage() {
       await reload()
       toast.success(`Escalated ${incident.incidentId}`)
     } catch (err) {
+      setIncidents(previousIncidents)
       toast.error(err instanceof ApiError ? err.message : "Could not escalate incident")
-      await reload().catch(() => undefined)
     } finally {
       setBusyIncidentId(null)
     }
@@ -163,6 +168,7 @@ export function IncidentsPage() {
   async function handleReopen(incident: Incident) {
     if (!eventId || !canWrite) return
     setBusyIncidentId(incident.incidentId)
+    const previousIncidents = incidents
     patchLocal({
       ...incident,
       status: "open",
@@ -175,8 +181,8 @@ export function IncidentsPage() {
       await reload()
       toast.success(`Reopened ${incident.incidentId}`)
     } catch (err) {
+      setIncidents(previousIncidents)
       toast.error(err instanceof ApiError ? err.message : "Could not reopen incident")
-      await reload().catch(() => undefined)
     } finally {
       setBusyIncidentId(null)
     }

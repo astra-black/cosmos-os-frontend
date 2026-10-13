@@ -37,10 +37,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const storedToken = getAccessToken()
     const storedUser = getStoredUser<AuthUser>()
     if (storedToken !== token) setToken(storedToken)
-    if (storedUser && JSON.stringify(storedUser) !== JSON.stringify(user)) {
+    if (storedUser && storedUser.id !== user?.id) {
       setUser(storedUser)
     }
-  }, [token, user])
+  }, [token, user?.id])
 
   const login = useCallback(async (email: string, password: string) => {
     const response = await loginRequest(email, password)

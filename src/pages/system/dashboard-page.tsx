@@ -128,8 +128,14 @@ export function DashboardPage() {
             listProjects(),
             getCrmSummary(),
             listActivity(12),
-            listBudgets().catch(() => ({ data: [] })),
-            listAllIncidents().catch(() => ({ data: [] })),
+            listBudgets().catch((err) => {
+              console.warn('[Dashboard] Failed to load budgets:', err)
+              return { data: [] }
+            }),
+            listAllIncidents().catch((err) => {
+              console.warn('[Dashboard] Failed to load incidents:', err)
+              return { data: [] }
+            }),
           ])
         if (cancelled) return
         setTasks(tasksRes.data ?? [])

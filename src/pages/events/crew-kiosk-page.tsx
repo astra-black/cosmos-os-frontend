@@ -206,9 +206,18 @@ export function CrewKioskPage() {
         // Fallback to legacy endpoints if available
         try {
           const [evRes, crewRes, deptRes] = await Promise.all([
-            getEvent(eventId).catch(() => ({ data: null })),
-            listCrew(eventId).catch(() => ({ data: [] })),
-            listDepartments(eventId).catch(() => ({ data: [] })),
+            getEvent(eventId).catch((err) => {
+              console.warn('[CrewKiosk] Failed to load event:', err)
+              return { data: null }
+            }),
+            listCrew(eventId).catch((err) => {
+              console.warn('[CrewKiosk] Failed to load crew:', err)
+              return { data: [] }
+            }),
+            listDepartments(eventId).catch((err) => {
+              console.warn('[CrewKiosk] Failed to load departments:', err)
+              return { data: [] }
+            }),
           ])
           if (evRes?.data) setEvent(evRes.data)
           if (crewRes?.data) setCrew(crewRes.data)
@@ -417,10 +426,15 @@ export function CrewKioskPage() {
   // Fullscreen toggle
   const toggleFullscreen = () => {
     if (!document.fullscreenElement) {
-      document.documentElement.requestFullscreen().catch(() => {})
+      document.documentElement.requestFullscreen().catch((err) => {
+        console.warn('[CrewKiosk] Fullscreen request failed:', err)
+        toast.error("Could not enter fullscreen mode")
+      })
       setIsFullscreen(true)
     } else {
-      document.exitFullscreen().catch(() => {})
+      document.exitFullscreen().catch((err) => {
+        console.warn('[CrewKiosk] Exit fullscreen failed:', err)
+      })
       setIsFullscreen(false)
     }
   }

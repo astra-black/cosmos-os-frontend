@@ -49,6 +49,8 @@ export type Event = {
   expectedAttendees?: number
   budget?: number
   actualCost?: number
+  clientId?: string | null
+  clientVisible?: boolean
   metadata?: Record<string, any>
   createdAt?: string
   updatedAt?: string
@@ -68,6 +70,7 @@ export type Project = {
   assets?: string[]
   budget?: number
   description?: string
+  clientVisible?: boolean
   createdAt?: string
   updatedAt?: string
 }
