@@ -1,6 +1,16 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { useNavigate } from "react-router-dom"
-import { Loader2Icon, PencilIcon, PlusIcon, RocketIcon, SparklesIcon, Trash2Icon, TrendingUpIcon } from "lucide-react"
+import {
+  ArrowRightIcon,
+  CalendarIcon,
+  Loader2Icon,
+  PencilIcon,
+  PlusIcon,
+  RocketIcon,
+  SparklesIcon,
+  Trash2Icon,
+  TrendingUpIcon,
+} from "lucide-react"
 import { toast } from "sonner"
 
 import { EmptyState } from "@/components/shared/empty-state"
@@ -339,19 +349,28 @@ export function CrmPipelinePage() {
   }
 
   return (
-    <div className="flex flex-col gap-5">
-      <PageHeader
-        title="CRM pipeline"
-        description="Sales desk — opportunities by stage with weighted pipeline value."
-        actions={
-          canWriteCrm ? (
-            <Button size="sm" onClick={openCreate}>
-              <PlusIcon className="size-3.5" />
-              New deal
-            </Button>
-          ) : undefined
-        }
-      />
+    <div className="flex flex-col gap-6">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h1 className="font-sora text-2xl sm:text-3xl font-bold tracking-tight text-foreground">
+            CRM Pipeline
+          </h1>
+          <p className="text-sm text-muted-foreground mt-1">
+            Sales desk — track opportunities across stages with probability weighting and conversion tools.
+          </p>
+        </div>
+        {canWriteCrm ? (
+          <Button
+            size="sm"
+            onClick={openCreate}
+            className="bg-[#270045] text-white hover:bg-[#3a006b] rounded-full px-4 h-9 shadow-xs"
+          >
+            <PlusIcon className="size-3.5 mr-1" />
+            New deal
+          </Button>
+        ) : null}
+      </div>
 
       {error ? (
         <Card className="border-destructive/40 px-4 py-3 text-sm">
@@ -362,122 +381,193 @@ export function CrmPipelinePage() {
         </Card>
       ) : null}
 
-      {/* Pipeline KPIs — compact strip, not dashboard clone */}
-      <div className="bg-card grid grid-cols-2 gap-3 rounded-xl border p-4 sm:grid-cols-4">
-        <div>
-          <div className="text-muted-foreground text-xs">Open pipeline</div>
-          <div className="text-xl font-semibold tabular-nums">
+      {/* Pipeline KPI Stat Tiles */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="rounded-xl border border-border bg-card p-4 flex flex-col gap-1.5 shadow-[0_1px_3px_0_rgba(39,0,69,0.08)]">
+          <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Open Pipeline</p>
+          <p className="font-sora text-2xl sm:text-3xl font-bold text-foreground leading-none">
             {summary ? money(summary.pipelineValue) : "—"}
+          </p>
+          <div className="mt-1">
+            <span className="inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold bg-primary/10 text-primary">
+              Total unweighted volume
+            </span>
           </div>
         </div>
-        <div>
-          <div className="text-muted-foreground text-xs">Weighted</div>
-          <div className="text-xl font-semibold tabular-nums">
+
+        <div className="rounded-xl border border-border bg-card p-4 flex flex-col gap-1.5 shadow-[0_1px_3px_0_rgba(39,0,69,0.08)]">
+          <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Weighted Forecast</p>
+          <p className="font-sora text-2xl sm:text-3xl font-bold text-foreground leading-none">
             {summary ? money(summary.weightedPipeline) : "—"}
+          </p>
+          <div className="mt-1">
+            <span className="inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold bg-orange/15 text-orange">
+              Probability adjusted
+            </span>
           </div>
         </div>
-        <div>
-          <div className="text-muted-foreground text-xs">Open deals</div>
-          <div className="text-xl font-semibold tabular-nums">{summary?.openDeals ?? "—"}</div>
+
+        <div className="rounded-xl border border-border bg-card p-4 flex flex-col gap-1.5 shadow-[0_1px_3px_0_rgba(39,0,69,0.08)]">
+          <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Open Deals</p>
+          <p className="font-sora text-2xl sm:text-3xl font-bold text-foreground leading-none">
+            {summary?.openDeals ?? "—"}
+          </p>
+          <div className="mt-1">
+            <span className="inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold bg-surface-alt text-muted-foreground">
+              Active opportunities
+            </span>
+          </div>
         </div>
-        <div>
-          <div className="text-muted-foreground text-xs">Won YTD</div>
-          <div className="flex items-center gap-1 text-xl font-semibold tabular-nums">
-            <TrendingUpIcon className="size-4 opacity-60" />
+
+        <div className="rounded-xl border border-border bg-card p-4 flex flex-col gap-1.5 shadow-[0_1px_3px_0_rgba(39,0,69,0.08)]">
+          <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Won YTD</p>
+          <p className="font-sora text-2xl sm:text-3xl font-bold text-foreground leading-none">
             {summary ? money(summary.wonValue) : "—"}
+          </p>
+          <div className="mt-1">
+            <span className="inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold bg-success/15 text-success">
+              Closed revenue
+            </span>
           </div>
         </div>
       </div>
 
       {loading ? (
-        <div className="flex gap-3 overflow-x-auto pb-2 md:grid md:grid-cols-3 md:overflow-visible xl:grid-cols-6">
+        <div className="flex gap-4 overflow-x-auto pb-2 md:grid md:grid-cols-3 xl:grid-cols-6">
           {STAGES.map((s) => (
-            <Skeleton key={s.id} className="h-80 w-[min(85vw,16rem)] shrink-0 rounded-xl md:w-auto" />
+            <Skeleton key={s.id} className="h-80 w-[min(85vw,17rem)] shrink-0 rounded-2xl md:w-auto" />
           ))}
         </div>
       ) : (
-        <div className="-mx-1 flex gap-3 overflow-x-auto px-1 pb-2 snap-x snap-mandatory md:mx-0 md:grid md:grid-cols-2 md:overflow-visible md:px-0 md:pb-0 md:snap-none xl:grid-cols-3 2xl:grid-cols-6">
+        <div className="-mx-1 flex gap-4 overflow-x-auto px-1 pb-4 snap-x snap-mandatory md:mx-0 md:grid md:grid-cols-2 md:overflow-visible md:px-0 md:pb-0 md:snap-none xl:grid-cols-3 2xl:grid-cols-6">
           {lanes.map((lane) => (
             <section
               key={lane.id}
               className={cn(
-                "bg-muted/40 flex min-h-72 w-[min(85vw,16rem)] shrink-0 snap-start flex-col rounded-xl border border-dashed p-2 md:w-auto md:min-w-0",
-                lane.id === "won" && "border-chart-2/40",
-                lane.id === "lost" && "opacity-80",
+                "bg-surface-alt/40 flex min-h-[420px] w-[min(85vw,17rem)] shrink-0 snap-start flex-col rounded-2xl border border-border/70 p-3 md:w-auto md:min-w-0",
+                lane.id === "won" && "border-success/30 bg-success/5",
+                lane.id === "lost" && "opacity-75"
               )}
             >
-              <header className="mb-2 space-y-0.5 px-1 pt-1">
+              <header className="mb-3 space-y-1 px-1.5 pt-1">
                 <div className="flex items-center justify-between">
-                  <span className="text-sm font-semibold">{lane.label}</span>
-                  <Badge variant="secondary" className="tabular-nums">
+                  <span className="font-sora text-sm font-semibold text-foreground tracking-tight">{lane.label}</span>
+                  <span className="rounded-full px-2 py-0.5 text-xs font-semibold bg-surface border border-border text-foreground tabular-nums shadow-2xs">
                     {lane.items.length}
-                  </Badge>
+                  </span>
                 </div>
-                <div className="text-muted-foreground text-[11px] tabular-nums">
+                <div className="text-xs font-semibold text-muted-foreground tabular-nums">
                   {money(lane.value)}
                 </div>
               </header>
-              <div className="flex flex-1 flex-col gap-2 overflow-y-auto">
+
+              <div className="flex flex-1 flex-col gap-2.5 overflow-y-auto">
                 {lane.items.length === 0 ? (
-                  <EmptyState title="Empty" className="border-0 py-8" />
+                  <div className="flex flex-1 flex-col items-center justify-center p-6 text-center rounded-xl border border-dashed border-border/60 bg-surface/40 my-2">
+                    <p className="text-xs text-muted-foreground font-medium">No deals in {lane.label}</p>
+                  </div>
                 ) : (
                   lane.items.map((deal) => (
                     <article
                       key={deal.opportunityId}
-                      className="bg-card rounded-lg border p-3 shadow-xs"
+                      className="rounded-xl border border-border bg-card p-4 shadow-[0_1px_3px_0_rgba(39,0,69,0.08)] hover:shadow-md hover:border-primary/30 transition-all flex flex-col gap-2.5"
                     >
-                       <div className="flex items-start justify-between gap-1">
-                         <div className="text-sm font-medium leading-snug">{deal.name}</div>
-                          {canWriteCrm ? (
-                            <span className="flex shrink-0 gap-0.5">
-                              <Button size="icon" variant="ghost" className="size-6" onClick={() => openEdit(deal)} aria-label={`Edit ${deal.name}`}>
-                                <PencilIcon className="size-3" />
-                              </Button>
-                              <Button size="icon" variant="ghost" className="size-6 text-destructive" disabled={deletingId === deal.opportunityId} onClick={() => handleDelete(deal)} aria-label={`Delete ${deal.name}`}>
-                                <Trash2Icon className="size-3" />
-                              </Button>
-                            </span>
-                          ) : null}
-                       </div>
-                      <div className="text-muted-foreground mt-1 truncate text-xs">
-                        {deal.clientName || "—"}
+                      {/* Top: Deal title + probability + actions */}
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0 flex-1">
+                          <h3 className="font-sora text-sm font-semibold text-foreground leading-snug line-clamp-2">
+                            {deal.name}
+                          </h3>
+                          <p className="text-xs text-muted-foreground mt-0.5 truncate">
+                            {deal.clientName || "Unassigned client"}
+                          </p>
+                        </div>
+
+                        {canWriteCrm ? (
+                          <div className="flex items-center gap-0.5 shrink-0">
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              className="size-6 text-muted-foreground hover:text-foreground"
+                              onClick={() => openEdit(deal)}
+                              aria-label={`Edit ${deal.name}`}
+                            >
+                              <PencilIcon className="size-3" />
+                            </Button>
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              className="size-6 text-muted-foreground hover:text-destructive"
+                              disabled={deletingId === deal.opportunityId}
+                              onClick={() => handleDelete(deal)}
+                              aria-label={`Delete ${deal.name}`}
+                            >
+                              <Trash2Icon className="size-3" />
+                            </Button>
+                          </div>
+                        ) : null}
                       </div>
-                      <div className="mt-2 flex items-center justify-between text-xs">
-                        <span className="font-semibold tabular-nums">{money(deal.value)}</span>
-                        <span className="text-muted-foreground tabular-nums">
-                          {deal.probability}%
+
+                      {/* Deal Value + Probability Pill */}
+                      <div className="flex items-center justify-between gap-2 pt-1 border-t border-border/50">
+                        <span className="font-sora text-base font-bold text-foreground tabular-nums">
+                          {money(deal.value)}
+                        </span>
+                        <span
+                          className={cn(
+                            "rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider",
+                            deal.stage === "won"
+                              ? "bg-success/15 text-success border border-success/20"
+                              : deal.stage === "lost"
+                              ? "bg-destructive/15 text-destructive border border-destructive/20"
+                              : deal.probability >= 70
+                              ? "bg-success/15 text-success border border-success/20"
+                              : deal.probability >= 40
+                              ? "bg-orange/15 text-orange border border-orange/20"
+                              : "bg-surface-alt text-muted-foreground border border-border"
+                          )}
+                        >
+                          {deal.probability}% win prob
                         </span>
                       </div>
-                      <div className="text-muted-foreground mt-1 truncate text-[11px]">
-                        {deal.owner}
-                        {deal.expectedClose
-                          ? ` · close ${new Date(deal.expectedClose).toLocaleDateString()}`
-                          : ""}
+
+                      {/* Meta: Close date & Owner */}
+                      <div className="text-[11px] text-muted-foreground flex items-center justify-between gap-1">
+                        <span className="truncate">{deal.owner || "Unassigned"}</span>
+                        {deal.expectedClose && (
+                          <span className="flex items-center gap-1 shrink-0">
+                            <CalendarIcon className="size-3 text-muted-foreground" />
+                            {new Date(deal.expectedClose).toLocaleDateString()}
+                          </span>
+                        )}
                       </div>
+
                       {deal.nextStep ? (
-                        <p className="text-muted-foreground mt-2 line-clamp-2 text-[11px]">
-                          Next: {deal.nextStep}
+                        <p className="text-[11px] text-muted-foreground bg-surface-alt/60 p-2 rounded-lg border border-border/60 line-clamp-2">
+                          <span className="font-semibold text-foreground">Next:</span> {deal.nextStep}
                         </p>
                       ) : null}
+
+                      {/* AI Assistance Buttons */}
                       {canWriteCrm ? (
-                        <div className="mt-2 flex gap-1">
+                        <div className="flex gap-1.5 pt-1">
                           <Button
                             size="sm"
                             variant="outline"
-                            className="h-6 flex-1 gap-1 text-[10px] border-sky-700/40 text-sky-400 hover:bg-sky-950/40"
+                            className="h-7 flex-1 gap-1 text-[11px] border-primary/30 text-primary hover:bg-primary/10 rounded-lg"
                             onClick={() => {
                               setAiTargetDeal(deal)
                               setAiModalMode("proposal")
                               setAiModalOpen(true)
                             }}
                           >
-                            <SparklesIcon className="size-2.5" />
+                            <SparklesIcon className="size-3" />
                             Proposal
                           </Button>
                           <Button
                             size="sm"
                             variant="outline"
-                            className="h-6 flex-1 gap-1 text-[10px]"
+                            className="h-7 flex-1 gap-1 text-[11px] border-border/80 text-foreground hover:bg-surface-alt rounded-lg"
                             onClick={() => {
                               setAiTargetDeal(deal)
                               setAiModalMode("followup")
@@ -488,25 +578,31 @@ export function CrmPipelinePage() {
                           </Button>
                         </div>
                       ) : null}
+
+                      {/* Stage Transitions */}
                       {canWriteCrm && lane.next ? (
                         <Button
                           size="sm"
-                          variant="outline"
-                          className="mt-2 h-7 w-full text-xs"
+                          className="h-7 w-full text-xs bg-[#270045] text-white hover:bg-[#3a006b] rounded-lg shadow-xs"
                           disabled={busyId === deal.opportunityId}
                           onClick={() => moveDeal(deal, lane.next!)}
                         >
                           {busyId === deal.opportunityId ? (
                             <Loader2Icon className="size-3 animate-spin" />
-                          ) : null}
-                          → {lane.next}
+                          ) : (
+                            <div className="flex items-center justify-center gap-1">
+                              <span>Move to {lane.next}</span>
+                              <ArrowRightIcon className="size-3" />
+                            </div>
+                          )}
                         </Button>
                       ) : null}
+
                       {canWriteCrm && lane.id === "negotiation" ? (
-                        <div className="mt-1.5 flex gap-1">
+                        <div className="flex gap-1.5">
                           <Button
                             size="sm"
-                            className="h-7 flex-1 text-xs"
+                            className="h-7 flex-1 text-xs bg-success/20 text-success hover:bg-success/30 border border-success/30 rounded-lg font-semibold"
                             disabled={busyId === deal.opportunityId}
                             onClick={() => moveDeal(deal, "won")}
                           >
@@ -515,7 +611,7 @@ export function CrmPipelinePage() {
                           <Button
                             size="sm"
                             variant="outline"
-                            className="h-7 flex-1 text-xs"
+                            className="h-7 flex-1 text-xs border-destructive/30 text-destructive hover:bg-destructive/10 rounded-lg font-semibold"
                             disabled={busyId === deal.opportunityId}
                             onClick={() => moveDeal(deal, "lost")}
                           >
@@ -523,19 +619,20 @@ export function CrmPipelinePage() {
                           </Button>
                         </div>
                       ) : null}
+
                       {canWriteCrm && lane.id === "won" ? (
                         <Button
                           size="sm"
-                          className="mt-2 h-7 w-full text-xs"
+                          className="h-8 w-full text-xs bg-[#7a5cc2] text-white hover:bg-[#6a4eb2] rounded-lg shadow-xs gap-1.5"
                           disabled={busyId === deal.opportunityId}
                           onClick={() => void startDelivery(deal)}
                         >
                           {busyId === deal.opportunityId ? (
-                            <Loader2Icon className="size-3 animate-spin" />
+                            <Loader2Icon className="size-3.5 animate-spin" />
                           ) : (
-                            <RocketIcon className="size-3" />
+                            <RocketIcon className="size-3.5" />
                           )}
-                          Start delivery
+                          Start delivery (create project)
                         </Button>
                       ) : null}
                     </article>
@@ -543,8 +640,8 @@ export function CrmPipelinePage() {
                 )}
               </div>
             </section>
-         ))}
-       </div>
+          ))}
+        </div>
       )}
       <EntityFormDialog
         open={showCreate || editingDeal !== null}

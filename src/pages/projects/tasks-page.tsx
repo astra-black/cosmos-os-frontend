@@ -1,8 +1,12 @@
 import { useEffect, useMemo, useState } from "react"
 import { Link, useSearchParams } from "react-router-dom"
 import {
+  CalendarIcon,
+  CheckCircle2Icon,
   ChevronLeftIcon,
   ChevronRightIcon,
+  LayoutGridIcon,
+  ListIcon,
   Loader2Icon,
   PencilIcon,
   PlusIcon,
@@ -14,7 +18,6 @@ import { CreateTaskModal } from "@/components/modals"
 import { EntityFormDialog } from "@/components/shared/entity-form-dialog"
 import { ConfirmationDialog } from "@/components/shared/confirmation-dialog"
 import { EmptyState } from "@/components/shared/empty-state"
-import { PageHeader } from "@/components/shared/page-header"
 import { Badge } from "@/components/ui/badge"
 import { Button, buttonVariants } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
@@ -294,20 +297,59 @@ export function TasksPage() {
     }
   }
 
+  const [viewMode, setViewMode] = useState<"board" | "list">("board")
+
   return (
-    <div className="flex flex-col gap-5">
-      <PageHeader
-        title="Tasks"
-        description="Production workboard — move cards, set priority, assign owners."
-        actions={
-          canWrite ? (
-            <Button size="sm" variant="outline" onClick={openCreateTask}>
-              <PlusIcon className="size-3.5" />
+    <div className="flex flex-col gap-6">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h1 className="font-sora text-2xl sm:text-3xl font-bold tracking-tight text-foreground">Tasks</h1>
+          <p className="text-sm text-muted-foreground mt-1">
+            Production workboard — manage deliverables, track status, and assign team owners.
+          </p>
+        </div>
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* Tab switcher: Board / List */}
+          <div className="flex items-center p-1 rounded-full bg-surface-alt border border-border">
+            <button
+              onClick={() => setViewMode("board")}
+              className={cn(
+                "flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all",
+                viewMode === "board"
+                  ? "bg-[#270045] text-white shadow-xs"
+                  : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              <LayoutGridIcon className="size-3.5" />
+              Board
+            </button>
+            <button
+              onClick={() => setViewMode("list")}
+              className={cn(
+                "flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all",
+                viewMode === "list"
+                  ? "bg-[#270045] text-white shadow-xs"
+                  : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              <ListIcon className="size-3.5" />
+              List
+            </button>
+          </div>
+
+          {canWrite ? (
+            <Button
+              size="sm"
+              onClick={openCreateTask}
+              className="bg-[#270045] text-white hover:bg-[#3a006b] rounded-full px-4 h-9 shadow-xs"
+            >
+              <PlusIcon className="size-3.5 mr-1" />
               Add task
             </Button>
-          ) : undefined
-        }
-      />
+          ) : null}
+        </div>
+      </div>
 
       {projects.length === 0 && !loading ? (
         <Card className="border-amber-500/30 bg-amber-500/10 p-4">
@@ -326,58 +368,92 @@ export function TasksPage() {
         </Card>
       ) : null}
 
-      {/* KPI */}
-      <div className="bg-card grid grid-cols-2 gap-3 rounded-xl border p-3 sm:grid-cols-4 sm:p-4">
-        <div>
-          <div className="text-muted-foreground text-xs">Total</div>
-          <div className="text-lg font-semibold tabular-nums">{counts.total}</div>
+      {/* KPI Stat Tiles */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="rounded-xl border border-border bg-card p-4 flex flex-col gap-1.5 shadow-[0_1px_3px_0_rgba(39,0,69,0.08)]">
+          <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Total Tasks</p>
+          <p className="font-sora text-2xl sm:text-3xl font-bold text-foreground leading-none">{counts.total}</p>
+          <div className="mt-1">
+            <span className="inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold bg-primary/10 text-primary">
+              All active deliverables
+            </span>
+          </div>
         </div>
-        <div>
-          <div className="text-muted-foreground text-xs">Done</div>
-          <div className="text-lg font-semibold tabular-nums">{counts.done}</div>
+
+        <div className="rounded-xl border border-border bg-card p-4 flex flex-col gap-1.5 shadow-[0_1px_3px_0_rgba(39,0,69,0.08)]">
+          <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Completed</p>
+          <p className="font-sora text-2xl sm:text-3xl font-bold text-foreground leading-none">{counts.done}</p>
+          <div className="mt-1">
+            <span className="inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold bg-success/15 text-success">
+              {counts.total > 0 ? `${Math.round((counts.done / counts.total) * 100)}% finished` : "0%"}
+            </span>
+          </div>
         </div>
-        <div>
-          <div className="text-muted-foreground text-xs">Blocked</div>
-          <div className="text-lg font-semibold tabular-nums">{counts.blocked}</div>
+
+        <div className="rounded-xl border border-border bg-card p-4 flex flex-col gap-1.5 shadow-[0_1px_3px_0_rgba(39,0,69,0.08)]">
+          <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Blocked</p>
+          <p className="font-sora text-2xl sm:text-3xl font-bold text-foreground leading-none">{counts.blocked}</p>
+          <div className="mt-1">
+            <span className={cn(
+              "inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold",
+              counts.blocked > 0 ? "bg-warning/15 text-warning" : "bg-surface-alt text-muted-foreground"
+            )}>
+              {counts.blocked > 0 ? "Needs attention" : "No blockers"}
+            </span>
+          </div>
         </div>
-        <div>
-          <div className="text-muted-foreground text-xs">Overdue</div>
-          <div
-            className={cn(
-              "text-lg font-semibold tabular-nums",
-              counts.overdue > 0 && "text-destructive",
-            )}
-          >
+
+        <div className="rounded-xl border border-border bg-card p-4 flex flex-col gap-1.5 shadow-[0_1px_3px_0_rgba(39,0,69,0.08)]">
+          <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Overdue</p>
+          <p className={cn(
+            "font-sora text-2xl sm:text-3xl font-bold leading-none",
+            counts.overdue > 0 ? "text-destructive" : "text-foreground"
+          )}>
             {counts.overdue}
+          </p>
+          <div className="mt-1">
+            <span className={cn(
+              "inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold",
+              counts.overdue > 0 ? "bg-destructive/15 text-destructive" : "bg-success/15 text-success"
+            )}>
+              {counts.overdue > 0 ? "Past scheduled due" : "On schedule"}
+            </span>
           </div>
         </div>
       </div>
 
-      <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
-        <select
-          className="border-input bg-background h-8 w-full rounded-lg border px-2 text-sm sm:w-auto"
-          value={assigneeFilter}
-          onChange={(e) => setAssigneeFilter(e.target.value)}
-        >
-          <option value="all">All assignees</option>
-          {assigneeOptions.map((a) => (
-            <option key={a} value={a}>
-              {a}
-            </option>
-          ))}
-        </select>
-        <select
-          className="border-input bg-background h-8 w-full rounded-lg border px-2 text-sm sm:w-auto"
-          value={priorityFilter}
-          onChange={(e) => setPriorityFilter(e.target.value)}
-        >
-          <option value="all">All priorities</option>
-          {PRIORITIES.map((p) => (
-            <option key={p} value={p}>
-              {p}
-            </option>
-          ))}
-        </select>
+      {/* Filter and search row */}
+      <div className="flex items-center gap-3 flex-wrap">
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-medium text-muted-foreground">Assignee:</span>
+          <select
+            className="border-input bg-surface h-9 rounded-lg border px-3 text-xs font-medium shadow-xs focus:ring-2 focus:ring-primary/20 outline-none"
+            value={assigneeFilter}
+            onChange={(e) => setAssigneeFilter(e.target.value)}
+          >
+            <option value="all">All assignees</option>
+            {assigneeOptions.map((a) => (
+              <option key={a} value={a}>
+                {a}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-medium text-muted-foreground">Priority:</span>
+          <select
+            className="border-input bg-surface h-9 rounded-lg border px-3 text-xs font-medium shadow-xs focus:ring-2 focus:ring-primary/20 outline-none"
+            value={priorityFilter}
+            onChange={(e) => setPriorityFilter(e.target.value)}
+          >
+            <option value="all">All priorities</option>
+            {PRIORITIES.map((p) => (
+              <option key={p} value={p}>
+                {p.charAt(0).toUpperCase() + p.slice(1)}
+              </option>
+            ))}
+          </select>
+        </div>
       </div>
 
       {error ? (
@@ -394,27 +470,30 @@ export function TasksPage() {
       ) : null}
 
       {loading ? (
-        <div className="flex gap-3 overflow-x-auto pb-2 md:grid md:grid-cols-3 md:overflow-visible xl:grid-cols-5">
+        <div className="flex gap-4 overflow-x-auto pb-2 md:grid md:grid-cols-3 xl:grid-cols-5">
           {LANES.map((l) => (
-            <Skeleton key={l.id} className="h-72 w-[min(85vw,16rem)] shrink-0 rounded-xl md:w-auto" />
+            <Skeleton key={l.id} className="h-80 w-[min(85vw,17rem)] shrink-0 rounded-2xl md:w-auto" />
           ))}
         </div>
-      ) : (
-        <div className="-mx-1 flex gap-3 overflow-x-auto px-1 pb-2 snap-x snap-mandatory md:mx-0 md:grid md:grid-cols-2 md:overflow-visible md:px-0 md:pb-0 md:snap-none xl:grid-cols-5">
+      ) : viewMode === "board" ? (
+        <div className="-mx-1 flex gap-4 overflow-x-auto px-1 pb-4 snap-x snap-mandatory md:mx-0 md:grid md:grid-cols-2 md:overflow-visible md:px-0 md:pb-0 md:snap-none xl:grid-cols-5">
           {lanes.map((lane) => (
             <section
               key={lane.id}
-              className="bg-muted/40 flex min-h-72 w-[min(85vw,16rem)] shrink-0 snap-start flex-col rounded-xl border border-dashed p-2 md:w-auto md:min-w-0"
+              className="bg-surface-alt/40 flex min-h-[380px] w-[min(85vw,17rem)] shrink-0 snap-start flex-col rounded-2xl border border-border/70 p-3 md:w-auto md:min-w-0"
             >
-              <header className="mb-2 flex items-center justify-between px-1 pt-1">
-                <span className="text-sm font-semibold">{lane.label}</span>
-                <Badge variant="secondary" className="tabular-nums">
+              <header className="mb-3 flex items-center justify-between px-1.5 pt-1">
+                <span className="font-sora text-sm font-semibold text-foreground tracking-tight">{lane.label}</span>
+                <span className="rounded-full px-2 py-0.5 text-xs font-semibold bg-surface border border-border text-foreground tabular-nums shadow-2xs">
                   {lane.items.length}
-                </Badge>
+                </span>
               </header>
-              <div className="flex flex-1 flex-col gap-2 overflow-y-auto">
+
+              <div className="flex flex-1 flex-col gap-2.5 overflow-y-auto">
                 {lane.items.length === 0 ? (
-                  <EmptyState title="Empty" className="border-0 py-10" />
+                  <div className="flex flex-1 flex-col items-center justify-center p-6 text-center rounded-xl border border-dashed border-border/60 bg-surface/40 my-2">
+                    <p className="text-xs text-muted-foreground font-medium">No tasks in {lane.label}</p>
+                  </div>
                 ) : (
                   lane.items.map((task) => {
                     const overdue =
@@ -424,147 +503,127 @@ export function TasksPage() {
                     return (
                       <article
                         key={task.taskId}
-                        className="bg-card rounded-lg border p-3 shadow-xs"
+                        className="rounded-xl border border-border bg-card p-4 shadow-[0_1px_3px_0_rgba(39,0,69,0.08)] hover:shadow-md hover:border-primary/30 transition-all flex flex-col gap-2.5"
                       >
+                        {/* Top: Priority + Project + Actions */}
                         <div className="flex items-start justify-between gap-2">
-                            <div className="flex min-w-0 items-start gap-1">
-                              <h3 className="text-sm font-medium leading-snug">{task.title}</h3>
-                              {canWrite ? (
-                                <>
-                                  <Button size="icon" variant="ghost" className="size-6 shrink-0" disabled={Boolean(deletingId) || Boolean(busyId)} onClick={() => openEditTask(task)} aria-label={`Edit ${task.title}`}>
-                                    <PencilIcon className="size-3" />
-                                  </Button>
-                                  <Button size="icon" variant="ghost" className="size-6 shrink-0 text-destructive" disabled={Boolean(deletingId)} onClick={() => setDeleteTarget(task)} aria-label={`Delete ${task.title}`}>
-                                    <Trash2Icon className="size-3" />
-                                  </Button>
-                                </>
-                              ) : null}
-                            </div>
+                          <span
+                            className={cn(
+                              "rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider",
+                              task.priority === "critical"
+                                ? "bg-destructive/15 text-destructive border border-destructive/20"
+                                : task.priority === "high"
+                                ? "bg-orange/15 text-orange border border-orange/20"
+                                : task.priority === "medium"
+                                ? "bg-primary/15 text-primary border border-primary/20"
+                                : "bg-surface-alt text-muted-foreground border border-border"
+                            )}
+                          >
+                            {task.priority}
+                          </span>
+
                           {canWrite ? (
-                            <select
-                              className={cn(
-                                "h-6 max-w-[5.5rem] shrink-0 rounded border-0 px-1 text-[10px] font-medium capitalize outline-none",
-                                priorityTone[task.priority] ?? "bg-muted",
-                              )}
-                              value={task.priority}
-                              disabled={busyId === task.taskId}
-                              onChange={(e) =>
-                                void patchTask(
-                                  task,
-                                  { priority: e.target.value },
-                                  `Priority → ${e.target.value}`,
-                                )
-                              }
-                            >
-                              {PRIORITIES.map((p) => (
-                                <option key={p} value={p}>
-                                  {p}
-                                </option>
-                              ))}
-                            </select>
-                          ) : (
-                            <Badge
-                              className={cn(
-                                "h-5 shrink-0 capitalize",
-                                priorityTone[task.priority] ?? "",
-                              )}
-                            >
-                              {task.priority}
-                            </Badge>
-                          )}
+                            <div className="flex items-center gap-0.5">
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                className="size-6 text-muted-foreground hover:text-foreground"
+                                disabled={Boolean(deletingId) || Boolean(busyId)}
+                                onClick={() => openEditTask(task)}
+                                aria-label={`Edit ${task.title}`}
+                              >
+                                <PencilIcon className="size-3" />
+                              </Button>
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                className="size-6 text-muted-foreground hover:text-destructive"
+                                disabled={Boolean(deletingId)}
+                                onClick={() => setDeleteTarget(task)}
+                                aria-label={`Delete ${task.title}`}
+                              >
+                                <Trash2Icon className="size-3" />
+                              </Button>
+                            </div>
+                          ) : null}
                         </div>
-                        <p className="text-muted-foreground mt-1 truncate text-xs">
+
+                        {/* Title */}
+                        <h3 className="font-sora text-sm font-semibold text-foreground leading-snug line-clamp-2">
+                          {task.title}
+                        </h3>
+
+                        {/* Project Link */}
+                        <p className="text-xs text-muted-foreground truncate">
                           {task.projectId ? (
                             <Link
                               to={`/projects/${task.projectId}`}
-                              className="hover:text-primary underline-offset-2 hover:underline"
+                              className="text-primary hover:underline font-medium"
                               onClick={(e) => e.stopPropagation()}
                             >
                               {task.projectName || task.projectId}
                             </Link>
                           ) : (
-                            task.projectName || "No project"
+                            task.projectName || "General task"
                           )}
                         </p>
-                        <div className="text-muted-foreground mt-2 flex flex-wrap items-center justify-between gap-1 text-[11px]">
-                          {canWrite ? (
-                            <select
-                              className="bg-transparent max-w-[8rem] truncate text-[11px] outline-none"
-                              value={task.assigneeMemberId || ""}
-                              disabled={busyId === task.taskId}
-                              onChange={(e) =>
-                                void (async () => {
-                                try {
-                                  const res = await assignTask(task.taskId, e.target.value || null)
-                                  if (res.data) patchLocal(res.data)
-                                  toast.success(
-                                    e.target.value
-                                      ? `Assigned to ${res.data?.assignee || "team member"}`
-                                      : "Task unassigned",
-                                  )
-                                  await reload()
-                                } catch (err) {
-                                  toast.error(err instanceof ApiError ? err.message : "Assignment failed")
-                                }
-                                })()
-                              }
+
+                        {/* Assignee Avatar + Due date */}
+                        <div className="flex items-center justify-between gap-2 pt-1 border-t border-border/50 text-xs">
+                          <div className="flex items-center gap-1.5 min-w-0">
+                            <div
+                              className="h-5 w-5 rounded-full border border-card flex items-center justify-center text-[9px] font-bold text-white shrink-0"
+                              style={{
+                                background: `hsl(${((task.assignee || "?").charCodeAt(0) * 45) % 360}deg 60% 45%)`,
+                              }}
                             >
-                              <option value="">Unassigned</option>
-                              {memberOptions.map((member) => (
-                                <option key={member.memberId} value={member.memberId}>
-                                {member.name}
-                                </option>
-                              ))}
-                            </select>
-                          ) : (
-                            <span>{task.assignee || "Unassigned"}</span>
-                          )}
-                          <span className={cn(overdue && "text-destructive font-medium")}>
-                            {task.dueDate
-                              ? new Date(task.dueDate).toLocaleDateString()
-                              : "No due"}
+                              {(task.assignee || "U").slice(0, 2).toUpperCase()}
+                            </div>
+                            <span className="truncate text-muted-foreground text-[11px] font-medium">
+                              {task.assignee || "Unassigned"}
+                            </span>
+                          </div>
+
+                          <span
+                            className={cn(
+                              "text-[11px] shrink-0 font-medium",
+                              overdue ? "text-destructive font-semibold" : "text-muted-foreground"
+                            )}
+                          >
+                            {task.dueDate ? new Date(task.dueDate).toLocaleDateString() : "No due"}
                           </span>
                         </div>
+
+                        {/* Stage Transition Buttons */}
                         {canWrite ? (
-                          <div className="mt-2 flex flex-col gap-1">
-                            <div className="flex gap-1">
-                              {lane.prev ? (
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  className="h-7 flex-1 text-xs"
-                                  disabled={busyId === task.taskId}
-                                  onClick={() => moveTask(task, lane.prev!)}
-                                >
-                                  <ChevronLeftIcon className="size-3" />
-                                </Button>
-                              ) : null}
-                              {lane.next ? (
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  className="h-7 flex-1 text-xs"
-                                  disabled={busyId === task.taskId}
-                                  onClick={() => moveTask(task, lane.next!)}
-                                >
-                                  {busyId === task.taskId ? (
-                                    <Loader2Icon className="size-3 animate-spin" />
-                                  ) : (
-                                    <ChevronRightIcon className="size-3" />
-                                  )}
-                                  {lane.next.replace("_", " ")}
-                                </Button>
-                              ) : null}
-                            </div>
-                            {task.status !== "blocked" && task.status !== "done" ? (
+                          <div className="mt-1 flex items-center gap-1.5 pt-1">
+                            {lane.prev ? (
                               <Button
                                 size="sm"
-                                variant="ghost"
-                                className="h-7 w-full text-xs"
+                                variant="outline"
+                                className="h-7 px-2 text-[11px] flex-1 border-border/80"
                                 disabled={busyId === task.taskId}
-                                onClick={() => moveTask(task, "blocked")}
+                                onClick={() => moveTask(task, lane.prev!)}
                               >
-                                Block
+                                <ChevronLeftIcon className="size-3" />
+                              </Button>
+                            ) : null}
+
+                            {lane.next ? (
+                              <Button
+                                size="sm"
+                                className="h-7 px-2 text-[11px] flex-1 bg-[#270045] text-white hover:bg-[#3a006b]"
+                                disabled={busyId === task.taskId}
+                                onClick={() => moveTask(task, lane.next!)}
+                              >
+                                {busyId === task.taskId ? (
+                                  <Loader2Icon className="size-3 animate-spin" />
+                                ) : (
+                                  <>
+                                    <span className="truncate">{lane.next.replace("_", " ")}</span>
+                                    <ChevronRightIcon className="size-3 ml-0.5" />
+                                  </>
+                                )}
                               </Button>
                             ) : null}
                           </div>
@@ -576,6 +635,145 @@ export function TasksPage() {
               </div>
             </section>
           ))}
+        </div>
+      ) : (
+        /* List View */
+        <div className="rounded-2xl border border-border bg-card overflow-hidden shadow-[0_1px_3px_0_rgba(39,0,69,0.08)]">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm">
+              <thead className="bg-surface-alt/60 text-muted-foreground text-xs uppercase tracking-wider font-semibold border-b border-border">
+                <tr>
+                  <th className="py-3 px-4">Task</th>
+                  <th className="py-3 px-4">Status</th>
+                  <th className="py-3 px-4">Priority</th>
+                  <th className="py-3 px-4">Project</th>
+                  <th className="py-3 px-4">Assignee</th>
+                  <th className="py-3 px-4">Due Date</th>
+                  {canWrite && <th className="py-3 px-4 text-right">Actions</th>}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border/60">
+                {filtered.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} className="py-12 text-center text-muted-foreground">
+                      No tasks found matching your filters.
+                    </td>
+                  </tr>
+                ) : (
+                  filtered.map((task) => {
+                    const overdue =
+                      task.dueDate &&
+                      task.status !== "done" &&
+                      new Date(task.dueDate) < new Date(new Date().toDateString())
+
+                    return (
+                      <tr key={task.taskId} className="hover:bg-surface-alt/30 transition-colors">
+                        <td className="py-3.5 px-4 font-medium text-foreground">
+                          <div>
+                            <span className="font-sora font-semibold text-sm">{task.title}</span>
+                            {task.tags && task.tags.length > 0 && (
+                              <div className="flex gap-1 mt-1 flex-wrap">
+                                {task.tags.map((t) => (
+                                  <span key={t} className="text-[10px] text-muted-foreground bg-surface-alt px-1.5 py-0.5 rounded">
+                                    #{t}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        </td>
+                        <td className="py-3.5 px-4">
+                          <span
+                            className={cn(
+                              "rounded-full px-2.5 py-0.5 text-xs font-semibold inline-block",
+                              task.status === "done"
+                                ? "bg-success/15 text-success border border-success/20"
+                                : task.status === "review"
+                                ? "bg-blue/15 text-blue border border-blue/20"
+                                : task.status === "in_progress"
+                                ? "bg-primary/15 text-primary border border-primary/20"
+                                : task.status === "blocked"
+                                ? "bg-destructive/15 text-destructive border border-destructive/20"
+                                : "bg-surface-alt text-muted-foreground border border-border"
+                            )}
+                          >
+                            {TASK_STATUS_LABELS[task.status as TaskStatus] || task.status.replace("_", " ")}
+                          </span>
+                        </td>
+                        <td className="py-3.5 px-4">
+                          <span
+                            className={cn(
+                              "rounded-full px-2.5 py-0.5 text-xs font-semibold inline-block uppercase text-[10px]",
+                              task.priority === "critical"
+                                ? "bg-destructive/15 text-destructive border border-destructive/20"
+                                : task.priority === "high"
+                                ? "bg-orange/15 text-orange border border-orange/20"
+                                : task.priority === "medium"
+                                ? "bg-primary/15 text-primary border border-primary/20"
+                                : "bg-surface-alt text-muted-foreground border border-border"
+                            )}
+                          >
+                            {task.priority}
+                          </span>
+                        </td>
+                        <td className="py-3.5 px-4 text-xs">
+                          {task.projectId ? (
+                            <Link to={`/projects/${task.projectId}`} className="text-primary hover:underline font-medium">
+                              {task.projectName || task.projectId}
+                            </Link>
+                          ) : (
+                            <span className="text-muted-foreground">{task.projectName || "None"}</span>
+                          )}
+                        </td>
+                        <td className="py-3.5 px-4">
+                          <div className="flex items-center gap-2">
+                            <div
+                              className="h-6 w-6 rounded-full border border-card flex items-center justify-center text-[10px] font-bold text-white shrink-0"
+                              style={{
+                                background: `hsl(${((task.assignee || "?").charCodeAt(0) * 45) % 360}deg 60% 45%)`,
+                              }}
+                            >
+                              {(task.assignee || "U").slice(0, 2).toUpperCase()}
+                            </div>
+                            <span className="text-xs text-foreground font-medium">{task.assignee || "Unassigned"}</span>
+                          </div>
+                        </td>
+                        <td className="py-3.5 px-4 text-xs font-medium">
+                          <span className={cn(overdue ? "text-destructive font-semibold" : "text-muted-foreground")}>
+                            {task.dueDate ? new Date(task.dueDate).toLocaleDateString() : "—"}
+                          </span>
+                        </td>
+                        {canWrite && (
+                          <td className="py-3.5 px-4 text-right">
+                            <div className="flex items-center justify-end gap-1">
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                className="size-7 text-muted-foreground hover:text-foreground"
+                                onClick={() => openEditTask(task)}
+                                aria-label={`Edit ${task.title}`}
+                              >
+                                <PencilIcon className="size-3.5" />
+                              </Button>
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                className="size-7 text-muted-foreground hover:text-destructive"
+                                onClick={() => setDeleteTarget(task)}
+                                aria-label={`Delete ${task.title}`}
+                              >
+                                <Trash2Icon className="size-3.5" />
+                              </Button>
+                            </div>
+                          </td>
+                        )}
+                      </tr>
+                    )
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
 

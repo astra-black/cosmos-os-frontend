@@ -1,12 +1,26 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { Link, useSearchParams } from "react-router-dom"
-import { BellIcon, CheckIcon, Loader2Icon, MessageSquareWarningIcon, PlusIcon, XIcon } from "lucide-react"
+import {
+  BellIcon,
+  CalendarIcon,
+  CheckCircle2Icon,
+  CheckIcon,
+  ClockIcon,
+  FileCheckIcon,
+  FilterIcon,
+  Loader2Icon,
+  MessageSquareIcon,
+  MessageSquareWarningIcon,
+  PlusIcon,
+  SparklesIcon,
+  UserIcon,
+  XIcon,
+} from "lucide-react"
 import { toast } from "sonner"
 
 import { EmptyState } from "@/components/shared/empty-state"
 import { CommentsPanel } from "@/components/shared/comments-panel"
 import { EntityFormDialog } from "@/components/shared/entity-form-dialog"
-import { PageHeader } from "@/components/shared/page-header"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
@@ -107,6 +121,17 @@ export function ApprovalsPage() {
     })
   }, [approvals, filter])
 
+  const counts = useMemo(() => {
+    return {
+      total: approvals.length,
+      pending: approvals.filter((a) => a.status === "pending").length,
+      changes: approvals.filter((a) => a.status === "changes_requested").length,
+      approved: approvals.filter((a) => a.status === "approved").length,
+      rejected: approvals.filter((a) => a.status === "rejected").length,
+      critical: approvals.filter((a) => a.priority === "critical").length,
+    }
+  }, [approvals])
+
   async function decide(
     approval: Approval,
     decision: ApprovalDecision,
@@ -192,37 +217,125 @@ export function ApprovalsPage() {
   }
 
   return (
-    <div className="flex flex-col gap-5">
-      <PageHeader
-        title="Approvals"
-        description="Review queue for assets, deliverables, and budget asks."
-        actions={
-          <div className="flex gap-1">
-            {canRequest ? (
-              <Button size="sm" className="rounded-full" onClick={() => setCreateOpen((open) => !open)}>
-                <PlusIcon className="size-3.5" />
-                Request approval
-              </Button>
-            ) : null}
-            <Button
-              size="sm"
-              variant={filter === "queue" ? "default" : "outline"}
-              className="rounded-full"
+    <div className="flex flex-col gap-6">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h1 className="font-sora text-2xl sm:text-3xl font-bold tracking-tight text-foreground">
+            Approvals & Proofs
+          </h1>
+          <p className="text-sm text-muted-foreground mt-1">
+            Review queue for creative assets, milestone deliverables, and client sign-offs.
+          </p>
+        </div>
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* Filter Pills */}
+          <div className="flex items-center p-1 rounded-full bg-surface-alt border border-border">
+            <button
               onClick={() => setFilter("queue")}
+              className={cn(
+                "flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all",
+                filter === "queue"
+                  ? "bg-[#270045] text-white shadow-xs"
+                  : "text-muted-foreground hover:text-foreground"
+              )}
             >
               Queue
-            </Button>
-            <Button
-              size="sm"
-              variant={filter === "all" ? "default" : "outline"}
-              className="rounded-full"
+              <span className={cn(
+                "rounded-full px-1.5 py-0.2 text-[10px] font-bold tabular-nums",
+                filter === "queue" ? "bg-white/20 text-white" : "bg-border text-muted-foreground"
+              )}>
+                {counts.pending + counts.changes}
+              </span>
+            </button>
+            <button
               onClick={() => setFilter("all")}
+              className={cn(
+                "flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all",
+                filter === "all"
+                  ? "bg-[#270045] text-white shadow-xs"
+                  : "text-muted-foreground hover:text-foreground"
+              )}
             >
               All
-            </Button>
+              <span className={cn(
+                "rounded-full px-1.5 py-0.2 text-[10px] font-bold tabular-nums",
+                filter === "all" ? "bg-white/20 text-white" : "bg-border text-muted-foreground"
+              )}>
+                {counts.total}
+              </span>
+            </button>
           </div>
-        }
-      />
+
+          {canRequest ? (
+            <Button
+              size="sm"
+              onClick={() => setCreateOpen((open) => !open)}
+              className="bg-[#270045] text-white hover:bg-[#3a006b] rounded-full px-4 h-9 shadow-xs"
+            >
+              <PlusIcon className="size-3.5 mr-1" />
+              Request approval
+            </Button>
+          ) : null}
+        </div>
+      </div>
+
+      {/* KPI Stat Tiles */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="rounded-xl border border-border bg-card p-4 flex flex-col gap-1.5 shadow-[0_1px_3px_0_rgba(39,0,69,0.08)]">
+          <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Awaiting Review</p>
+          <p className="font-sora text-2xl sm:text-3xl font-bold text-foreground leading-none">{counts.pending}</p>
+          <div className="mt-1">
+            <span className={cn(
+              "inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold",
+              counts.pending > 0 ? "bg-warning/15 text-warning" : "bg-surface-alt text-muted-foreground"
+            )}>
+              {counts.pending > 0 ? "Needs sign-off" : "Queue clear"}
+            </span>
+          </div>
+        </div>
+
+        <div className="rounded-xl border border-border bg-card p-4 flex flex-col gap-1.5 shadow-[0_1px_3px_0_rgba(39,0,69,0.08)]">
+          <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Changes Requested</p>
+          <p className="font-sora text-2xl sm:text-3xl font-bold text-foreground leading-none">{counts.changes}</p>
+          <div className="mt-1">
+            <span className={cn(
+              "inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold",
+              counts.changes > 0 ? "bg-orange/15 text-orange" : "bg-surface-alt text-muted-foreground"
+            )}>
+              {counts.changes > 0 ? "Revision active" : "None pending"}
+            </span>
+          </div>
+        </div>
+
+        <div className="rounded-xl border border-border bg-card p-4 flex flex-col gap-1.5 shadow-[0_1px_3px_0_rgba(39,0,69,0.08)]">
+          <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Approved</p>
+          <p className="font-sora text-2xl sm:text-3xl font-bold text-foreground leading-none">{counts.approved}</p>
+          <div className="mt-1">
+            <span className="inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold bg-success/15 text-success">
+              Ready for release
+            </span>
+          </div>
+        </div>
+
+        <div className="rounded-xl border border-border bg-card p-4 flex flex-col gap-1.5 shadow-[0_1px_3px_0_rgba(39,0,69,0.08)]">
+          <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Critical Priority</p>
+          <p className={cn(
+            "font-sora text-2xl sm:text-3xl font-bold leading-none",
+            counts.critical > 0 ? "text-destructive" : "text-foreground"
+          )}>
+            {counts.critical}
+          </p>
+          <div className="mt-1">
+            <span className={cn(
+              "inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold",
+              counts.critical > 0 ? "bg-destructive/15 text-destructive" : "bg-surface-alt text-muted-foreground"
+            )}>
+              {counts.critical > 0 ? "Urgent attention" : "Normal pacing"}
+            </span>
+          </div>
+        </div>
+      </div>
 
       {error ? (
         <Card className="flex items-center justify-between gap-3 border-destructive/40 px-4 py-3 text-sm">
@@ -232,14 +345,17 @@ export function ApprovalsPage() {
       ) : null}
 
       {loading ? (
-        <div className="flex flex-col gap-2">
-          <Skeleton className="h-24 rounded-xl" />
-          <Skeleton className="h-24 rounded-xl" />
+        <div className="flex flex-col gap-3">
+          <Skeleton className="h-32 rounded-2xl" />
+          <Skeleton className="h-32 rounded-2xl" />
         </div>
-       ) : queue.length === 0 ? (
-         <EmptyState title={filter === "queue" ? "Queue clear" : "No approvals yet"} description={filter === "queue" ? "Nothing waiting for review." : "Create an approval request to start a review."} />
+      ) : queue.length === 0 ? (
+        <EmptyState
+          title={filter === "queue" ? "Queue clear" : "No approvals found"}
+          description={filter === "queue" ? "All proofs and items are currently reviewed." : "Create an approval request to initiate client or internal sign-off."}
+        />
       ) : (
-        <ul className="flex flex-col gap-2">
+        <ul className="flex flex-col gap-3.5">
           {queue.map((approval) => {
             const busy = busyId === approval.approvalId
             const open =
@@ -248,134 +364,205 @@ export function ApprovalsPage() {
               <li key={approval.approvalId}>
                 <Card
                   className={cn(
-                    "p-4",
-                    approval.priority === "critical" && "border-l-destructive border-l-4",
-                    approval.priority === "high" && "border-l-chart-4 border-l-4",
-       )}
+                    "p-5 rounded-2xl border border-border bg-card shadow-[0_1px_3px_0_rgba(39,0,69,0.08)] hover:shadow-md transition-all flex flex-col gap-3",
+                    approval.priority === "critical" && "border-l-4 border-l-destructive",
+                    approval.priority === "high" && "border-l-4 border-l-orange"
+                  )}
                 >
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="text-muted-foreground font-mono text-xs">
+                  <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
+                    <div className="min-w-0 flex-1">
+                      {/* Top Badges */}
+                      <div className="flex flex-wrap items-center gap-2 mb-1.5">
+                        <span className="text-muted-foreground font-mono text-[11px] font-medium">
                           {approval.approvalId.length > 12 ? `#${approval.approvalId.slice(0, 8)}` : approval.approvalId}
                         </span>
-                        <Badge variant="outline" className="capitalize">
+
+                        <span className="rounded-full px-2 py-0.5 text-xs font-semibold bg-surface-alt text-muted-foreground border border-border capitalize">
                           {approval.entityType}
-                        </Badge>
-                        <Badge className="capitalize">{approval.status.replace("_", " ")}</Badge>
+                        </span>
+
+                        <span
+                          className={cn(
+                            "rounded-full px-2.5 py-0.5 text-xs font-semibold capitalize",
+                            approval.status === "approved"
+                              ? "bg-success/15 text-success border border-success/20"
+                              : approval.status === "changes_requested"
+                              ? "bg-warning/15 text-warning border border-warning/20"
+                              : approval.status === "rejected"
+                              ? "bg-destructive/15 text-destructive border border-destructive/20"
+                              : "bg-primary/15 text-primary border border-primary/20"
+                          )}
+                        >
+                          {approval.status.replace("_", " ")}
+                        </span>
+
                         {approval.priority ? (
-                          <Badge variant="secondary" className="capitalize">
+                          <span
+                            className={cn(
+                              "rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider",
+                              approval.priority === "critical"
+                                ? "bg-destructive/15 text-destructive border border-destructive/20"
+                                : approval.priority === "high"
+                                ? "bg-orange/15 text-orange border border-orange/20"
+                                : approval.priority === "medium"
+                                ? "bg-primary/15 text-primary border border-primary/20"
+                                : "bg-surface-alt text-muted-foreground border border-border"
+                            )}
+                          >
                             {approval.priority}
-                          </Badge>
+                          </span>
                         ) : null}
                       </div>
-                      <h3 className="mt-1 font-semibold">{approval.title}</h3>
-                      <p className="text-muted-foreground mt-1 text-xs">
-                        {approval.requester} → {approval.reviewer}
-                        {approval.dueDate
-                          ? ` · due ${new Date(approval.dueDate).toLocaleDateString()}`
-                          : ""}
-                        {approval.projectId ? (
+
+                      {/* Title */}
+                      <h3 className="font-sora text-base font-semibold text-foreground leading-snug">
+                        {approval.title}
+                      </h3>
+
+                      {/* Meta information */}
+                      <div className="text-muted-foreground mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
+                        <span>
+                          {approval.requester || "Staff"} → <span className="text-foreground font-medium">{approval.reviewer || "Client Reviewer"}</span>
+                        </span>
+
+                        {approval.dueDate && (
                           <>
-                            {" · "}
+                            <span>·</span>
+                            <span className="flex items-center gap-1">
+                              <CalendarIcon className="size-3 text-muted-foreground" />
+                              due {new Date(approval.dueDate).toLocaleDateString()}
+                            </span>
+                          </>
+                        )}
+
+                        {approval.projectId && (
+                          <>
+                            <span>·</span>
                             <Link
                               to={`/projects/${approval.projectId}`}
-                              className="text-primary underline-offset-2 hover:underline"
+                              className="text-primary hover:underline font-medium"
                             >
-                              {projects.find((p) => p.projectId === approval.projectId)?.projectName || (approval.projectId.length > 12 ? "Project" : approval.projectId)}
+                              {projects.find((p) => p.projectId === approval.projectId)?.projectName || "Project"}
                             </Link>
                           </>
-                        ) : null}
-                        {approval.clientId ? (
+                        )}
+
+                        {approval.clientId && (
                           <>
-                            {" · "}
+                            <span>·</span>
                             <Link
                               to={`/clients/${approval.clientId}`}
-                              className="text-primary underline-offset-2 hover:underline"
+                              className="text-primary hover:underline font-medium"
                             >
-                              {clients.find((c) => c.clientId === approval.clientId)?.name || (approval.clientId.length > 12 ? "Client" : approval.clientId)}
+                              {clients.find((c) => c.clientId === approval.clientId)?.name || "Client"}
                             </Link>
                           </>
-                        ) : null}
-                      </p>
+                        )}
+                      </div>
+
                       {approval.notes ? (
-                        <p className="text-muted-foreground mt-2 text-sm">{approval.notes}</p>
+                        <p className="text-muted-foreground mt-2 text-xs bg-surface-alt/60 p-2.5 rounded-lg border border-border/60">
+                          {approval.notes}
+                        </p>
                       ) : null}
                     </div>
-                    {open && canDecide ? (
-                      <div className="flex flex-wrap gap-1.5">
-                        <Button
-                          size="sm"
-                          disabled={busy}
-                          onClick={() => openDecision(approval, "approved")}
-                        >
-                          {busy ? (
-                            <Loader2Icon className="size-3.5 animate-spin" />
-                          ) : (
-                            <CheckIcon className="size-3.5" />
-                          )}
-                          Approve
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          disabled={busy}
-                          onClick={() => openDecision(approval, "changes_requested")}
-                        >
-                          <MessageSquareWarningIcon className="size-3.5" />
-                          Changes
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          disabled={busy}
-                          onClick={() => openDecision(approval, "rejected")}
-                        >
-                          <XIcon className="size-3.5" />
-                          Reject
-                        </Button>
-                        {approval.clientId ? (
-                          <>
-                            <ShareWithClientToggle
-                              clientId={approval.clientId}
-                              entityType="APPROVAL"
-                              entityId={approval.approvalId}
-                              clientVisible={approval.clientVisible}
-                              size="sm"
-                            />
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              disabled={nudgeBusyId === approval.approvalId}
-                              onClick={async () => {
-                                setNudgeBusyId(approval.approvalId)
-                                try {
-                                  const res = await nudgeApprovalClient(approval.approvalId)
-                                  toast.success(`Nudge sent to ${res.data?.to || "client"}`)
-                                } catch (err) {
-                                  toast.error(err instanceof ApiError ? err.message : "Nudge failed")
-                                } finally {
-                                  setNudgeBusyId(null)
-                                }
-                              }}
-                              className="border-amber-700/40 text-amber-400 hover:bg-amber-950/40 gap-1"
-                            >
-                              {nudgeBusyId === approval.approvalId ? (
-                                <Loader2Icon className="size-3 animate-spin" />
-                              ) : (
-                                <BellIcon className="size-3" />
-                              )}
-                              Nudge
-                            </Button>
-                          </>
-                        ) : null}
-                      </div>
-                    ) : open && !canDecide ? (
-                      <p className="text-muted-foreground text-xs">View only — need PM/Producer</p>
-                    ) : null}
+
+                    {/* Action buttons */}
+                    <div className="flex flex-wrap items-center gap-2 shrink-0">
+                      {open && canDecide ? (
+                        <>
+                          <Button
+                            size="sm"
+                            disabled={busy}
+                            onClick={() => openDecision(approval, "approved")}
+                            className="bg-[#7a5cc2] text-white hover:bg-[#6a4eb2] shadow-xs rounded-lg text-xs"
+                          >
+                            {busy ? (
+                              <Loader2Icon className="size-3.5 animate-spin" />
+                            ) : (
+                              <CheckIcon className="size-3.5" />
+                            )}
+                            Approve
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            disabled={busy}
+                            onClick={() => openDecision(approval, "changes_requested")}
+                            className="border-warning/30 text-warning hover:bg-warning/10 rounded-lg text-xs"
+                          >
+                            <MessageSquareWarningIcon className="size-3.5" />
+                            Changes
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            disabled={busy}
+                            onClick={() => openDecision(approval, "rejected")}
+                            className="border-destructive/30 text-destructive hover:bg-destructive/10 rounded-lg text-xs"
+                          >
+                            <XIcon className="size-3.5" />
+                            Reject
+                          </Button>
+                        </>
+                      ) : open && !canDecide ? (
+                        <span className="text-muted-foreground text-xs italic">Review only</span>
+                      ) : null}
+
+                      {/* Comments toggle */}
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => setSelectedId(selectedId === approval.approvalId ? null : approval.approvalId)}
+                        className={cn(
+                          "rounded-lg text-xs",
+                          selectedId === approval.approvalId ? "bg-surface-alt text-primary font-semibold" : "text-muted-foreground"
+                        )}
+                      >
+                        <MessageSquareIcon className="size-3.5 mr-1" />
+                        Comments
+                      </Button>
+
+                      {approval.clientId && open ? (
+                        <>
+                          <ShareWithClientToggle
+                            clientId={approval.clientId}
+                            entityType="APPROVAL"
+                            entityId={approval.approvalId}
+                            clientVisible={approval.clientVisible}
+                            size="sm"
+                          />
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            disabled={nudgeBusyId === approval.approvalId}
+                            onClick={async () => {
+                              setNudgeBusyId(approval.approvalId)
+                              try {
+                                const res = await nudgeApprovalClient(approval.approvalId)
+                                toast.success(`Nudge sent to ${res.data?.to || "client"}`)
+                              } catch (err) {
+                                toast.error(err instanceof ApiError ? err.message : "Nudge failed")
+                              } finally {
+                                setNudgeBusyId(null)
+                              }
+                            }}
+                            className="border-amber-700/40 text-amber-500 hover:bg-amber-500/10 gap-1 rounded-lg text-xs"
+                          >
+                            {nudgeBusyId === approval.approvalId ? (
+                              <Loader2Icon className="size-3 animate-spin" />
+                            ) : (
+                              <BellIcon className="size-3" />
+                            )}
+                            Nudge
+                          </Button>
+                        </>
+                      ) : null}
+                    </div>
                   </div>
+
                   {selectedId === approval.approvalId ? (
-                    <div className="mt-3">
+                    <div className="mt-3 pt-3 border-t border-border/60">
                       <CommentsPanel entityType="approval" entityId={approval.approvalId} title="Approval comments" />
                     </div>
                   ) : null}
@@ -383,7 +570,7 @@ export function ApprovalsPage() {
               </li>
             )
           })}
-       </ul>
+        </ul>
       )}
       <EntityFormDialog
         open={createOpen && canRequest}
