@@ -177,20 +177,20 @@ export function AppSidebar({ incidentCount }: { incidentCount?: number }) {
       style={{ "--sidebar-width": "240px" } as React.CSSProperties}
     >
       {/* ── Brand header ──────────────────────────────────── */}
-      <SidebarHeader className="border-b px-4 py-4" style={{ borderColor: "rgba(255,255,255,0.06)" }}>
+      <SidebarHeader className="border-b border-sidebar-border px-4 py-4">
         <div className="flex items-center gap-3">
           {/* AB Logo tile — always dark purple */}
           <div
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-white font-sora font-bold text-sm select-none shadow-lg"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-white font-sora font-bold text-sm select-none shadow-md"
             style={{ background: "#270045" }}
           >
             AB
           </div>
           <div className="min-w-0 flex-1">
-            <p className="font-sora font-semibold text-sm leading-tight truncate" style={{ color: "rgba(255,255,255,0.92)" }}>
+            <p className="font-sora font-semibold text-sm leading-tight truncate text-sidebar-foreground">
               Astra Black
             </p>
-            <p className="text-[11px] leading-tight truncate" style={{ color: "rgba(255,255,255,0.38)" }}>
+            <p className="text-[11px] leading-tight truncate text-sidebar-foreground/50">
               AB 360 Client Workspace
             </p>
           </div>
@@ -203,10 +203,7 @@ export function AppSidebar({ incidentCount }: { incidentCount?: number }) {
           {filteredGroups.map((group) => (
             <div key={group.label}>
               {/* Section label */}
-              <p
-                className="px-3 pb-1.5 text-[10px] font-semibold uppercase tracking-[0.12em]"
-                style={{ color: "rgba(255,255,255,0.28)" }}
-              >
+              <p className="px-3 pb-1.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-sidebar-foreground/40">
                 {group.label}
               </p>
               {/* Nav items */}
@@ -220,31 +217,26 @@ export function AppSidebar({ incidentCount }: { incidentCount?: number }) {
                         end={item.to === "/dashboard"}
                         onClick={closeOnMobile}
                         className={cn(
-                          "flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors duration-150 relative",
+                          "group flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors duration-150 relative",
                           active
-                            ? "font-medium"
-                            : "hover:text-white",
+                            ? "bg-sidebar-accent text-sidebar-primary font-medium"
+                            : "text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent",
                         )}
-                        style={
-                          active
-                            ? {
-                                background: "rgba(122,92,194,0.18)",
-                                color: "#a78bfa",
-                              }
-                            : { color: "rgba(255,255,255,0.58)" }
-                        }
                       >
                         <item.icon
                           size={15}
-                          className="shrink-0"
-                          style={{ color: active ? "#a78bfa" : "rgba(255,255,255,0.45)" }}
+                          className={cn(
+                            "shrink-0 transition-colors",
+                            active
+                              ? "text-sidebar-primary"
+                              : "text-sidebar-foreground/50 group-hover:text-sidebar-foreground",
+                          )}
                         />
                         <span>{item.label}</span>
                         {/* Badge for incidents */}
                         {item.to === "/incidents" && (incidentCount ?? 0) > 0 && (
                           <span
-                            className="ml-auto flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[10px] font-bold text-white"
-                            style={{ background: "#270045" }}
+                            className="ml-auto flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[10px] font-bold text-white bg-[#270045]"
                           >
                             {incidentCount}
                           </span>
@@ -259,10 +251,7 @@ export function AppSidebar({ incidentCount }: { incidentCount?: number }) {
         </nav>
 
         {/* ── User footer ─────────────────────────────────── */}
-        <div
-          className="mt-6 flex items-center gap-3 rounded-xl px-3 py-2.5 mx-0"
-          style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.06)" }}
-        >
+        <div className="mt-6 flex items-center gap-3 rounded-xl px-3 py-2.5 mx-0 bg-sidebar-accent border border-sidebar-border">
           <div
             className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[10px] font-bold text-white"
             style={{ background: avatarBg(user?.name || "AB") }}
@@ -270,10 +259,10 @@ export function AppSidebar({ incidentCount }: { incidentCount?: number }) {
             {initials}
           </div>
           <div className="min-w-0 flex-1">
-            <p className="text-xs font-medium truncate" style={{ color: "rgba(255,255,255,0.85)" }}>
+            <p className="text-xs font-medium truncate text-sidebar-foreground">
               {user?.name || user?.email || "User"}
             </p>
-            <p className="text-[10px] capitalize truncate" style={{ color: "rgba(255,255,255,0.38)" }}>
+            <p className="text-[10px] capitalize truncate text-sidebar-foreground/50">
               {user?.role || "member"}
             </p>
           </div>

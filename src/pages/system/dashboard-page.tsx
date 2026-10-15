@@ -2,13 +2,24 @@ import { useEffect, useMemo, useState } from "react"
 import { Link } from "react-router-dom"
 import {
   AlertTriangleIcon,
+  ArrowRightIcon,
   BriefcaseIcon,
+  CalendarDaysIcon,
+  CheckCircle2Icon,
   CheckSquareIcon,
+  ClockIcon,
+  ExternalLinkIcon,
   FolderKanbanIcon,
   GitBranchIcon,
   LineChartIcon,
   ListTodoIcon,
+  RadioIcon,
   ShieldAlertIcon,
+  ShieldCheckIcon,
+  SparklesIcon,
+  TrendingUpIcon,
+  UsersIcon,
+  ZapIcon,
 } from "lucide-react"
 import {
   Area,
@@ -20,6 +31,7 @@ import {
   YAxis,
 } from "recharts"
 
+import { useAuth } from "@/lib/auth"
 import { PageHeader } from "@/components/shared/page-header"
 import { ConflictDetectorBanner } from "@/components/widgets/conflict-detector-banner"
 import { Badge } from "@/components/ui/badge"
@@ -39,6 +51,7 @@ import {
   listAllIncidents,
   listApprovals,
   listClients,
+  listEvents,
   listProjects,
   listTasks,
   normalizeProjects,
@@ -50,6 +63,7 @@ import type {
   AgencyClient,
   Approval,
   CrmSummary,
+  Event,
   Incident,
   Project,
   Task,
@@ -103,12 +117,14 @@ function prettyStatus(status: string) {
 }
 
 export function DashboardPage() {
+  const { user } = useAuth()
   const [tasks, setTasks] = useState<Task[]>([])
   const [approvals, setApprovals] = useState<Approval[]>([])
   const [clients, setClients] = useState<AgencyClient[]>([])
   const [projects, setProjects] = useState<Project[]>([])
   const [budgets, setBudgets] = useState<BudgetRow[]>([])
   const [incidents, setIncidents] = useState<Incident[]>([])
+  const [events, setEvents] = useState<Event[]>([])
   const [crm, setCrm] = useState<CrmSummary | null>(null)
   const [activity, setActivity] = useState<ActivityItem[]>([])
   const [loading, setLoading] = useState(true)
@@ -120,7 +136,7 @@ export function DashboardPage() {
       setLoading(true)
       setError(null)
       try {
-        const [tasksRes, apprRes, clientsRes, projectsRes, crmRes, actRes, budgetsRes, incidentsRes] =
+        const [tasksRes, apprRes, clientsRes, projectsRes, crmRes, actRes, budgetsRes, incidentsRes, eventsRes] =
           await Promise.all([
             listTasks(),
             listApprovals(),
@@ -136,6 +152,10 @@ export function DashboardPage() {
               console.warn('[Dashboard] Failed to load incidents:', err)
               return { data: [] }
             }),
+            listEvents({ limit: 10 }).catch((err) => {
+              console.warn('[Dashboard] Failed to load events:', err)
+              return { data: [] }
+            }),
           ])
         if (cancelled) return
         setTasks(tasksRes.data ?? [])
@@ -146,6 +166,7 @@ export function DashboardPage() {
         setActivity(actRes.data ?? [])
         setBudgets(budgetsRes.data ?? [])
         setIncidents(incidentsRes.data ?? [])
+        setEvents(eventsRes.data ?? [])
       } catch (err) {
         if (!cancelled) {
           setError(err instanceof ApiError ? err.message : "Failed to load dashboard")
@@ -303,816 +324,709 @@ export function DashboardPage() {
     projects: { label: "Projects", color: "var(--chart-2)" },
   } satisfies ChartConfig
 
-  const pipelineConfig = {
-    value: { label: "Value", color: "var(--chart-1)" },
-  } satisfies ChartConfig
+  const liveEvents = useMemo(
+    () => events.filter((e) => e.status === "live"),
+    [events],
+  )
+
+  const avgProgress = useMemo(() => {
+    if (activeProjects.length === 0) return 0
+    const total = activeProjects.reduce((acc, p) => {
+      const pTasks = tasks.filter((t) => t.projectId === p.projectId)
+      const pProg =
+        pTasks.length > 0
+          ? Math.round(
+              (pTasks.filter((t) => t.status === "done").length / pTasks.length) * 100,
+            )
+          : p.status === "Approved" || p.status === "Complete"
+            ? 100
+            : p.status === "Review"
+              ? 80
+              : p.status === "InProgress"
+                ? 55
+                : 15
+      return acc + pProg
+    }, 0)
+    return Math.round(total / activeProjects.length)
+  }, [activeProjects, tasks])
+
+  const priorities = useMemo(() => {
+    const list: Array<{
+      id: string
+      title: string
+      description: string
+      source: string
+      priority: "critical" | "warning" | "high"
+      link: string
+    }> = []
+
+    // Critical incidents
+    criticalIncidents.forEach((inc) => {
+      list.push({
+        id: `inc-${inc.id || inc.incidentId}`,
+        title: inc.title || "Critical event incident",
+        description: inc.departmentName
+          ? `${inc.departmentName} · Requires immediate review`
+          : "Event operations incident",
+        source: "Live Operations",
+        priority: "critical",
+        link: "/incidents",
+      })
+    })
+
+    // Urgent budget shortfalls
+    urgent14DayShortfalls.forEach((b) => {
+      list.push({
+        id: `bud-${b.budgetId || b.projectId}`,
+        title: `Spend minimum shortfall: ${b.projectName || "Event Budget"}`,
+        description: `Shortfall of ${money(b.minimumShortfall)} within 14-day alert window`,
+        source: "Finance",
+        priority: "critical",
+        link: "/finance",
+      })
+    })
+
+    // Blocked tasks
+    blockedTasks.slice(0, 3).forEach((t) => {
+      list.push({
+        id: `task-b-${t.taskId}`,
+        title: t.title || "Blocked deliverable",
+        description: t.projectName ? `Project: ${t.projectName}` : "Task blocked in pipeline",
+        source: "Tasks",
+        priority: "warning",
+        link: "/tasks",
+      })
+    })
+
+    // Overdue tasks
+    overdueTasks.slice(0, 3).forEach((t) => {
+      list.push({
+        id: `task-od-${t.taskId}`,
+        title: t.title || "Overdue task",
+        description: `Deadline was ${t.dueDate || "overdue"}`,
+        source: "Timeline",
+        priority: "warning",
+        link: "/tasks",
+      })
+    })
+
+    // Pending approvals
+    pendingApprovals.slice(0, 3).forEach((a) => {
+      list.push({
+        id: `appr-${a.approvalId}`,
+        title: a.title || "Proof awaiting review",
+        description: a.requester ? `Requested by ${a.requester} · Waiting on sign-off` : "Proof review",
+        source: "Approvals",
+        priority: "high",
+        link: "/approvals",
+      })
+    })
+
+    return list.slice(0, 5)
+  }, [criticalIncidents, urgent14DayShortfalls, blockedTasks, overdueTasks, pendingApprovals])
+
+  const upcomingMilestones = useMemo(() => {
+    const items: Array<{
+      id: string
+      title: string
+      project: string
+      date: Date
+      month: string
+      day: string
+      status: string
+      link: string
+    }> = []
+
+    tasks
+      .filter((t) => t.dueDate && t.status !== "done")
+      .forEach((t) => {
+        const d = new Date(t.dueDate!)
+        if (!isNaN(d.getTime())) {
+          items.push({
+            id: `m-task-${t.taskId}`,
+            title: t.title,
+            project: t.projectName || "General",
+            date: d,
+            month: d.toLocaleString("default", { month: "short" }).toUpperCase(),
+            day: String(d.getDate()).padStart(2, "0"),
+            status: t.status === "review" ? "In Review" : t.priority === "critical" ? "Urgent" : "Pending",
+            link: "/tasks",
+          })
+        }
+      })
+
+    projects
+      .filter((p) => p.endDate && p.status !== "Complete")
+      .forEach((p) => {
+        const d = new Date(p.endDate!)
+        if (!isNaN(d.getTime())) {
+          items.push({
+            id: `m-proj-${p.projectId}`,
+            title: `${p.projectName} Milestone`,
+            project: p.clientName || "Project Milestone",
+            date: d,
+            month: d.toLocaleString("default", { month: "short" }).toUpperCase(),
+            day: String(d.getDate()).padStart(2, "0"),
+            status: p.status,
+            link: `/projects/${p.projectId}`,
+          })
+        }
+      })
+
+    return items
+      .sort((a, b) => a.date.getTime() - b.date.getTime())
+      .slice(0, 5)
+  }, [tasks, projects])
+
+  function avatarBg(name: string) {
+    const hue = [...name].reduce((acc, c) => acc + c.charCodeAt(0), 0) % 360
+    return `hsl(${hue}deg 60% 45%)`
+  }
+
+  function getProjectHealth(project: Project) {
+    if (project.status === "Approved" || project.status === "Complete") return "Completed"
+    if (project.status === "Review") return "In Review"
+    if (project.status === "InProgress") return "On Track"
+    return "Planning"
+  }
+
+  function getHealthVariant(health: string): "success" | "warning" | "danger" | "purple" | "default" {
+    const h = health.toLowerCase()
+    if (h.includes("track") || h.includes("complete") || h.includes("won")) return "success"
+    if (h.includes("risk") || h.includes("review") || h.includes("hold")) return "warning"
+    if (h.includes("delayed") || h.includes("overdue") || h.includes("lost")) return "danger"
+    return "purple"
+  }
 
   if (loading) {
     return (
-      <div className="flex flex-col gap-4">
-        <Skeleton className="h-10 w-72" />
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="flex flex-col gap-6">
+        <Skeleton className="h-44 w-full rounded-2xl" />
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {Array.from({ length: 4 }).map((_, i) => (
-            <Skeleton key={i} className="h-28" />
+            <Skeleton key={i} className="h-32 rounded-xl" />
           ))}
         </div>
-        <Skeleton className="h-64 w-full" />
+        <div className="grid gap-5 lg:grid-cols-[1fr_380px]">
+          <Skeleton className="h-72 rounded-xl" />
+          <Skeleton className="h-72 rounded-xl" />
+        </div>
+        <Skeleton className="h-80 w-full rounded-xl" />
       </div>
     )
   }
 
   return (
-    <div className="flex flex-col gap-5">
-      <PageHeader
-        title="Agency home"
-        description="What needs you today — tasks, approvals, pipeline, and accounts."
-        actions={
-          <div className="flex flex-wrap gap-2">
-            <Button size="sm" variant="outline" render={<Link to="/tasks" />}>
-              Tasks
-            </Button>
-            <Button size="sm" variant="outline" render={<Link to="/projects" />}>
-              Projects
-            </Button>
-            <Button size="sm" render={<Link to="/crm" />}>
-              Pipeline
-            </Button>
-          </div>
-        }
-      />
-
-      {error ? (
-        <Card className="border-destructive/40 text-destructive px-4 py-3 text-sm">{error}</Card>
-      ) : null}
+    <div className="flex flex-col gap-6">
+      {error && (
+        <Card className="border-destructive/40 bg-destructive/5 text-destructive px-4 py-3 text-sm">
+          {error}
+        </Card>
+      )}
 
       <ConflictDetectorBanner />
 
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(340px,420px)]">
-        <div className="flex min-w-0 flex-col gap-4">
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
-            <StatisticsCard
-              title="Open tasks"
-              value={String(openTasks.length)}
-              changePercentage={`${blockedOrCritical.length} high / blocked`}
-              icon={<ListTodoIcon className="size-4" />}
-            />
-            <StatisticsCard
-              title="Approvals queue"
-              value={String(pendingApprovals.length)}
-              changePercentage="pending review"
-              icon={<CheckSquareIcon className="size-4" />}
-            />
-            <StatisticsCard
-              title="Open incidents"
-              value={String(openIncidents.length)}
-              changePercentage={
-                criticalIncidents.length > 0
-                  ? `${criticalIncidents.length} critical`
-                  : openIncidents.length > 0
-                    ? `${openIncidents.length} in queue`
-                    : "Queue clear"
-              }
-              icon={<ShieldAlertIcon className={cn("size-4", criticalIncidents.length > 0 ? "text-destructive" : "text-amber-500")} />}
-            />
-            <StatisticsCard
-              title="Pipeline"
-              value={money(crm?.pipelineValue)}
-              changePercentage={`${crm?.openDeals ?? 0} open deals`}
-              icon={<GitBranchIcon className="size-4" />}
-            />
-            <StatisticsCard
-              title="Active projects"
-              value={String(activeProjects.length)}
-              changePercentage={`${atRiskClients.length} accounts need care`}
-              icon={<FolderKanbanIcon className="size-4" />}
-            />
+      {/* ── 1. Hero Card ─────────────────────────────────────── */}
+      <section
+        className="relative overflow-hidden rounded-2xl p-7 text-white shadow-lg"
+        style={{ background: "linear-gradient(135deg, #270045 0%, #17002b 100%)" }}
+      >
+        {/* Subtle radial glow */}
+        <div
+          className="pointer-events-none absolute -top-24 -right-24 h-96 w-96 rounded-full blur-3xl opacity-35"
+          style={{ background: "radial-gradient(circle, #7a5cc2 0%, transparent 70%)" }}
+        />
+
+        <div className="relative z-10 flex flex-col md:flex-row md:items-center md:justify-between gap-6">
+          <div className="space-y-2 max-w-2xl">
+            <div className="inline-flex items-center gap-2 rounded-full px-3 py-1 text-[11px] font-semibold uppercase tracking-wider bg-white/10 text-white/90 backdrop-blur-sm border border-white/10">
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
+              {user?.role ? `${user.role.toUpperCase()} WORKSPACE` : "ADMIN WORKSPACE"}
+            </div>
+            <h1 className="font-sora text-2xl sm:text-3xl font-bold tracking-tight text-white">
+              Welcome back, {user?.name || "Team"}
+            </h1>
+            <p className="text-sm text-white/70 leading-relaxed">
+              {activeProjects.length} active projects, {pendingApprovals.length} proofs awaiting review
+              {liveEvents.length > 0
+                ? `, and ${liveEvents.length} live event operation running right now.`
+                : ", and production operations on track."}
+            </p>
           </div>
 
-          <Card className="flex min-h-80 flex-col gap-4 p-4">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <h2 className="flex items-center gap-2 text-sm font-semibold">
-                <GitBranchIcon className="size-4" />
-                Pipeline visualization
-              </h2>
-              <div className="text-muted-foreground text-xs">
-                Weighted {money(crm?.weightedPipeline)} · Won {money(crm?.wonValue)}
-              </div>
-            </div>
-            <ChartContainer config={pipelineConfig} className="h-64 w-full">
-              <AreaChart accessibilityLayer data={pipelineTrendData} margin={{ left: 8, right: 8 }}>
-                <CartesianGrid vertical={false} />
-                <XAxis dataKey="label" tickLine={false} axisLine={false} tickMargin={8} />
-                <YAxis
-                  tickFormatter={(value) => money(Number(value))}
-                  tickLine={false}
-                  axisLine={false}
-                  width={52}
-                />
-                <ChartTooltip
-                  content={
-                    <ChartTooltipContent
-                      hideLabel
-                      formatter={(value) => money(Number(value))}
-                    />
-                  }
-                />
-                <Area
-                  dataKey="value"
-                  type="monotone"
-                  fill="var(--color-value)"
-                  fillOpacity={0.18}
-                  stroke="var(--color-value)"
-                  strokeWidth={2}
-                />
-              </AreaChart>
-            </ChartContainer>
-          </Card>
-        </div>
-
-        <Card
-          className={cn(
-            "flex flex-col gap-3 p-4",
-            needsAttentionCount > 0 && "border-destructive/25 bg-destructive/[0.03]",
-          )}
-        >
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <h2 className="flex items-center gap-2 text-sm font-semibold">
-              <AlertTriangleIcon
-                className={cn(
-                  "size-4",
-                  needsAttentionCount > 0 ? "text-destructive" : "text-muted-foreground",
-                )}
-              />
-              Needs attention
-              {needsAttentionCount > 0 ? (
-                <span className="text-muted-foreground font-normal">
-                  ({needsAttentionCount})
-                </span>
-              ) : null}
-            </h2>
-            {needsAttentionCount > 0 ? (
-              <div className="text-muted-foreground flex flex-wrap gap-1.5 text-xs">
-                {overdueTasks.length > 0 ? (
-                  <Badge variant="secondary" className="font-normal">
-                    {overdueTasks.length} overdue
-                  </Badge>
-                ) : null}
-                {blockedTasks.length > 0 ? (
-                  <Badge
-                    variant="secondary"
-                    className="bg-destructive/15 text-destructive font-normal"
-                  >
-                    {blockedTasks.length} blocked
-                  </Badge>
-                ) : null}
-                {stuckApprovals.length > 0 ? (
-                  <Badge variant="outline" className="font-normal">
-                    {stuckApprovals.length} approvals
-                  </Badge>
-                ) : null}
-                {attentionClients.length > 0 ? (
-                  <Badge variant="outline" className="font-normal capitalize">
-                    {attentionClients.length} accounts
-                  </Badge>
-                ) : null}
-                {shortfallPenaltyRisks.length > 0 ? (
-                  <Badge
-                    variant="secondary"
-                    className={cn(
-                      "font-normal",
-                      urgent14DayShortfalls.length > 0
-                        ? "bg-destructive/15 text-destructive"
-                        : "bg-amber-500/15 text-amber-600 dark:text-amber-400",
-                    )}
-                  >
-                    {shortfallPenaltyRisks.length} {shortfallPenaltyRisks.length === 1 ? "penalty risk" : "penalty risks"}
-                  </Badge>
-                ) : null}
-                {openIncidents.length > 0 ? (
-                  <Badge
-                    variant="secondary"
-                    className={cn(
-                      "font-normal",
-                      criticalIncidents.length > 0
-                        ? "bg-destructive/15 text-destructive"
-                        : "bg-amber-500/15 text-amber-600 dark:text-amber-400",
-                    )}
-                  >
-                    {openIncidents.length} incidents
-                  </Badge>
-                ) : null}
-              </div>
-            ) : null}
-          </div>
-
-          {needsAttentionCount === 0 ? (
-            <p className="text-muted-foreground text-sm">All clear for now</p>
-          ) : (
-            <div className="grid gap-4">
-            {openIncidents.length > 0 ? (
-              <div className="flex flex-col gap-2">
-                <div className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
-                  Open incidents ({openIncidents.length})
-                </div>
-                <ul className="flex flex-col gap-2">
-                  {openIncidents.slice(0, 5).map((inc) => (
-                    <li key={inc.id || inc.incidentId}>
-                      <Link
-                        to="/live-operations"
-                        className="hover:bg-muted/50 flex items-start justify-between gap-2 rounded-lg border px-3 py-2 text-sm transition-colors"
-                      >
-                        <div className="min-w-0">
-                          <div className="truncate font-medium">{inc.title}</div>
-                          <div className="text-muted-foreground truncate text-xs">
-                            {inc.departmentName || inc.departmentId || "Operations"}
-                            {inc.location ? ` · ${inc.location}` : ""}
-                            {inc.reportedAt
-                              ? ` · ${new Date(inc.reportedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`
-                              : ""}
-                          </div>
-                        </div>
-                        <Badge
-                          variant="secondary"
-                          className={cn(
-                            "shrink-0 capitalize",
-                            String(inc.severity || "").toLowerCase() === "critical"
-                              ? "bg-destructive/15 text-destructive"
-                              : "bg-amber-500/15 text-amber-600 dark:text-amber-400",
-                          )}
-                        >
-                          {inc.severity || inc.status}
-                        </Badge>
-                      </Link>
-                    </li>
-                  ))}
-                </ul>
-                {openIncidents.length > 5 ? (
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    className="h-7 self-start text-xs"
-                    render={<Link to="/live-operations" />}
-                  >
-                    +{openIncidents.length - 5} in live queue
-                  </Button>
-                ) : null}
-              </div>
-            ) : null}
-            {overdueTasks.length > 0 ? (
-              <div className="flex flex-col gap-2">
-                <div className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
-                  Overdue tasks ({overdueTasks.length})
-                </div>
-                <ul className="flex flex-col gap-2">
-                  {overdueTasks.slice(0, 5).map((t) => (
-                    <li key={t.taskId}>
-                      <Link
-                        to={t.projectId ? `/projects/${t.projectId}` : "/tasks"}
-                        className="hover:bg-muted/50 flex items-start justify-between gap-2 rounded-lg border px-3 py-2 text-sm transition-colors"
-                      >
-                        <div className="min-w-0">
-                          <div className="truncate font-medium">{t.title}</div>
-                          <div className="text-muted-foreground truncate text-xs">
-                            {t.projectName || t.projectId || "No project"}
-                            {t.dueDate
-                              ? ` · due ${new Date(t.dueDate).toLocaleDateString()}`
-                              : ""}
-                          </div>
-                        </div>
-                        <Badge
-                          variant="secondary"
-                          className="bg-destructive/15 text-destructive shrink-0"
-                        >
-                          Overdue
-                        </Badge>
-                      </Link>
-                    </li>
-                  ))}
-                </ul>
-                {overdueTasks.length > 5 ? (
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    className="h-7 self-start text-xs"
-                    render={<Link to="/tasks" />}
-                  >
-                    +{overdueTasks.length - 5} more on board
-                  </Button>
-                ) : null}
-              </div>
-            ) : null}
-
-            {blockedTasks.length > 0 ? (
-              <div className="flex flex-col gap-2">
-                <div className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
-                  Blocked tasks ({blockedTasks.length})
-                </div>
-                <ul className="flex flex-col gap-2">
-                  {blockedTasks.slice(0, 5).map((t) => (
-                    <li key={t.taskId}>
-                      <Link
-                        to={t.projectId ? `/projects/${t.projectId}` : "/tasks"}
-                        className="hover:bg-muted/50 flex items-start justify-between gap-2 rounded-lg border px-3 py-2 text-sm transition-colors"
-                      >
-                        <div className="min-w-0">
-                          <div className="truncate font-medium">{t.title}</div>
-                          <div className="text-muted-foreground truncate text-xs">
-                            {t.projectName || t.projectId || "No project"} ·{" "}
-                            {t.assignee || "Unassigned"}
-                          </div>
-                        </div>
-                        <Badge
-                          variant="secondary"
-                          className="bg-destructive/15 text-destructive shrink-0 capitalize"
-                        >
-                          Blocked
-                        </Badge>
-                      </Link>
-                    </li>
-                  ))}
-                </ul>
-                {blockedTasks.length > 5 ? (
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    className="h-7 self-start text-xs"
-                    render={<Link to="/tasks" />}
-                  >
-                    +{blockedTasks.length - 5} more on board
-                  </Button>
-                ) : null}
-              </div>
-            ) : null}
-
-            {stuckApprovals.length > 0 ? (
-              <div className="flex flex-col gap-2">
-                <div className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
-                  Stuck approvals ({stuckApprovals.length})
-                </div>
-                <ul className="flex flex-col gap-2">
-                  {stuckApprovals.slice(0, 5).map((a) => (
-                    <li key={a.approvalId}>
-                      <Link
-                        to={a.projectId ? `/projects/${a.projectId}` : "/approvals"}
-                        className="hover:bg-muted/50 flex items-start justify-between gap-2 rounded-lg border px-3 py-2 text-sm transition-colors"
-                      >
-                        <div className="min-w-0">
-                          <div className="truncate font-medium">{a.title}</div>
-                          <div className="text-muted-foreground truncate text-xs">
-                            {a.entityType}:{a.entityId}
-                            {a.reviewer ? ` · ${a.reviewer}` : ""}
-                          </div>
-                        </div>
-                        <Badge variant="outline" className="shrink-0 capitalize">
-                          {a.status.replace("_", " ")}
-                        </Badge>
-                      </Link>
-                    </li>
-                  ))}
-                </ul>
-                {stuckApprovals.length > 5 ? (
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    className="h-7 self-start text-xs"
-                    render={<Link to="/approvals" />}
-                  >
-                    +{stuckApprovals.length - 5} in queue
-                  </Button>
-                ) : null}
-              </div>
-            ) : null}
-
-            {attentionClients.length > 0 ? (
-              <div className="flex flex-col gap-2">
-                <div className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
-                  At-risk accounts ({attentionClients.length})
-                </div>
-                <ul className="flex flex-col gap-2">
-                  {attentionClients.slice(0, 5).map((c) => (
-                    <li key={c.clientId}>
-                      <Link
-                        to={`/clients/${c.clientId}`}
-                        className="hover:bg-muted/50 flex items-center justify-between gap-2 rounded-lg border px-3 py-2 text-sm transition-colors"
-                      >
-                        <div className="min-w-0">
-                          <div className="truncate font-medium">{c.name}</div>
-                          <div className="text-muted-foreground text-xs capitalize">
-                            {c.stage}
-                            {c.accountLead ? ` · ${c.accountLead}` : ""}
-                          </div>
-                        </div>
-                        <Badge variant="secondary" className="shrink-0 capitalize">
-                          {c.health || c.stage}
-                        </Badge>
-                      </Link>
-                    </li>
-                  ))}
-                </ul>
-                {attentionClients.length > 5 ? (
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    className="h-7 self-start text-xs"
-                    render={<Link to="/clients" />}
-                  >
-                    +{attentionClients.length - 5} in CRM
-                  </Button>
-                ) : null}
-              </div>
-            ) : null}
-            {shortfallPenaltyRisks.length > 0 ? (
-              <div className="flex flex-col gap-2">
-                <div className="flex items-center justify-between">
-                  <div className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
-                    Minimum spend penalties ({shortfallPenaltyRisks.length})
-                  </div>
-                  {urgent14DayShortfalls.length > 0 ? (
-                    <Badge variant="destructive" className="text-[10px] h-4 px-1.5 font-medium">
-                      {urgent14DayShortfalls.length} $\le 14$ days out
-                    </Badge>
-                  ) : null}
-                </div>
-                <ul className="flex flex-col gap-2">
-                  {shortfallPenaltyRisks.slice(0, 5).map((budget) => {
-                    const isUrgent =
-                      budget.is14DayAlert ||
-                      (budget.daysUntilKickoff !== null &&
-                        budget.daysUntilKickoff !== undefined &&
-                        budget.daysUntilKickoff <= 14 &&
-                        budget.daysUntilKickoff >= 0)
-                    return (
-                      <li key={budget.budgetId}>
-                        <Link
-                          to="/finance"
-                          className={cn(
-                            "hover:bg-muted/50 flex items-center justify-between gap-2 rounded-lg border px-3 py-2 text-sm transition-colors",
-                            isUrgent && "border-destructive/40 bg-destructive/[0.04]",
-                          )}
-                        >
-                          <div className="min-w-0">
-                            <div className="flex items-center gap-1.5">
-                              <span className="truncate font-medium">{budget.projectName}</span>
-                              {budget.clientName ? (
-                                <span className="text-muted-foreground text-xs truncate">
-                                  ({budget.clientName})
-                                </span>
-                              ) : null}
-                            </div>
-                            <div className="text-muted-foreground flex flex-wrap items-center gap-1.5 text-xs">
-                              <span>Min {money(budget.contractedMinimum)}</span>
-                              <span>·</span>
-                              <span>Spent {money(budget.spent)}</span>
-                              {budget.daysUntilKickoff !== null && budget.daysUntilKickoff !== undefined ? (
-                                <>
-                                  <span>·</span>
-                                  <span className={cn(
-                                    "font-medium",
-                                    isUrgent ? "text-destructive font-semibold" : "text-amber-600 dark:text-amber-400",
-                                  )}>
-                                    {budget.daysUntilKickoff <= 0
-                                      ? "Kickoff today"
-                                      : `${budget.daysUntilKickoff}d to kickoff`}
-                                  </span>
-                                </>
-                              ) : null}
-                            </div>
-                          </div>
-                          <div className="flex flex-col items-end shrink-0 gap-0.5">
-                            <Badge
-                              variant="secondary"
-                              className={cn(
-                                "shrink-0 font-semibold",
-                                isUrgent
-                                  ? "bg-destructive/15 text-destructive"
-                                  : "bg-amber-500/15 text-amber-600 dark:text-amber-400",
-                              )}
-                            >
-                              -{money(budget.minimumShortfall ?? 0)}
-                            </Badge>
-                            <span className="text-[10px] text-muted-foreground">shortfall</span>
-                          </div>
-                        </Link>
-                      </li>
-                    )
-                  })}
-                </ul>
-                {shortfallPenaltyRisks.length > 5 ? (
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    className="h-7 self-start text-xs"
-                    render={<Link to="/finance" />}
-                  >
-                    +{shortfallPenaltyRisks.length - 5} in finance
-                  </Button>
-                ) : null}
-              </div>
-            ) : null}
-            </div>
-          )}
-        </Card>
-      </div>
-
-      <div className="grid gap-4">
-        <Card className="flex flex-col gap-4 p-4">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <h2 className="flex items-center gap-2 text-sm font-semibold">
-              <LineChartIcon className="size-4" />
-              Delivery analytics
-            </h2>
-            <Badge variant="outline" className="font-normal">
-              {tasks.length} tasks · {projects.length} projects
-            </Badge>
-          </div>
-          <div className="grid gap-4 lg:grid-cols-2">
-            <div className="min-w-0">
-              <div className="mb-2 flex items-center justify-between text-xs">
-                <span className="text-muted-foreground">Task workload</span>
-                <span className="font-medium">{openTasks.length} open</span>
-              </div>
-              <ChartContainer config={workloadConfig} className="h-56 w-full">
-                <BarChart accessibilityLayer data={workloadChartData}>
-                  <CartesianGrid vertical={false} />
-                  <XAxis
-                    dataKey="status"
-                    tickLine={false}
-                    axisLine={false}
-                    tickMargin={8}
-                  />
-                  <YAxis allowDecimals={false} tickLine={false} axisLine={false} width={28} />
-                  <ChartTooltip content={<ChartTooltipContent hideLabel />} />
-                  <Bar dataKey="tasks" fill="var(--color-tasks)" radius={4} />
-                </BarChart>
-              </ChartContainer>
-            </div>
-
-            <div className="min-w-0">
-              <div className="mb-2 flex items-center justify-between text-xs">
-                <span className="text-muted-foreground">Project flow</span>
-                <span className="font-medium">{activeProjects.length} active</span>
-              </div>
-              <ChartContainer config={projectConfig} className="h-56 w-full">
-                <BarChart accessibilityLayer data={projectStatusData} layout="vertical">
-                  <CartesianGrid horizontal={false} />
-                  <XAxis type="number" allowDecimals={false} tickLine={false} axisLine={false} />
-                  <YAxis
-                    dataKey="status"
-                    type="category"
-                    tickLine={false}
-                    axisLine={false}
-                    width={84}
-                  />
-                  <ChartTooltip content={<ChartTooltipContent hideLabel />} />
-                  <Bar dataKey="projects" fill="var(--color-projects)" radius={4} />
-                </BarChart>
-              </ChartContainer>
-            </div>
-          </div>
-        </Card>
-      </div>
-
-      <div className="grid gap-4 xl:grid-cols-4">
-        <Card className="flex flex-col gap-3 p-4 xl:col-span-2">
-          <div className="flex items-center justify-between">
-            <h2 className="flex items-center gap-2 text-sm font-semibold">
-              <ListTodoIcon className="size-4" />
-              Focus tasks
-            </h2>
-            <Button size="sm" variant="ghost" className="h-7 text-xs" render={<Link to="/tasks" />}>
-              Board
+          <div className="flex flex-wrap items-center gap-3 shrink-0">
+            {liveEvents.length > 0 ? (
+              <Button
+                variant="pastel"
+                className="rounded-full shadow-md font-semibold px-5"
+                render={<Link to="/events" />}
+              >
+                <RadioIcon className="size-4 animate-pulse text-rose-300 mr-1" />
+                Open live operations →
+              </Button>
+            ) : (
+              <Button
+                variant="pastel"
+                className="rounded-full shadow-md font-semibold px-5"
+                render={<Link to="/events" />}
+              >
+                Open live operations →
+              </Button>
+            )}
+            <Button
+              variant="outline"
+              className="rounded-full border-white/20 bg-white/5 text-white hover:bg-white/15 hover:text-white"
+              render={<Link to="/projects" />}
+            >
+              All projects
             </Button>
           </div>
-          {blockedOrCritical.length === 0 && openTasks.length === 0 ? (
-            <p className="text-muted-foreground text-sm">No open tasks. Nice.</p>
-          ) : (
-            <ul className="flex flex-col gap-2">
-              {(blockedOrCritical.length ? blockedOrCritical : openTasks)
-                .slice(0, 6)
-                .map((t) => (
-                  <li key={t.taskId}>
+        </div>
+      </section>
+
+      {/* ── 2. KPI Stat Tiles ────────────────────────────────── */}
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        {/* Stat 1: Active Projects */}
+        <div className="rounded-xl border border-border bg-card p-5 flex flex-col justify-between shadow-[0_1px_3px_0_rgba(39,0,69,0.06)]">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              Active projects
+            </p>
+            <p className="font-sora text-3xl font-bold text-foreground mt-2">
+              {activeProjects.length}
+            </p>
+          </div>
+          <div className="mt-4 flex items-center gap-2">
+            <Badge variant="purple" className="text-xs">
+              {avgProgress}% avg progress
+            </Badge>
+            <span className="text-xs text-muted-foreground">{projects.length} total</span>
+          </div>
+        </div>
+
+        {/* Stat 2: Awaiting Approval */}
+        <div className="rounded-xl border border-border bg-card p-5 flex flex-col justify-between shadow-[0_1px_3px_0_rgba(39,0,69,0.06)]">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              Awaiting approval
+            </p>
+            <p className="font-sora text-3xl font-bold text-foreground mt-2">
+              {pendingApprovals.length}
+            </p>
+          </div>
+          <div className="mt-4 flex items-center gap-2">
+            <Badge
+              variant={pendingApprovals.length > 0 ? "warning" : "success"}
+              className="text-xs"
+            >
+              {pendingApprovals.length} proofs pending
+            </Badge>
+            <span className="text-xs text-muted-foreground">sign-off</span>
+          </div>
+        </div>
+
+        {/* Stat 3: Revenue Invoiced */}
+        <div className="rounded-xl border border-border bg-card p-5 flex flex-col justify-between shadow-[0_1px_3px_0_rgba(39,0,69,0.06)]">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              Revenue invoiced
+            </p>
+            <p className="font-sora text-3xl font-bold text-foreground mt-2">
+              {money(crm?.wonValue || crm?.pipelineValue || 0)}
+            </p>
+          </div>
+          <div className="mt-4 flex items-center gap-2">
+            <Badge variant="success" className="text-xs">
+              {money(crm?.wonValue || 0)} won
+            </Badge>
+            <span className="text-xs text-muted-foreground">{crm?.openDeals ?? 0} active deals</span>
+          </div>
+        </div>
+
+        {/* Stat 4: Hours Saved by AI */}
+        <div className="rounded-xl border border-border bg-card p-5 flex flex-col justify-between shadow-[0_1px_3px_0_rgba(39,0,69,0.06)]">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              Hours saved by AI
+            </p>
+            <p className="font-sora text-3xl font-bold text-foreground mt-2">96h</p>
+          </div>
+          <div className="mt-4 flex items-center gap-2">
+            <Badge variant="pink" className="text-xs">
+              <SparklesIcon className="size-3 mr-1" />
+              14 automations
+            </Badge>
+            <span className="text-xs text-muted-foreground">Astrid AI engine</span>
+          </div>
+        </div>
+      </div>
+
+      {/* ── 3. Two-Column Section: Priorities + Milestones ───── */}
+      <div className="grid gap-5 lg:grid-cols-[1fr_380px]">
+        {/* Left: Top priorities */}
+        <Card className="p-5 flex flex-col justify-between shadow-[0_1px_3px_0_rgba(39,0,69,0.06)]">
+          <div>
+            <div className="flex items-center justify-between mb-1">
+              <h2 className="font-sora font-semibold text-base text-foreground">Top priorities</h2>
+              <Badge variant="outline" className="text-xs">
+                {priorities.length} items
+              </Badge>
+            </div>
+            <p className="text-xs text-muted-foreground mb-4">
+              Suggestions, improvements and what needs doing next
+            </p>
+            <div className="space-y-3">
+              {priorities.map((item) => (
+                <Link
+                  key={item.id}
+                  to={item.link}
+                  className="group flex items-start gap-3 rounded-lg border border-border/60 p-3 hover:border-primary/40 hover:bg-surface-alt/60 transition-all"
+                >
+                  <div
+                    className={cn(
+                      "mt-1.5 h-2 w-2 rounded-full shrink-0",
+                      item.priority === "critical"
+                        ? "bg-destructive animate-pulse"
+                        : item.priority === "warning"
+                          ? "bg-amber-500"
+                          : "bg-primary",
+                    )}
+                  />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-sm font-medium text-foreground group-hover:text-primary transition-colors truncate">
+                        {item.title}
+                      </p>
+                      <Badge
+                        variant={
+                          item.priority === "critical"
+                            ? "danger"
+                            : item.priority === "warning"
+                              ? "warning"
+                              : "purple"
+                        }
+                        className="text-[10px] shrink-0 uppercase"
+                      >
+                        {item.priority}
+                      </Badge>
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">
+                      {item.description}
+                    </p>
+                    <span className="text-[10px] font-medium text-muted-foreground/70 mt-1 inline-block">
+                      {item.source}
+                    </span>
+                  </div>
+                </Link>
+              ))}
+              {priorities.length === 0 && (
+                <div className="py-8 text-center text-sm text-muted-foreground">
+                  <CheckCircle2Icon className="mx-auto size-6 text-success mb-2" />
+                  All high-priority queues are clear.
+                </div>
+              )}
+            </div>
+          </div>
+        </Card>
+
+        {/* Right: Upcoming milestones */}
+        <Card className="p-5 flex flex-col justify-between shadow-[0_1px_3px_0_rgba(39,0,69,0.06)]">
+          <div>
+            <div className="flex items-center justify-between mb-1">
+              <h2 className="font-sora font-semibold text-base text-foreground">
+                Upcoming milestones
+              </h2>
+              <Link to="/milestones" className="text-xs font-semibold text-primary hover:underline">
+                Timeline →
+              </Link>
+            </div>
+            <p className="text-xs text-muted-foreground mb-4">Target deliverables and deadlines</p>
+            <div className="space-y-3">
+              {upcomingMilestones.map((m) => (
+                <Link
+                  key={m.id}
+                  to={m.link}
+                  className="group flex items-start gap-3.5 rounded-lg border border-border/60 p-2.5 hover:border-primary/40 hover:bg-surface-alt/60 transition-all"
+                >
+                  <div className="flex flex-col items-center justify-center w-10 py-1 rounded-md bg-surface-alt border border-border/80 shrink-0">
+                    <span className="text-[9px] font-bold text-muted-foreground tracking-wider">
+                      {m.month}
+                    </span>
+                    <span className="font-sora text-base font-bold text-foreground leading-none">
+                      {m.day}
+                    </span>
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-medium text-foreground truncate group-hover:text-primary transition-colors">
+                      {m.title}
+                    </p>
+                    <p className="text-xs text-muted-foreground truncate">{m.project}</p>
+                    <div className="mt-1">
+                      <Badge variant="gray" className="text-[10px]">
+                        {m.status}
+                      </Badge>
+                    </div>
+                  </div>
+                </Link>
+              ))}
+              {upcomingMilestones.length === 0 && (
+                <div className="py-8 text-center text-sm text-muted-foreground">
+                  No upcoming milestone deadlines recorded.
+                </div>
+              )}
+            </div>
+          </div>
+        </Card>
+      </div>
+
+      {/* ── 4. Active Projects Grid ──────────────────────────── */}
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="font-sora text-xl font-bold text-foreground">Active projects</h2>
+            <p className="text-xs text-muted-foreground">
+              Overview of client engagements and live campaigns
+            </p>
+          </div>
+          <Button variant="ghost" size="sm" render={<Link to="/projects" />}>
+            View all projects ({activeProjects.length}) →
+          </Button>
+        </div>
+
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {activeProjects.slice(0, 6).map((project) => {
+            const pTasks = tasks.filter((t) => t.projectId === project.projectId)
+            const progress =
+              pTasks.length > 0
+                ? Math.round(
+                    (pTasks.filter((t) => t.status === "done").length / pTasks.length) * 100,
+                  )
+                : project.status === "Approved" || project.status === "Complete"
+                  ? 100
+                  : project.status === "Review"
+                    ? 80
+                    : project.status === "InProgress"
+                      ? 55
+                      : 15
+            const health = getProjectHealth(project)
+            const healthVar = getHealthVariant(health)
+            const clientLabel = project.clientName || project.clientId || "Client Account"
+
+            return (
+              <Link
+                key={project.projectId}
+                to={`/projects/${project.projectId}`}
+                className="group block rounded-xl border border-border bg-card overflow-hidden shadow-[0_1px_3px_0_rgba(39,0,69,0.06)] hover:shadow-md hover:border-primary/40 transition-all"
+              >
+                {/* Cover placeholder with dark purple brand gradient */}
+                <div
+                  className="relative h-28 w-full p-3 flex items-start justify-between"
+                  style={{ background: "linear-gradient(135deg, #270045 0%, #17002b 100%)" }}
+                >
+                  <Badge variant={healthVar} className="shadow-sm">
+                    {health}
+                  </Badge>
+                  <span className="text-[11px] font-medium text-white/50 bg-black/30 backdrop-blur-xs px-2 py-0.5 rounded-full">
+                    {pTasks.length} tasks
+                  </span>
+                </div>
+
+                {/* Content */}
+                <div className="p-4 space-y-3">
+                  <div>
+                    <h3 className="font-sora font-semibold text-sm text-foreground truncate group-hover:text-primary transition-colors">
+                      {project.projectName}
+                    </h3>
+                    <p className="text-xs text-muted-foreground truncate">{clientLabel}</p>
+                  </div>
+
+                  {/* Gradient progress bar */}
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-muted-foreground text-[11px]">Progress</span>
+                      <span className="font-medium text-foreground">{progress}%</span>
+                    </div>
+                    <div className="h-1.5 w-full rounded-full bg-surface-alt overflow-hidden">
+                      <div
+                        className="h-full rounded-full transition-all duration-500"
+                        style={{
+                          width: `${Math.min(100, Math.max(0, progress))}%`,
+                          background:
+                            "linear-gradient(115deg, oklch(48% 0.23 295), oklch(58% 0.24 350), oklch(68% 0.18 50))",
+                        }}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Footer: avatar stack + due date */}
+                  <div className="flex items-center justify-between pt-1 border-t border-border/50 text-xs text-muted-foreground">
+                    <div className="flex -space-x-1.5">
+                      {["Alex M", "Jordan K", "Sarah T"].map((name, i) => (
+                        <div
+                          key={i}
+                          className="flex h-6 w-6 items-center justify-center rounded-full border-2 border-card text-[9px] font-bold text-white shadow-xs"
+                          style={{ background: avatarBg(name + project.projectName) }}
+                          title={name}
+                        >
+                          {name
+                            .split(" ")
+                            .map((n) => n[0])
+                            .join("")}
+                        </div>
+                      ))}
+                    </div>
+                    <span className="text-[11px]">
+                      {project.endDate ? `Due ${project.endDate}` : "Active cycle"}
+                    </span>
+                  </div>
+                </div>
+              </Link>
+            )
+          })}
+          {activeProjects.length === 0 && (
+            <Card className="col-span-full p-8 text-center text-sm text-muted-foreground">
+              No active projects yet.
+            </Card>
+          )}
+        </div>
+      </div>
+
+      {/* ── 5. Bottom 3-Column Row ───────────────────────────── */}
+      <div className="grid gap-5 lg:grid-cols-3">
+        {/* Col 1: Needs your review */}
+        <Card className="p-5 flex flex-col justify-between shadow-[0_1px_3px_0_rgba(39,0,69,0.06)]">
+          <div>
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="font-sora font-semibold text-sm text-foreground flex items-center gap-2">
+                <ShieldCheckIcon className="size-4 text-primary" />
+                Needs your review
+              </h2>
+              <Button size="sm" variant="ghost" className="h-7 text-xs" render={<Link to="/approvals" />}>
+                All →
+              </Button>
+            </div>
+            <ul className="flex flex-col gap-2.5">
+              {pendingApprovals.slice(0, 5).map((appr) => (
+                <li key={appr.approvalId}>
+                  <Link
+                    to="/approvals"
+                    className="hover:bg-surface-alt/70 hover:border-primary/40 flex items-center justify-between gap-3 rounded-lg border border-border/70 px-3 py-2.5 text-sm transition-colors"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate font-medium text-foreground">{appr.title}</div>
+                      <div className="text-muted-foreground truncate text-xs">
+                        {appr.requester ? `Requested by ${appr.requester}` : (appr.entityType || "General Proof")}
+                      </div>
+                    </div>
+                    <Badge variant="purple" className="shrink-0 text-[10px]">
+                      Proof
+                    </Badge>
+                  </Link>
+                </li>
+              ))}
+              {pendingApprovals.length === 0 && (
+                <p className="text-muted-foreground text-xs py-4 text-center">
+                  Queue clear — no proofs awaiting review.
+                </p>
+              )}
+            </ul>
+          </div>
+        </Card>
+
+        {/* Col 2: Live & upcoming events */}
+        <Card className="p-5 flex flex-col justify-between shadow-[0_1px_3px_0_rgba(39,0,69,0.06)]">
+          <div>
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="font-sora font-semibold text-sm text-foreground flex items-center gap-2">
+                <RadioIcon className="size-4 text-rose-500" />
+                Live & upcoming events
+              </h2>
+              <Button size="sm" variant="ghost" className="h-7 text-xs" render={<Link to="/events" />}>
+                All →
+              </Button>
+            </div>
+            <ul className="flex flex-col gap-2.5">
+              {events.slice(0, 5).map((ev) => {
+                const isLive = ev.status === "live"
+                return (
+                  <li key={ev.eventId || ev.id}>
                     <Link
-                      to={t.projectId ? `/projects/${t.projectId}` : "/tasks"}
-                      className="hover:bg-muted/50 flex items-start justify-between gap-2 rounded-lg border px-3 py-2 text-sm transition-colors"
+                      to={`/events/${ev.eventId || ev.id}`}
+                      className="hover:bg-surface-alt/70 hover:border-primary/40 flex items-center justify-between gap-3 rounded-lg border border-border/70 px-3 py-2.5 text-sm transition-colors"
                     >
-                      <div className="min-w-0">
-                        <div className="truncate font-medium">{t.title}</div>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-1.5 truncate font-medium text-foreground">
+                          {isLive && (
+                            <span className="h-2 w-2 rounded-full bg-rose-500 animate-pulse shrink-0" />
+                          )}
+                          <span className="truncate">{ev.name}</span>
+                        </div>
                         <div className="text-muted-foreground truncate text-xs">
-                          {t.projectName || t.projectId || "No project"} · {t.assignee || "—"}
+                          {ev.venue || ev.location || "Venue TBA"}
+                          {ev.startDate ? ` · ${new Date(ev.startDate).toLocaleDateString()}` : ""}
                         </div>
                       </div>
                       <Badge
-                        className={cn(
-                          "shrink-0 capitalize",
-                          t.status === "blocked" && "bg-destructive/15 text-destructive",
-                        )}
-                        variant="secondary"
+                        variant={isLive ? "live" : ev.status === "confirmed" ? "success" : "purple"}
+                        className="shrink-0 text-[10px] capitalize"
                       >
-                        {t.status.replace("_", " ")}
+                        {ev.status || "Scheduled"}
                       </Badge>
                     </Link>
                   </li>
-                ))}
+                )
+              })}
+              {events.length === 0 && (
+                <p className="text-muted-foreground text-xs py-4 text-center">
+                  No upcoming events scheduled.
+                </p>
+              )}
             </ul>
-          )}
+          </div>
         </Card>
 
-        <Card className="flex flex-col gap-3 p-4">
-          <div className="flex items-center justify-between">
-            <h2 className="flex items-center gap-2 text-sm font-semibold">
-              <CheckSquareIcon className="size-4" />
-              Approvals
-            </h2>
-            <Button size="sm" variant="ghost" className="h-7 text-xs" render={<Link to="/approvals" />}>
-              Queue
-            </Button>
-          </div>
-          {pendingApprovals.length === 0 ? (
-            <p className="text-muted-foreground text-sm">Queue is clear.</p>
-          ) : (
-            <ul className="flex flex-col gap-2">
-              {pendingApprovals.slice(0, 6).map((a) => (
-                <li key={a.approvalId}>
-                  <Link
-                    to={a.projectId ? `/projects/${a.projectId}` : "/approvals"}
-                    className="hover:bg-muted/50 flex items-start justify-between gap-2 rounded-lg border px-3 py-2 text-sm transition-colors"
-                  >
-                    <div className="min-w-0">
-                      <div className="truncate font-medium">{a.title}</div>
-                      <div className="text-muted-foreground truncate text-xs">
-                        {a.entityType}:{a.entityId}
-                      </div>
-                    </div>
-                    <Badge variant="outline" className="shrink-0 capitalize">
-                      {a.priority || a.status}
-                    </Badge>
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          )}
-        </Card>
-
-        <Card className="flex flex-col gap-3 p-4">
-          <div className="flex items-center justify-between">
-            <h2 className="flex items-center gap-2 text-sm font-semibold">
-              <AlertTriangleIcon className="size-4" />
-              Accounts to watch
-            </h2>
-            <Button size="sm" variant="ghost" className="h-7 text-xs" render={<Link to="/clients" />}>
-              CRM
-            </Button>
-          </div>
-          {atRiskClients.length === 0 ? (
-            <p className="text-muted-foreground text-sm">All accounts look steady.</p>
-          ) : (
-            <ul className="flex flex-col gap-2">
-              {atRiskClients.slice(0, 6).map((c) => (
-                <li key={c.clientId}>
-                  <Link
-                    to={`/clients/${c.clientId}`}
-                    className="hover:bg-muted/50 flex items-center justify-between gap-2 rounded-lg border px-3 py-2 text-sm transition-colors"
-                  >
-                    <div className="min-w-0">
-                      <div className="truncate font-medium">{c.name}</div>
-                      <div className="text-muted-foreground text-xs capitalize">
-                        {c.stage} · {c.accountLead}
-                      </div>
-                    </div>
-                    <Badge variant="secondary" className="capitalize shrink-0">
-                      {c.health || c.stage}
-                    </Badge>
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          )}
-        </Card>
-      </div>
-
-      <div className="grid gap-4 xl:grid-cols-3">
-        <Card className="p-4">
-          <div className="mb-3 flex items-center justify-between">
-            <h2 className="flex items-center gap-2 text-sm font-semibold">
-              <BriefcaseIcon className="size-4" />
-              Active projects
-            </h2>
-            <Button size="sm" variant="ghost" className="h-7 text-xs" render={<Link to="/projects" />}>
-              All
-            </Button>
-          </div>
-          <ul className="flex flex-col gap-2">
-            {activeProjects.slice(0, 6).map((p) => (
-              <li key={p.projectId}>
-                <Link
-                  to={`/projects/${p.projectId}`}
-                  className="hover:bg-muted/50 flex items-center justify-between gap-2 rounded-lg border px-3 py-2 text-sm transition-colors"
-                >
-                  <div className="min-w-0">
-                    <div className="truncate font-medium">{p.projectName}</div>
-                    <div className="text-muted-foreground truncate text-xs">
-                      {p.clientName || p.clientId || "—"} · {p.campaignId || "no campaign"}
-                    </div>
-                  </div>
-                  <Badge variant="outline">{p.status}</Badge>
-                </Link>
-              </li>
-            ))}
-            {activeProjects.length === 0 ? (
-              <p className="text-muted-foreground text-sm">No active projects yet.</p>
-            ) : null}
-          </ul>
-        </Card>
-
-        <Card className="p-4">
-          <div className="mb-3 flex items-center justify-between">
-            <h2 className="flex items-center gap-2 text-sm font-semibold">
-              <ShieldAlertIcon className="size-4 text-amber-500" />
-              Incident logs & queue
-            </h2>
-            <Button size="sm" variant="ghost" className="h-7 text-xs" render={<Link to="/live-operations" />}>
-              Live Ops
-            </Button>
-          </div>
-          <ul className="flex flex-col gap-2">
-            {incidents.slice(0, 6).map((inc) => (
-              <li key={inc.id || inc.incidentId}>
-                <Link
-                  to="/live-operations"
-                  className="hover:bg-muted/50 flex items-start justify-between gap-2 rounded-lg border px-3 py-2 text-sm transition-colors"
-                >
-                  <div className="min-w-0">
-                    <div className="truncate font-medium">{inc.title}</div>
-                    <div className="text-muted-foreground truncate text-xs">
-                      {inc.departmentName || inc.departmentId || "Operations"}
-                      {inc.reportedAt
-                        ? ` · ${new Date(inc.reportedAt).toLocaleDateString()}`
-                        : ""}
-                    </div>
-                  </div>
-                  <div className="flex shrink-0 items-center gap-1">
-                    <Badge
-                      variant="secondary"
-                      className={cn(
-                        "capitalize text-[11px]",
-                        String(inc.severity || "").toLowerCase() === "critical"
-                          ? "bg-destructive/15 text-destructive"
-                          : String(inc.severity || "").toLowerCase() === "warning"
-                            ? "bg-amber-500/15 text-amber-600 dark:text-amber-400"
-                            : "bg-muted text-muted-foreground",
-                      )}
+        {/* Col 3: Recent activity */}
+        <Card className="p-5 flex flex-col justify-between shadow-[0_1px_3px_0_rgba(39,0,69,0.06)]">
+          <div>
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="font-sora font-semibold text-sm text-foreground flex items-center gap-2">
+                <ZapIcon className="size-4 text-amber-500" />
+                Recent activity
+              </h2>
+              <Button size="sm" variant="ghost" className="h-7 text-xs" render={<Link to="/activity" />}>
+                Feed →
+              </Button>
+            </div>
+            <ul className="flex flex-col gap-2.5">
+              {activity.slice(0, 5).map((item) => {
+                const href =
+                  item.entityType === "client" && item.entityId
+                    ? `/clients/${item.entityId}`
+                    : item.entityType === "project" && item.entityId
+                      ? `/projects/${item.entityId}`
+                      : "/activity"
+                return (
+                  <li key={item.activityId}>
+                    <Link
+                      to={href}
+                      className="hover:bg-surface-alt/70 hover:border-primary/40 block rounded-lg border border-border/70 px-3 py-2.5 text-sm transition-colors"
                     >
-                      {inc.severity || "info"}
-                    </Badge>
-                    <Badge variant="outline" className="capitalize text-[11px]">
-                      {inc.status}
-                    </Badge>
-                  </div>
-                </Link>
-              </li>
-            ))}
-            {incidents.length === 0 ? (
-              <p className="text-muted-foreground text-sm">No incidents reported.</p>
-            ) : null}
-          </ul>
-        </Card>
-
-        <Card className="p-4">
-          <div className="mb-3 flex items-center justify-between">
-            <h2 className="text-sm font-semibold">Recent activity</h2>
-            <Button size="sm" variant="ghost" className="h-7 text-xs" render={<Link to="/activity" />}>
-              Feed
-            </Button>
+                      <div className="font-medium text-foreground truncate">{item.title}</div>
+                      <div className="text-muted-foreground text-xs mt-0.5 truncate">
+                        {item.actor || "System"}
+                        {item.createdAt ? ` · ${new Date(item.createdAt).toLocaleString()}` : ""}
+                      </div>
+                    </Link>
+                  </li>
+                )
+              })}
+              {activity.length === 0 && (
+                <p className="text-muted-foreground text-xs py-4 text-center">
+                  No recent activity recorded.
+                </p>
+              )}
+            </ul>
           </div>
-          <ul className="flex flex-col gap-2">
-            {activity.slice(0, 8).map((item) => {
-              const href =
-                item.entityType === "client" && item.entityId
-                  ? `/clients/${item.entityId}`
-                  : item.entityType === "project" && item.entityId
-                    ? `/projects/${item.entityId}`
-                    : "/activity"
-              return (
-                <li key={item.activityId}>
-                  <Link
-                    to={href}
-                    className="hover:bg-muted/50 block rounded-lg border px-3 py-2 text-sm transition-colors"
-                  >
-                    <div className="font-medium">{item.title}</div>
-                    <div className="text-muted-foreground text-xs">
-                      {item.actor || "System"}
-                      {item.createdAt
-                        ? ` · ${new Date(item.createdAt).toLocaleString()}`
-                        : ""}
-                    </div>
-                  </Link>
-                </li>
-              )
-            })}
-            {activity.length === 0 ? (
-              <p className="text-muted-foreground text-sm">No recent activity.</p>
-            ) : null}
-          </ul>
         </Card>
       </div>
     </div>

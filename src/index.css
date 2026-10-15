@@ -33,15 +33,15 @@
   --ns-pink: oklch(60% 0.24 350);
   --ns-orange: oklch(68% 0.18 50);
   --ns-blue: oklch(55% 0.2 255);
-  /* Sidebar (always dark) */
-  --sidebar: #0f0b1a;
-  --sidebar-foreground: rgba(255,255,255,0.65);
-  --sidebar-primary: #7a5cc2;
-  --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: rgba(255,255,255,0.06);
-  --sidebar-accent-foreground: #ffffff;
-  --sidebar-border: rgba(255,255,255,0.06);
-  --sidebar-ring: #7a5cc2;
+  /* Sidebar — light mode: white surface, lavender border */
+  --sidebar: oklch(100% 0 0);
+  --sidebar-foreground: oklch(45% 0.035 285);
+  --sidebar-primary: oklch(50% 0.23 295);
+  --sidebar-primary-foreground: oklch(99% 0.005 295);
+  --sidebar-accent: oklch(94% 0.02 295);
+  --sidebar-accent-foreground: oklch(20% 0.045 285);
+  --sidebar-border: oklch(88% 0.02 295);
+  --sidebar-ring: oklch(50% 0.23 295);
   /* Charts */
   --chart-1: oklch(0.646 0.222 41.116);
   --chart-2: oklch(0.6 0.118 184.704);
