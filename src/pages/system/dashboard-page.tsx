@@ -404,7 +404,7 @@ export function DashboardPage() {
         id: `task-od-${t.taskId}`,
         title: t.title || "Overdue task",
         description: `Deadline was ${t.dueDate || "overdue"}`,
-        source: "Timeline",
+        source: "Tasks",
         priority: "warning",
         link: "/tasks",
       })
@@ -737,7 +737,7 @@ export function DashboardPage() {
                 Upcoming milestones
               </h2>
               <Link to="/milestones" className="text-xs font-semibold text-primary hover:underline">
-                Timeline →
+                Milestones →
               </Link>
             </div>
             <p className="text-xs text-muted-foreground mb-4">Target deliverables and deadlines</p>
