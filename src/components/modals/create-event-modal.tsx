@@ -13,9 +13,11 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Select } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
 import { createEvent } from "@/lib/api/agency"
 import { ApiError } from "@/lib/api/client"
+import { useTeamMembers } from "@/hooks/use-agency-data"
 import type { Event, EventStatus } from "@/types/agency"
 
 const EVENT_TYPES = ["festival", "concert", "conference", "corporate", "tour", "private", "product"] as const

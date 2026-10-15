@@ -19,6 +19,7 @@ import { ShareWithClientToggle } from "@/components/shared/share-with-client-tog
 import { ApiError } from "@/lib/api/client"
 import { useAuth } from "@/lib/auth"
 import { canPerform } from "@/lib/rbac"
+import { useClients, useProjects } from "@/hooks/use-agency-data"
 import type { Approval } from "@/types/agency"
 import { cn } from "@/lib/utils"
 
@@ -28,6 +29,8 @@ type ApprovalDecision = "approved" | "rejected" | "changes_requested"
 
 export function ApprovalsPage() {
   const { user } = useAuth()
+  const { data: projects } = useProjects()
+  const { data: clients } = useClients()
   const [searchParams] = useSearchParams()
   const scopedProjectId = searchParams.get("projectId") || ""
   const canDecide = canPerform(user?.role, "decide_approval")
@@ -254,7 +257,7 @@ export function ApprovalsPage() {
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
                         <span className="text-muted-foreground font-mono text-xs">
-                          {approval.approvalId}
+                          {approval.approvalId.length > 12 ? `#${approval.approvalId.slice(0, 8)}` : approval.approvalId}
                         </span>
                         <Badge variant="outline" className="capitalize">
                           {approval.entityType}
@@ -279,7 +282,7 @@ export function ApprovalsPage() {
                               to={`/projects/${approval.projectId}`}
                               className="text-primary underline-offset-2 hover:underline"
                             >
-                              {approval.projectId}
+                              {projects.find((p) => p.projectId === approval.projectId)?.projectName || (approval.projectId.length > 12 ? "Project" : approval.projectId)}
                             </Link>
                           </>
                         ) : null}
@@ -290,7 +293,7 @@ export function ApprovalsPage() {
                               to={`/clients/${approval.clientId}`}
                               className="text-primary underline-offset-2 hover:underline"
                             >
-                              {approval.clientId}
+                              {clients.find((c) => c.clientId === approval.clientId)?.name || (approval.clientId.length > 12 ? "Client" : approval.clientId)}
                             </Link>
                           </>
                         ) : null}
@@ -424,12 +427,36 @@ export function ApprovalsPage() {
             <Input id="approval-form-due-date" type="date" value={form.dueDate} onChange={(e) => setForm({ ...form, dueDate: e.target.value })} />
           </div>
           <div className="grid gap-1.5">
-            <Label htmlFor="approval-form-project">Project ID</Label>
-            <Input id="approval-form-project" value={form.projectId} onChange={(e) => setForm({ ...form, projectId: e.target.value })} placeholder="Optional" />
+            <Label htmlFor="approval-form-project">Project</Label>
+            <select
+              id="approval-form-project"
+              className="h-9 rounded-md border border-input bg-transparent px-2 text-sm"
+              value={form.projectId}
+              onChange={(e) => setForm({ ...form, projectId: e.target.value })}
+            >
+              <option value="">No linked project</option>
+              {projects.map((p) => (
+                <option key={p.projectId} value={p.projectId}>
+                  {p.projectName}
+                </option>
+              ))}
+            </select>
           </div>
           <div className="grid gap-1.5">
-            <Label htmlFor="approval-form-client">Client ID</Label>
-            <Input id="approval-form-client" value={form.clientId} onChange={(e) => setForm({ ...form, clientId: e.target.value })} placeholder="Optional" />
+            <Label htmlFor="approval-form-client">Client</Label>
+            <select
+              id="approval-form-client"
+              className="h-9 rounded-md border border-input bg-transparent px-2 text-sm"
+              value={form.clientId}
+              onChange={(e) => setForm({ ...form, clientId: e.target.value })}
+            >
+              <option value="">No linked client</option>
+              {clients.map((c) => (
+                <option key={c.clientId} value={c.clientId}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
           </div>
           <div className="grid gap-1.5">
             <Label htmlFor="approval-form-requester">Requester</Label>

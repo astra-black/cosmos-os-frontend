@@ -118,8 +118,8 @@ export function VendorsPage() {
 
   const filtered = useMemo(() => {
     return vendors.filter((v) => {
-      if (category !== "all" && v.category !== category) return false
-      if (statusFilter !== "all" && v.status !== statusFilter) return false
+      if (category !== "all" && (v.category || "").toLowerCase() !== category.toLowerCase()) return false
+      if (statusFilter !== "all" && (v.status || "active").toLowerCase() !== statusFilter.toLowerCase()) return false
       if (search) {
         const q = search.toLowerCase()
         const hay =
@@ -133,7 +133,7 @@ export function VendorsPage() {
   const [aiModalOpen, setAiModalOpen] = useState(false)
   const [aiTargetVendor, setAiTargetVendor] = useState<Vendor | null>(null)
 
-  const preferred = vendors.filter((v) => v.status === "preferred").length
+  const preferred = vendors.filter((v) => (v.status || "").toLowerCase() === "preferred").length
 
   function openCreateDialog() {
     setEditingVendor(null)
@@ -145,13 +145,13 @@ export function VendorsPage() {
     setEditingVendor(vendor)
     setForm({
       name: vendor.name,
-      category: vendor.category || "general",
+      category: (vendor.category || "general").toLowerCase(),
       contact: vendor.contact || "",
       email: vendor.email || "",
       rateCard: vendor.rateCard || "",
       skills: (vendor.skills || []).join(", "),
       regions: (vendor.regions || []).join(", "),
-      status: vendor.status || "active",
+      status: (vendor.status || "active").toLowerCase(),
     })
     setIsDialogOpen(true)
   }
@@ -339,13 +339,18 @@ export function VendorsPage() {
                 className="relative overflow-hidden pl-5 hover:-translate-y-1 hover:shadow-lg hover:shadow-primary/5 transition-all duration-300 bg-card border border-border rounded-xl p-5 flex flex-col justify-between min-h-[220px]"
               >
                 {/* Status indicator strip on the left edge */}
-                <div className={cn(
-                  "absolute left-0 top-0 bottom-0 w-[4px]",
-                  vendor.status === "preferred" && "bg-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.4)]",
-                  vendor.status === "active" && "bg-primary",
-                  vendor.status === "trial" && "bg-cyan-500",
-                  vendor.status === "inactive" && "bg-muted-foreground/30"
-                )} />
+                {(() => {
+                  const statusLower = (vendor.status || "active").toLowerCase()
+                  return (
+                    <div className={cn(
+                      "absolute left-0 top-0 bottom-0 w-[4px]",
+                      statusLower === "preferred" && "bg-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.4)]",
+                      statusLower === "active" && "bg-primary",
+                      statusLower === "trial" && "bg-cyan-500",
+                      statusLower === "inactive" && "bg-muted-foreground/30"
+                    )} />
+                  )
+                })()}
 
                 {/* Background Category Watermark */}
                 <CategoryIcon className="absolute -bottom-8 -right-8 size-32 opacity-[0.02] text-foreground pointer-events-none select-none" />
@@ -360,41 +365,53 @@ export function VendorsPage() {
                   </div>
                   <div className="flex items-center gap-1">
                     {canWrite ? (
-                      <select
-                        className={cn(
-                          "h-6 shrink-0 rounded-full border px-2 text-[10px] font-mono font-medium capitalize outline-none bg-background cursor-pointer",
-                          vendor.status === "preferred" && "border-amber-500/40 bg-amber-500/10 text-amber-500",
-                          vendor.status === "active" && "border-primary/40 bg-primary/10 text-primary",
-                          vendor.status === "trial" && "border-cyan-500/40 bg-cyan-500/10 text-cyan-500",
-                        )}
-                        value={vendor.status}
-                        disabled={busyId === vendor.vendorId}
-                        onChange={(e) =>
-                          void patchVendor(
-                            vendor,
-                            { status: e.target.value },
-                            `${vendor.name} → ${e.target.value}`,
-                          )
-                        }
-                      >
-                        {STATUSES.map((s) => (
-                          <option key={s} value={s}>
-                            {s}
-                          </option>
-                        ))}
-                      </select>
+                      (() => {
+                        const statusLower = (vendor.status || "active").toLowerCase()
+                        return (
+                          <select
+                            className={cn(
+                              "h-6 shrink-0 rounded-full border px-2 text-[10px] font-mono font-medium capitalize outline-none bg-background cursor-pointer",
+                              statusLower === "preferred" && "border-amber-500/40 bg-amber-500/10 text-amber-500",
+                              statusLower === "active" && "border-primary/40 bg-primary/10 text-primary",
+                              statusLower === "trial" && "border-cyan-500/40 bg-cyan-500/10 text-cyan-500",
+                              statusLower === "inactive" && "border-muted-foreground/40 bg-muted/10 text-muted-foreground",
+                            )}
+                            value={statusLower}
+                            disabled={busyId === vendor.vendorId}
+                            onChange={(e) =>
+                              void patchVendor(
+                                vendor,
+                                { status: e.target.value },
+                                `${vendor.name} → ${e.target.value}`,
+                              )
+                            }
+                          >
+                            {STATUSES.map((s) => (
+                              <option key={s} value={s}>
+                                {s}
+                              </option>
+                            ))}
+                          </select>
+                        )
+                      })()
                     ) : (
-                      <Badge
-                        className={cn(
-                          "capitalize text-[9px] font-mono py-0 h-4.5 px-2",
-                          vendor.status === "preferred" ? "bg-amber-500/10 text-amber-500 border-amber-500/30" :
-                          vendor.status === "active" ? "bg-primary/10 text-primary border-primary/30" :
-                          "bg-muted text-muted-foreground border-transparent",
-                        )}
-                        variant="outline"
-                      >
-                        {vendor.status}
-                      </Badge>
+                      (() => {
+                        const statusLower = (vendor.status || "active").toLowerCase()
+                        return (
+                          <Badge
+                            className={cn(
+                              "capitalize text-[9px] font-mono py-0 h-4.5 px-2",
+                              statusLower === "preferred" ? "bg-amber-500/10 text-amber-500 border-amber-500/30" :
+                              statusLower === "active" ? "bg-primary/10 text-primary border-primary/30" :
+                              statusLower === "trial" ? "bg-cyan-500/10 text-cyan-500 border-cyan-500/30" :
+                              "bg-muted text-muted-foreground border-transparent",
+                            )}
+                            variant="outline"
+                          >
+                            {statusLower}
+                          </Badge>
+                        )
+                      })()
                     )}
                     {canWrite ? (
                       <>

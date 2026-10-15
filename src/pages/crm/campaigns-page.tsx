@@ -247,7 +247,7 @@ export function CampaignsPage() {
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
                     <div className="text-muted-foreground font-mono text-xs">
-                      {campaign.campaignId}
+                      {campaign.campaignId.length > 12 ? `#${campaign.campaignId.slice(0, 8)}` : campaign.campaignId}
                     </div>
                     <h2 className="mt-0.5 text-base font-semibold leading-snug">
                       {campaign.name}
@@ -258,7 +258,7 @@ export function CampaignsPage() {
                           to={`/clients/${campaign.clientId}`}
                           className="hover:text-primary underline-offset-2 hover:underline"
                         >
-                          {campaign.clientName || campaign.clientId}
+                          {campaign.clientName || "Client"}
                         </Link>
                       ) : (
                         campaign.clientName || "—"

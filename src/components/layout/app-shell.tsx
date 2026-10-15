@@ -49,7 +49,7 @@ const titles: Record<string, string> = {
   "/incidents": "Incidents",
   "/analytics": "Analytics",
   "/finance": "Finance",
-  "/ai": "AI assist",
+  "/ai": "Astrid",
   "/billing": "Billing",
   "/teams": "Teams & roles",
   "/monitoring": "Monitoring",

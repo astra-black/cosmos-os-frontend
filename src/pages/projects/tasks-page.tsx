@@ -637,9 +637,9 @@ export function TasksPage() {
               onChange={(event) => setTaskForm((form) => ({ ...form, campaignId: event.target.value }))}
             >
               <option value="">No campaign</option>
-              {campaigns.map((campaign) => <option key={campaign.campaignId} value={campaign.campaignId}>{campaign.name} ({campaign.campaignId})</option>)}
+              {campaigns.map((campaign) => <option key={campaign.campaignId} value={campaign.campaignId}>{campaign.name}</option>)}
               {editingTask?.campaignId && !campaigns.some((campaign) => campaign.campaignId === editingTask.campaignId) ? (
-                <option value={editingTask.campaignId}>{editingTask.campaignId}</option>
+                <option value={editingTask.campaignId}>Current Campaign</option>
               ) : null}
             </Select>
           </div>

@@ -29,6 +29,7 @@ import { deleteEvent, listEvents, updateEvent } from "@/lib/api/agency"
 import { ApiError } from "@/lib/api/client"
 import { useAuth } from "@/lib/auth"
 import { canPerform } from "@/lib/rbac"
+import { useTeamMembers } from "@/hooks/use-agency-data"
 import type { Event, EventStatus } from "@/types/agency"
 
 const EVENT_TYPES = ["festival", "concert", "conference", "corporate", "tour", "private", "product"] as const
@@ -81,6 +82,7 @@ const STATUS_COLORS: Record<string, string> = {
 
 export function EventsPage() {
   const { user } = useAuth()
+  const { data: teamMembers } = useTeamMembers()
   const canWrite = canPerform(user?.role, "write_ops")
   const [events, setEvents] = useState<Event[]>([])
   const [loading, setLoading] = useState(true)
@@ -411,8 +413,18 @@ export function EventsPage() {
             <Input id="event-venue" value={form.venue} onChange={(e) => setForm((f) => ({ ...f, venue: e.target.value }))} placeholder="Venue name" />
           </div>
           <div className="grid gap-1.5">
-            <Label htmlFor="event-organizer">Organizer ID</Label>
-            <Input id="event-organizer" value={form.organizerId} onChange={(e) => setForm((f) => ({ ...f, organizerId: e.target.value }))} placeholder="Optional organizer ID" />
+            <Label htmlFor="event-organizer">Lead Organizer</Label>
+            <Select id="event-organizer" value={form.organizerId} onChange={(e) => setForm((f) => ({ ...f, organizerId: e.target.value }))}>
+              <option value="">Select lead organizer</option>
+              {teamMembers.map((member) => (
+                <option key={member.memberId} value={member.memberId}>
+                  {member.name} {member.role ? `(${member.role})` : ""}
+                </option>
+              ))}
+              {form.organizerId && !teamMembers.some((m) => m.memberId === form.organizerId) ? (
+                <option value={form.organizerId}>Current Organizer</option>
+              ) : null}
+            </Select>
           </div>
           <div className="grid gap-1.5">
             <Label htmlFor="event-start">Start</Label>

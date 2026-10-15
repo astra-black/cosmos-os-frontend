@@ -16,8 +16,11 @@ import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
-import { aiAssist } from "@/lib/api/platform"
-import type { AiAction } from "@/lib/api/platform"
+import { Select } from "@/components/ui/select"
+import { aiAssist, type AiAction, type AiRecordSelection } from "@/lib/api/platform"
+import { useClients, useProjects, useCampaigns, useTasks, useVendors } from "@/hooks/use-agency-data"
+import { useEventsSimpleCache } from "@/hooks/use-events-simple-cache"
+import type { Event } from "@/types/agency"
 import { ApiError } from "@/lib/api/client"
 import { cn } from "@/lib/utils"
 
@@ -118,7 +121,7 @@ function welcome(mode: ContextMode): Msg {
   return {
     id: uid(),
     role: "assistant",
-    text: `I’m Cosmos AI — scoped to **${labels[mode]}**.\n\nI can answer with structured ops guidance **and** propose real actions (tasks, time, CRM deals, incidents, approvals). Confirm before anything is written.`,
+    text: `I’m Astrid — scoped to **${labels[mode]}**.\n\nI can answer with structured ops guidance **and** propose real actions (tasks, time, CRM deals, incidents, approvals). Confirm before anything is written.`,
     provider: "cosmos",
     context: mode,
     at: Date.now(),
@@ -161,6 +164,13 @@ export function AiAssistPage() {
   const [copiedId, setCopiedId] = useState<string | null>(null)
   const scrollerRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
+  const { data: clients } = useClients()
+  const { data: projects } = useProjects()
+  const { data: campaigns } = useCampaigns()
+  const { data: tasks } = useTasks()
+  const { data: vendors } = useVendors()
+  const { data: events } = useEventsSimpleCache()
+  const [selection, setSelection] = useState<AiRecordSelection>({})
 
   useEffect(() => {
     const el = scrollerRef.current
@@ -205,7 +215,7 @@ export function AiAssistPage() {
     setPrompt("")
     setPending(true)
     try {
-      const res = await aiAssist(q, mode)
+      const res = await aiAssist(q, mode, undefined, selection)
       const data = res.data as
         | { reply?: string; provider?: string; links?: { label: string; href: string }[]; proposedAction?: AiAction }
         | undefined
@@ -246,7 +256,7 @@ export function AiAssistPage() {
     setPending(true)
     try {
       const { summary: _summary, ...payload } = action
-      const res = await aiAssist("Confirm the proposed action", mode, payload as AiAction)
+      const res = await aiAssist("Confirm the proposed action", mode, payload as AiAction, selection)
       const data = res.data
       setMessages((current) => current.map((message) => message.id === messageId
         ? {
@@ -289,7 +299,7 @@ export function AiAssistPage() {
             <SparkOrbit className="size-5" />
           </div>
           <div className="min-w-0">
-            <h1 className="truncate text-lg font-semibold tracking-tight">Cosmos AI</h1>
+            <h1 className="truncate text-lg font-semibold tracking-tight">Astrid</h1>
             <p className="text-muted-foreground text-xs">Agency intelligence hub</p>
           </div>
         </div>
@@ -350,7 +360,7 @@ export function AiAssistPage() {
               <SparkOrbit className="size-5" />
             </div>
             <div className="min-w-0">
-              <h1 className="text-xl font-semibold tracking-tight sm:text-2xl">Cosmos AI</h1>
+              <h1 className="text-xl font-semibold tracking-tight sm:text-2xl">Astrid</h1>
               <p className="text-muted-foreground text-sm">Agency intelligence hub</p>
             </div>
           </div>
@@ -388,6 +398,76 @@ export function AiAssistPage() {
             )
           })}
         </div>
+
+        <Card className="border-border/80 p-3 sm:p-4">
+          <div className="mb-2 flex items-center justify-between gap-3">
+            <div>
+              <p className="text-sm font-semibold">Scope this conversation</p>
+              <p className="text-muted-foreground text-xs">
+                Selected records are sent as trusted IDs so AI can read or propose changes to the right records.
+              </p>
+            </div>
+            <Button size="sm" variant="ghost" onClick={() => setSelection({})} disabled={!Object.keys(selection).length}>
+              Clear
+            </Button>
+          </div>
+          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+            <RecordSelect
+              label="Project"
+              value={selection.projectId}
+              options={projects.map((item) => ({ id: item.projectId, label: item.projectName }))}
+              onChange={(id) => {
+                const item = projects.find((entry) => entry.projectId === id)
+                setSelection((current) => ({ ...current, projectId: id || undefined, projectName: item?.projectName }))
+              }}
+            />
+            <RecordSelect
+              label="Client"
+              value={selection.clientId}
+              options={clients.map((item) => ({ id: item.clientId, label: item.name }))}
+              onChange={(id) => {
+                const item = clients.find((entry) => entry.clientId === id)
+                setSelection((current) => ({ ...current, clientId: id || undefined, clientName: item?.name }))
+              }}
+            />
+            <RecordSelect
+              label="Campaign"
+              value={selection.campaignId}
+              options={campaigns.map((item) => ({ id: item.campaignId, label: item.name }))}
+              onChange={(id) => {
+                const item = campaigns.find((entry) => entry.campaignId === id)
+                setSelection((current) => ({ ...current, campaignId: id || undefined, campaignName: item?.name }))
+              }}
+            />
+            <RecordSelect
+              label="Event"
+              value={selection.eventId}
+              options={(events ?? []).map((item: Event) => ({ id: item.eventId || item.id, label: item.name }))}
+              onChange={(id) => {
+                const item = (events ?? []).find((entry: Event) => (entry.eventId || entry.id) === id)
+                setSelection((current) => ({ ...current, eventId: id || undefined, eventName: item?.name }))
+              }}
+            />
+            <RecordSelect
+              label="Vendor"
+              value={selection.vendorId}
+              options={vendors.map((item) => ({ id: item.vendorId, label: item.name }))}
+              onChange={(id) => {
+                const item = vendors.find((entry) => entry.vendorId === id)
+                setSelection((current) => ({ ...current, vendorId: id || undefined, vendorName: item?.name }))
+              }}
+            />
+            <RecordSelect
+              label="Task"
+              value={selection.taskId}
+              options={tasks.map((item) => ({ id: item.taskId, label: item.title }))}
+              onChange={(id) => {
+                const item = tasks.find((entry) => entry.taskId === id)
+                setSelection((current) => ({ ...current, taskId: id || undefined, taskTitle: item?.title }))
+              }}
+            />
+          </div>
+        </Card>
 
       <Card className="border-border/80 flex min-h-0 flex-1 flex-col overflow-hidden p-0 shadow-sm">
         <div
@@ -553,7 +633,7 @@ export function AiAssistPage() {
                     ? "Ask about pipeline or accounts…"
                     : mode === "finance"
                       ? "Ask about budgets or time…"
-                      : "Message Cosmos AI…"
+                      : "Message Astrid…"
               }
               className="placeholder:text-muted-foreground max-h-[120px] min-h-[40px] flex-1 resize-none bg-transparent px-3 py-2.5 text-sm outline-none"
               disabled={pending}
@@ -582,6 +662,32 @@ export function AiAssistPage() {
       </Card>
       </div>
     </div>
+  )
+}
+
+function RecordSelect({
+  label,
+  value,
+  options,
+  onChange,
+}: {
+  label: string
+  value?: string
+  options: { id: string; label: string }[]
+  onChange: (value: string) => void
+}) {
+  return (
+    <label className="grid gap-1 text-xs">
+      <span className="text-muted-foreground font-medium">{label}</span>
+      <Select value={value || ""} onChange={(event) => onChange(event.target.value)}>
+        <option value="">All {label.toLowerCase()} records</option>
+        {options.map((option) => (
+          <option key={option.id} value={option.id}>
+            {option.label}
+          </option>
+        ))}
+      </Select>
+    </label>
   )
 }
 

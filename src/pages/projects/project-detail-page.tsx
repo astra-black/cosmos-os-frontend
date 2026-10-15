@@ -446,7 +446,7 @@ export function ProjectDetailPage() {
               className="h-7 rounded-full"
               render={<Link to="/campaigns" />}
             >
-              {project.campaignId}
+              {campaigns.find((c) => c.campaignId === project.campaignId)?.name || (project.campaignId.length > 12 ? "Campaign" : project.campaignId)}
             </Button>
           ) : null}
         </div>
@@ -817,11 +817,11 @@ export function ProjectDetailPage() {
               <option value="">Unassigned</option>
               {campaigns.map((campaign) => (
                 <option key={campaign.campaignId} value={campaign.campaignId}>
-                  {campaign.name} ({campaign.campaignId})
+                  {campaign.name}
                 </option>
               ))}
               {project.campaignId && !campaigns.some((campaign) => campaign.campaignId === project.campaignId) ? (
-                <option value={project.campaignId}>{project.campaignId}</option>
+                <option value={project.campaignId}>Current Campaign</option>
               ) : null}
             </Select>
           </div>

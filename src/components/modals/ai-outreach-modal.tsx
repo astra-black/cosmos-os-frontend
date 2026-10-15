@@ -90,7 +90,7 @@ export function AiOutreachModal({
       } else {
         await sendOpportunityEmail(targetId, { kind: mode, to, subject, body })
       }
-      toast.success("Email sent successfully via Resend")
+      toast.success("Email sent successfully")
       onOpenChange(false)
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : "Failed to send email")
@@ -115,7 +115,7 @@ export function AiOutreachModal({
             {title}
           </DialogTitle>
           <DialogDescription>
-            Generate tailored copy using AI, review or customize the text, and dispatch directly via Resend.
+            Generate tailored copy using AI, review or customize the text, and dispatch directly.
           </DialogDescription>
         </DialogHeader>
 
@@ -207,10 +207,10 @@ export function AiOutreachModal({
               type="button"
               onClick={() => void handleSend()}
               disabled={sending || !to}
-              className="bg-emerald-600 hover:bg-emerald-500 text-white gap-2"
+              className="bg-primary hover:bg-primary/90 text-primary-foreground font-semibold px-4 tracking-wide uppercase text-xs gap-2"
             >
               {sending ? <Loader2Icon className="size-4 animate-spin" /> : <SendIcon className="size-4" />}
-              Send via Resend
+              SEND EMAIL
             </Button>
           )}
         </DialogFooter>

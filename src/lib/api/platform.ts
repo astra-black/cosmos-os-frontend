@@ -199,6 +199,12 @@ export type AiAction =
   | { type: "create_opportunity"; name: string; clientId?: string; clientName?: string; value?: number; stage?: "lead" | "qualified" | "proposal" | "negotiation" | "won" | "lost"; nextStep?: string; notes?: string; summary?: string }
   | { type: "create_incident"; title: string; eventId?: string; eventName?: string; severity?: "critical" | "warning" | "info"; description?: string; summary?: string }
   | { type: "create_approval"; title: string; projectId?: string; projectName?: string; priority?: "low" | "medium" | "high" | "urgent"; notes?: string; summary?: string }
+  | { type: "update_task"; taskId: string; title?: string; status?: "todo" | "in_progress" | "review" | "done" | "blocked"; priority?: "low" | "medium" | "high" | "urgent"; dueDate?: string | null; description?: string; summary?: string }
+  | { type: "delete_task"; taskId: string; summary?: string }
+  | { type: "update_client"; clientId: string; name?: string; stage?: string; health?: string; notes?: string; summary?: string }
+  | { type: "delete_client"; clientId: string; summary?: string }
+  | { type: "update_vendor"; vendorId: string; name?: string; status?: "preferred" | "active" | "trial" | "inactive"; category?: string; notes?: string; summary?: string }
+  | { type: "delete_vendor"; vendorId: string; summary?: string }
 
 export type AiAssistData = {
   reply: string
@@ -208,12 +214,32 @@ export type AiAssistData = {
   links?: { label: string; href: string }[]
 }
 
-export async function aiAssist(prompt: string, context = "general", action?: AiAction) {
+export type AiRecordSelection = {
+  projectId?: string
+  projectName?: string
+  clientId?: string
+  clientName?: string
+  campaignId?: string
+  campaignName?: string
+  eventId?: string
+  eventName?: string
+  vendorId?: string
+  vendorName?: string
+  taskId?: string
+  taskTitle?: string
+}
+
+export async function aiAssist(
+  prompt: string,
+  context = "general",
+  action?: AiAction,
+  selection?: AiRecordSelection,
+) {
   return apiRequest<ApiEnvelope<AiAssistData>>(
     "/api/v1/agency/ai/assist",
     {
       method: "POST",
-      body: JSON.stringify(action ? { prompt, context, action } : { prompt, context }),
+      body: JSON.stringify(action ? { prompt, context, action } : { prompt, context, selection }),
     },
   )
 }

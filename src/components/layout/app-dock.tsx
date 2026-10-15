@@ -76,7 +76,7 @@ const MODULES = [
   { to: "/activity", label: "Activity", icon: ActivityIcon },
 ] as const
 
-const AI = { to: "/ai", label: "AI assist", icon: CosmosAiIcon } as const
+const AI = { to: "/ai", label: "Astrid", icon: CosmosAiIcon } as const
 
 const SYSTEM = [{ to: "/settings", label: "Settings", icon: SettingsIcon }] as const
 
