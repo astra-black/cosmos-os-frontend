@@ -31,6 +31,7 @@ import { useAuth } from "@/lib/auth"
 import { canPerform } from "@/lib/rbac"
 import { useTeamMembers } from "@/hooks/use-agency-data"
 import type { Event, EventStatus } from "@/types/agency"
+import { cn } from "@/lib/utils"
 
 const EVENT_TYPES = ["festival", "concert", "conference", "corporate", "tour", "private", "product"] as const
 const EVENT_STATUSES = ["draft", "planning", "confirmed", "live", "completed", "cancelled"] as const
@@ -260,16 +261,27 @@ export function EventsPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <PageHeader
-        title="Events"
-        description="Agency calendar and show pipeline — open a row for cues, crew, and incidents."
-        actions={
-          canWrite ? <Button size="sm" onClick={openCreateDialog}>
-            <PlusIcon className="size-3.5" />
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h1 className="font-sora text-2xl sm:text-3xl font-bold tracking-tight text-foreground">
+            Events & Live Operations
+          </h1>
+          <p className="text-sm text-muted-foreground mt-1">
+            Agency calendar, stage display, and show pipeline — track live cues, crew rosters, and incident logs.
+          </p>
+        </div>
+        {canWrite ? (
+          <Button
+            size="sm"
+            onClick={openCreateDialog}
+            className="bg-[#270045] text-white hover:bg-[#3a006b] rounded-full px-4 h-9 shadow-xs"
+          >
+            <PlusIcon className="size-3.5 mr-1" />
             New event
-          </Button> : undefined
-        }
-      />
+          </Button>
+        ) : null}
+      </div>
 
       {error ? (
         <Card className="border-destructive/40 text-destructive px-4 py-3 text-sm">
@@ -280,48 +292,69 @@ export function EventsPage() {
       <ConflictDetectorBanner />
 
       <div className="grid grid-cols-2 gap-6 lg:grid-cols-3">
-        <div className="col-span-full grid gap-6 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="col-span-full grid gap-4 grid-cols-2 lg:grid-cols-4">
           {loading ? (
             <>
-              <Skeleton className="h-32" />
-              <Skeleton className="h-32" />
-              <Skeleton className="h-32" />
-              <Skeleton className="h-32" />
+              <Skeleton className="h-28 rounded-xl" />
+              <Skeleton className="h-28 rounded-xl" />
+              <Skeleton className="h-28 rounded-xl" />
+              <Skeleton className="h-28 rounded-xl" />
             </>
           ) : (
             <>
-              <StatisticsCard
-                icon={<CalendarDaysIcon className="size-4" />}
-                value={String(events.length)}
-                title="Total events"
-                changePercentage="all statuses"
-              />
-              <StatisticsCard
-                icon={<RadioIcon className="size-4" />}
-                value={String(liveCount)}
-                title="Live now"
-                changePercentage={`${pipelineCount} in pipeline`}
-              />
-              <StatisticsCard
-                icon={<CalendarCheckIcon className="size-4" />}
-                value={String(pipelineCount)}
-                title="Active pipeline"
-                changePercentage={`${planPercentage}% of book`}
-              />
-              <StatisticsCard
-                icon={<MapPinIcon className="size-4" />}
-                value={String(venues)}
-                title="Locations"
-                changePercentage={
-                  totalBudget > 0 ? `$${Math.round(totalBudget / 1000)}k budget` : "no budget"
-                }
-              />
+              <div className="rounded-xl border border-border bg-card p-4 flex flex-col gap-1.5 shadow-[0_1px_3px_0_rgba(39,0,69,0.08)]">
+                <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Total Events</p>
+                <p className="font-sora text-2xl sm:text-3xl font-bold text-foreground leading-none">{events.length}</p>
+                <div className="mt-1">
+                  <span className="inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold bg-primary/10 text-primary">
+                    All show productions
+                  </span>
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-border bg-card p-4 flex flex-col gap-1.5 shadow-[0_1px_3px_0_rgba(39,0,69,0.08)]">
+                <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Live Now</p>
+                <p className="font-sora text-2xl sm:text-3xl font-bold text-foreground leading-none">{liveCount}</p>
+                <div className="mt-1">
+                  <span className={cn(
+                    "inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-semibold",
+                    liveCount > 0 ? "bg-destructive/15 text-destructive border border-destructive/20 animate-pulse" : "bg-surface-alt text-muted-foreground"
+                  )}>
+                    {liveCount > 0 ? (
+                      <>
+                        <span className="size-1.5 rounded-full bg-destructive animate-ping" />
+                        Live operations active
+                      </>
+                    ) : "No live shows right now"}
+                  </span>
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-border bg-card p-4 flex flex-col gap-1.5 shadow-[0_1px_3px_0_rgba(39,0,69,0.08)]">
+                <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Active Pipeline</p>
+                <p className="font-sora text-2xl sm:text-3xl font-bold text-foreground leading-none">{pipelineCount}</p>
+                <div className="mt-1">
+                  <span className="inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold bg-warning/15 text-warning">
+                    {planPercentage}% of book in flight
+                  </span>
+                </div>
+              </div>
+
+              <div className="rounded-xl border border-border bg-card p-4 flex flex-col gap-1.5 shadow-[0_1px_3px_0_rgba(39,0,69,0.08)]">
+                <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">Locations</p>
+                <p className="font-sora text-2xl sm:text-3xl font-bold text-foreground leading-none">{venues}</p>
+                <div className="mt-1">
+                  <span className="inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold bg-success/15 text-success">
+                    {totalBudget > 0 ? `$${Math.round(totalBudget / 1000)}k allocated` : "Active venues"}
+                  </span>
+                </div>
+              </div>
             </>
           )}
         </div>
 
         <PortfolioSummaryCard
-          className="col-span-full justify-between gap-5 lg:col-span-1"
+          className="col-span-full justify-between gap-5 lg:col-span-1 rounded-2xl border border-border shadow-[0_1px_3px_0_rgba(39,0,69,0.08)]"
           loading={loading}
           title="By type"
           headlineValue={String(events.length)}
@@ -332,7 +365,7 @@ export function EventsPage() {
         />
 
         <EventOpsMetricsCard
-          className="col-span-full *:data-[slot=card-content]:gap-6 lg:col-span-2"
+          className="col-span-full *:data-[slot=card-content]:gap-6 lg:col-span-2 rounded-2xl border border-border shadow-[0_1px_3px_0_rgba(39,0,69,0.08)]"
           loading={loading}
           planPercentage={planPercentage}
           metrics={[
@@ -348,9 +381,9 @@ export function EventsPage() {
           statusSlices={statusSlices}
         />
 
-        <Card className="col-span-full w-full py-4">
-          <div className="mb-4 px-4">
-            <h2 className="text-lg font-semibold">Event register</h2>
+        <Card className="col-span-full w-full py-5 rounded-2xl border border-border bg-card shadow-[0_1px_3px_0_rgba(39,0,69,0.08)]">
+          <div className="mb-4 px-5">
+            <h2 className="font-sora text-lg font-semibold text-foreground">Event register</h2>
             <p className="text-muted-foreground text-sm">Open an event to review cues, crew, incidents, and run details.</p>
           </div>
           {loading ? (
