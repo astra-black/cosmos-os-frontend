@@ -9,13 +9,13 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -253,124 +253,129 @@ export function TeamsPage() {
         </div>
       )}
 
-      {/* Invite Member Dialog */}
-      <Dialog open={inviteOpen} onOpenChange={setInviteOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
+      {/* Invite Member Right-side Drawer */}
+      <Sheet open={inviteOpen} onOpenChange={setInviteOpen}>
+        <SheetContent
+          side="right"
+          className="w-full sm:max-w-md p-0 flex flex-col h-full bg-card border-l border-border shadow-2xl"
+        >
+          <SheetHeader className="p-6 border-b border-border bg-card pr-12 shrink-0">
+            <SheetTitle className="flex items-center gap-2 font-sora text-xl font-bold text-foreground">
               <UserPlusIcon className="size-5 text-primary" />
               Invite Team Member
-            </DialogTitle>
-            <DialogDescription>
+            </SheetTitle>
+            <SheetDescription className="text-xs text-muted-foreground mt-1">
               Generate a shareable invite link for a new colleague to join this agency.
-            </DialogDescription>
-          </DialogHeader>
+            </SheetDescription>
+          </SheetHeader>
 
-          {!generatedLink ? (
-            <form onSubmit={handleGenerateInvite} className="space-y-4">
-              <div className="space-y-1.5">
-                <Label htmlFor="inviteEmail">Recipient Email (Optional)</Label>
-                <Input
-                  id="inviteEmail"
-                  type="email"
-                  placeholder="colleague@company.com"
-                  value={inviteEmail}
-                  onChange={(e) => setInviteEmail(e.target.value)}
-                />
-                <p className="text-[11px] text-muted-foreground">
-                  If left blank, anyone with the link can sign up with their email.
-                </p>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
+          <div className="flex-1 overflow-y-auto p-6 space-y-4">
+            {!generatedLink ? (
+              <form onSubmit={handleGenerateInvite} className="space-y-4">
                 <div className="space-y-1.5">
-                  <Label htmlFor="permissionRole">Access Level</Label>
-                  <select
-                    id="permissionRole"
-                    className="w-full rounded-md border bg-background px-3 py-2 text-sm shadow-xs focus:outline-none focus:ring-1 focus:ring-primary"
-                    value={permissionRole}
-                    onChange={(e) => setPermissionRole(e.target.value as any)}
-                  >
-                    <option value="TEAM_MEMBER">Team Member</option>
-                    <option value="PROJECT_MANAGER">Project Manager</option>
-                    <option value="AGENCY_ADMIN">Agency Admin</option>
-                  </select>
+                  <Label htmlFor="inviteEmail">Recipient Email (Optional)</Label>
+                  <Input
+                    id="inviteEmail"
+                    type="email"
+                    placeholder="colleague@company.com"
+                    value={inviteEmail}
+                    onChange={(e) => setInviteEmail(e.target.value)}
+                  />
+                  <p className="text-[11px] text-muted-foreground">
+                    If left blank, anyone with the link can sign up with their email.
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="permissionRole">Access Level</Label>
+                    <select
+                      id="permissionRole"
+                      className="w-full rounded-md border bg-background px-3 py-2 text-sm shadow-xs focus:outline-none focus:ring-1 focus:ring-primary"
+                      value={permissionRole}
+                      onChange={(e) => setPermissionRole(e.target.value as any)}
+                    >
+                      <option value="TEAM_MEMBER">Team Member</option>
+                      <option value="PROJECT_MANAGER">Project Manager</option>
+                      <option value="AGENCY_ADMIN">Agency Admin</option>
+                    </select>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label htmlFor="jobFunction">Job Function</Label>
+                    <select
+                      id="jobFunction"
+                      className="w-full rounded-md border bg-background px-3 py-2 text-sm shadow-xs focus:outline-none focus:ring-1 focus:ring-primary"
+                      value={jobFunction}
+                      onChange={(e) => setJobFunction(e.target.value as any)}
+                    >
+                      <option value="OPS">Operations</option>
+                      <option value="CREATIVE">Creative</option>
+                      <option value="PRODUCER">Producer</option>
+                      <option value="PM">Project Manager</option>
+                      <option value="ADMIN">Admin</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="pt-4 flex items-center justify-end gap-2 border-t border-border">
+                  <Button type="button" variant="outline" onClick={() => setInviteOpen(false)}>
+                    Cancel
+                  </Button>
+                  <Button type="submit" disabled={inviting} className="gap-2">
+                    {inviting ? (
+                      <>
+                        <Loader2Icon className="size-4 animate-spin" />
+                        Generating...
+                      </>
+                    ) : (
+                      <>
+                        <Link2Icon className="size-4" />
+                        Generate Invite Link
+                      </>
+                    )}
+                  </Button>
+                </div>
+              </form>
+            ) : (
+              <div className="space-y-4">
+                <div className="rounded-lg bg-primary/10 border border-primary/20 p-3 text-sm text-foreground">
+                  <p className="font-medium text-primary mb-1">Invite link ready!</p>
+                  <p className="text-xs text-muted-foreground">
+                    Send this link to your teammate. It is valid for 7 days.
+                  </p>
                 </div>
 
                 <div className="space-y-1.5">
-                  <Label htmlFor="jobFunction">Job Function</Label>
-                  <select
-                    id="jobFunction"
-                    className="w-full rounded-md border bg-background px-3 py-2 text-sm shadow-xs focus:outline-none focus:ring-1 focus:ring-primary"
-                    value={jobFunction}
-                    onChange={(e) => setJobFunction(e.target.value as any)}
-                  >
-                    <option value="OPS">Operations</option>
-                    <option value="CREATIVE">Creative</option>
-                    <option value="PRODUCER">Producer</option>
-                    <option value="PM">Project Manager</option>
-                    <option value="ADMIN">Admin</option>
-                  </select>
+                  <Label>Shareable URL</Label>
+                  <div className="flex gap-2">
+                    <Input readOnly value={generatedLink} className="font-mono text-xs select-all bg-muted/40" />
+                    <Button type="button" variant="secondary" onClick={copyToClipboard} className="shrink-0 gap-1.5">
+                      {copied ? <CheckIcon className="size-4 text-emerald-500" /> : <CopyIcon className="size-4" />}
+                      {copied ? "Copied" : "Copy"}
+                    </Button>
+                  </div>
                 </div>
-              </div>
 
-              <DialogFooter className="pt-2">
-                <Button type="button" variant="outline" onClick={() => setInviteOpen(false)}>
-                  Cancel
-                </Button>
-                <Button type="submit" disabled={inviting} className="gap-2">
-                  {inviting ? (
-                    <>
-                      <Loader2Icon className="size-4 animate-spin" />
-                      Generating...
-                    </>
-                  ) : (
-                    <>
-                      <Link2Icon className="size-4" />
-                      Generate Invite Link
-                    </>
-                  )}
-                </Button>
-              </DialogFooter>
-            </form>
-          ) : (
-            <div className="space-y-4 py-2">
-              <div className="rounded-lg bg-primary/10 border border-primary/20 p-3 text-sm text-foreground">
-                <p className="font-medium text-primary mb-1">Invite link ready!</p>
-                <p className="text-xs text-muted-foreground">
-                  Send this link to your teammate. It is valid for 7 days.
-                </p>
-              </div>
-
-              <div className="space-y-1.5">
-                <Label>Shareable URL</Label>
-                <div className="flex gap-2">
-                  <Input readOnly value={generatedLink} className="font-mono text-xs select-all bg-muted/40" />
-                  <Button type="button" variant="secondary" onClick={copyToClipboard} className="shrink-0 gap-1.5">
-                    {copied ? <CheckIcon className="size-4 text-emerald-500" /> : <CopyIcon className="size-4" />}
-                    {copied ? "Copied" : "Copy"}
+                <div className="pt-4 flex items-center justify-end gap-2 border-t border-border">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => {
+                      resetInviteModal()
+                    }}
+                  >
+                    Create Another
+                  </Button>
+                  <Button type="button" onClick={() => setInviteOpen(false)}>
+                    Done
                   </Button>
                 </div>
               </div>
-
-              <DialogFooter className="pt-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => {
-                    resetInviteModal()
-                  }}
-                >
-                  Create Another
-                </Button>
-                <Button type="button" onClick={() => setInviteOpen(false)}>
-                  Done
-                </Button>
-              </DialogFooter>
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
+            )}
+          </div>
+        </SheetContent>
+      </Sheet>
     </div>
   )
 }

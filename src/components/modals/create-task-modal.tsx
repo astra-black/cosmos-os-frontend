@@ -6,13 +6,13 @@ import { LoaderCircleIcon } from "lucide-react"
 import { Button, buttonVariants } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
@@ -176,21 +176,25 @@ export function CreateTaskModal({
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg">
-        <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-          <DialogHeader>
-            <DialogTitle>Create New Task</DialogTitle>
-            <DialogDescription>
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetContent
+        side="right"
+        className="w-full sm:max-w-xl p-0 flex flex-col h-full bg-card border-l border-border shadow-2xl"
+      >
+        <form onSubmit={handleSubmit} className="flex flex-col h-full overflow-hidden">
+          <SheetHeader className="p-6 border-b border-border bg-card pr-12 shrink-0">
+            <SheetTitle className="font-sora text-xl font-bold text-foreground">Create New Task</SheetTitle>
+            <SheetDescription className="text-xs text-muted-foreground mt-1">
               Assign work items, action deliverables, or set milestones.
-            </DialogDescription>
-          </DialogHeader>
+            </SheetDescription>
+          </SheetHeader>
 
-          {error ? (
-            <div className="rounded-lg bg-destructive/10 p-3 text-xs text-destructive">
-              {error}
-            </div>
-          ) : null}
+          <div className="flex-1 overflow-y-auto p-6 space-y-4">
+            {error ? (
+              <div className="rounded-lg bg-destructive/10 p-3 text-xs text-destructive">
+                {error}
+              </div>
+            ) : null}
 
           {projects.length === 0 ? (
             <div className="rounded-lg bg-amber-500/10 border border-amber-500/30 p-3 text-xs text-amber-700 dark:text-amber-300 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
@@ -390,8 +394,9 @@ export function CreateTaskModal({
               />
             </div>
           </div>
+          </div>
 
-          <DialogFooter className="mt-2">
+          <SheetFooter className="p-4 border-t border-border bg-surface-alt/40 flex flex-row items-center justify-end gap-2 shrink-0">
             <Button
               type="button"
               variant="outline"
@@ -404,9 +409,9 @@ export function CreateTaskModal({
               {busy ? <LoaderCircleIcon className="size-4 animate-spin" /> : null}
               Create Task
             </Button>
-          </DialogFooter>
+          </SheetFooter>
         </form>
-      </DialogContent>
-    </Dialog>
+      </SheetContent>
+    </Sheet>
   )
 }

@@ -24,13 +24,13 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select } from "@/components/ui/select"
@@ -496,7 +496,18 @@ export function ProjectsPage() {
                     {selectedProject.clientName || "No Client Assigned"}
                   </p>
                 </div>
-                <div className="flex items-center gap-1 shrink-0">
+                <div className="flex items-center gap-1.5 shrink-0">
+                  {canWrite && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-7 text-xs px-2.5 gap-1 text-primary border-primary/30 hover:bg-primary/10"
+                      onClick={() => openEditDialog(selectedProject)}
+                    >
+                      <PencilIcon className="size-3" />
+                      Edit
+                    </Button>
+                  )}
                   <Button
                     size="sm"
                     variant="outline"
@@ -666,13 +677,18 @@ export function ProjectsPage() {
         }}
       />
 
-      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Edit project</DialogTitle>
-            <DialogDescription>Update delivery details, budget and dates.</DialogDescription>
-          </DialogHeader>
-          <div className="flex flex-col gap-3 py-2">
+      <Sheet open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+        <SheetContent
+          side="right"
+          className="w-full sm:max-w-lg p-0 flex flex-col h-full bg-card border-l border-border shadow-2xl"
+        >
+          <SheetHeader className="p-6 border-b border-border bg-card pr-12 shrink-0">
+            <SheetTitle className="font-sora text-xl font-bold text-foreground">Edit project</SheetTitle>
+            <SheetDescription className="text-xs text-muted-foreground mt-1">
+              Update delivery details, budget, timeline and client assignment.
+            </SheetDescription>
+          </SheetHeader>
+          <div className="flex-1 overflow-y-auto p-6 space-y-4">
             <div className="flex flex-col gap-1.5">
               <Label htmlFor="projectName">Project Name</Label>
               <Input
@@ -760,16 +776,16 @@ export function ProjectsPage() {
               />
             </div>
           </div>
-          <DialogFooter>
+          <SheetFooter className="p-4 border-t border-border bg-surface-alt/40 flex flex-row items-center justify-end gap-2 shrink-0">
             <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
               Cancel
             </Button>
             <Button onClick={handleSave} disabled={isSaving}>
               {isSaving ? "Saving..." : "Save changes"}
             </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+          </SheetFooter>
+        </SheetContent>
+      </Sheet>
 
       <ConfirmationDialog
         open={Boolean(deleteTarget)}

@@ -336,11 +336,51 @@ export function FinancePage() {
   }
 
   return (
-    <div className="flex flex-col gap-5">
-      <PageHeader
-        title="Finance"
-        description="Light finance — budgets, utilization, and time entries."
-      />
+    <div className="flex flex-col gap-6 animate-in fade-in duration-200">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h1 className="font-sora text-2xl sm:text-3xl font-bold text-foreground tracking-tight">
+            Budget & Profitability
+          </h1>
+          <p className="text-sm text-muted-foreground mt-0.5">
+            Real-time project financials, spend variance, profit margins, and commitments.
+          </p>
+        </div>
+        <div className="flex items-center gap-2 flex-wrap">
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => void retry()}
+            disabled={refreshing}
+            className="gap-1.5"
+          >
+            <RefreshCwIcon className={refreshing ? "size-3.5 animate-spin" : "size-3.5"} />
+            Refresh
+          </Button>
+          {canWrite && (
+            <>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setShowTimeForm(true)}
+                className="gap-1.5"
+              >
+                <PlusIcon className="size-3.5" />
+                Log time
+              </Button>
+              <Button
+                size="sm"
+                onClick={() => setShowBudgetForm(true)}
+                className="gap-1.5 bg-[#270045] hover:bg-[#3b006a] text-white"
+              >
+                <PlusIcon className="size-3.5" />
+                New budget
+              </Button>
+            </>
+          )}
+        </div>
+      </div>
 
       {error ? (
         <Card className="border-destructive/40 flex flex-wrap items-center justify-between gap-3 px-4 py-3 text-sm">
@@ -355,46 +395,177 @@ export function FinancePage() {
         </Card>
       ) : null}
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <Card className="p-4">
-          <div className="text-muted-foreground text-xs">Planned</div>
-          <div className="text-2xl font-semibold tabular-nums">
-            {money(summary?.planned ?? 0)}
+      {/* 4 Stat Tiles */}
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="rounded-2xl border border-border bg-card p-5 shadow-[0_1px_3px_0_rgba(39,0,69,0.08)] flex flex-col justify-between">
+          <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Total Budget</p>
+          <div className="my-2">
+            <span className="font-sora text-3xl font-bold text-foreground tabular-nums">
+              {money(summary?.planned ?? 0)}
+            </span>
           </div>
-        </Card>
-        <Card className="p-4">
-          <div className="text-muted-foreground text-xs">Spent</div>
-          <div className="text-2xl font-semibold tabular-nums">
-            {money(summary?.spent ?? 0)}
+          <div className="flex items-center gap-1.5">
+            <Badge variant="purple" className="text-[11px]">
+              {projects.length} active projects
+            </Badge>
           </div>
-        </Card>
-        <Card className="p-4">
-          <div className="text-muted-foreground text-xs">Billable hours</div>
-          <div className="text-2xl font-semibold tabular-nums">
-            {summary?.billableHours ?? 0}h
+        </div>
+
+        <div className="rounded-2xl border border-border bg-card p-5 shadow-[0_1px_3px_0_rgba(39,0,69,0.08)] flex flex-col justify-between">
+          <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Actual Cost</p>
+          <div className="my-2">
+            <span className="font-sora text-3xl font-bold text-foreground tabular-nums">
+              {money(summary?.spent ?? 0)}
+            </span>
           </div>
-        </Card>
-        <Card className="p-4">
-          <div className="text-muted-foreground text-xs">Time revenue</div>
-          <div className="text-2xl font-semibold tabular-nums">
-            {money(summary?.revenue ?? 0)}
+          <div className="flex items-center gap-1.5">
+            <Badge variant="warning" className="text-[11px]">
+              {summary?.planned ? Math.round(((summary.spent ?? 0) / summary.planned) * 100) : 0}% of budget
+            </Badge>
           </div>
-        </Card>
+        </div>
+
+        <div className="rounded-2xl border border-border bg-card p-5 shadow-[0_1px_3px_0_rgba(39,0,69,0.08)] flex flex-col justify-between">
+          <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Invoiced Revenue</p>
+          <div className="my-2">
+            <span className="font-sora text-3xl font-bold text-foreground tabular-nums">
+              {money(summary?.revenue ?? 0)}
+            </span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <Badge variant="success" className="text-[11px]">
+              {summary?.billableHours ?? 0}h billable
+            </Badge>
+          </div>
+        </div>
+
+        <div className="rounded-2xl border border-border bg-card p-5 shadow-[0_1px_3px_0_rgba(39,0,69,0.08)] flex flex-col justify-between">
+          <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Projected Profit</p>
+          <div className="my-2">
+            <span className={cn(
+              "font-sora text-3xl font-bold tabular-nums",
+              (summary?.revenue ?? 0) - (summary?.spent ?? 0) < 0 ? "text-destructive" : "text-success"
+            )}>
+              {money(Math.max(0, (summary?.revenue ?? 0) - (summary?.spent ?? 0)))}
+            </span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <Badge variant="success" className="text-[11px]">
+              {summary?.revenue && summary.revenue > 0
+                ? `${Math.round(((summary.revenue - (summary.spent ?? 0)) / summary.revenue) * 100)}% margin`
+                : "Healthy"}
+            </Badge>
+          </div>
+        </div>
       </div>
 
+      {/* Project Profitability Card & Table */}
+      <Card className="rounded-2xl border border-border bg-card overflow-hidden shadow-sm">
+        <div className="p-5 border-b border-border flex items-center justify-between">
+          <div>
+            <h2 className="font-sora font-bold text-base text-foreground">Project profitability & variance</h2>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Planned budget compared with logged time cost and forecasted margin.
+            </p>
+          </div>
+          <span className="text-xs font-medium text-muted-foreground">
+            {profitability.length} projects tracked
+          </span>
+        </div>
+
+        {profitability.length === 0 ? (
+          <EmptyState
+            className="py-12"
+            title="No profitability data yet"
+            description="Add a project budget or log time to see margin and variance metrics."
+          />
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm">
+              <thead className="bg-surface-alt/50 border-b border-border text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                <tr>
+                  <th className="py-3 px-5">Project</th>
+                  <th className="py-3 px-4">Budget</th>
+                  <th className="py-3 px-4">Actual Cost</th>
+                  <th className="py-3 px-4">Variance</th>
+                  <th className="py-3 px-4">Margin</th>
+                  <th className="py-3 px-4">Spend</th>
+                  <th className="py-3 px-5 text-right">Status</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {profitability.map((p) => {
+                  const spendPct = p.planned > 0 ? Math.min(100, Math.round((p.actualTimeCost / p.planned) * 100)) : 0
+                  const variance = p.planned - p.actualTimeCost
+                  return (
+                    <tr key={p.projectId} className="hover:bg-surface-alt/30 transition-colors">
+                      <td className="py-3.5 px-5">
+                        <Link to={`/projects/${p.projectId}`} className="font-semibold text-foreground hover:text-primary hover:underline">
+                          {p.projectName}
+                        </Link>
+                        <p className="text-[11px] text-muted-foreground">
+                          {p.actualHours.toFixed(1)}h logged {p.costAvailable ? "" : "· rate unavailable"}
+                        </p>
+                      </td>
+                      <td className="py-3.5 px-4 font-mono font-medium text-foreground">
+                        {money(p.planned)}
+                      </td>
+                      <td className="py-3.5 px-4 font-mono font-medium text-foreground">
+                        {p.costAvailable ? money(p.actualTimeCost) : "—"}
+                      </td>
+                      <td className="py-3.5 px-4 font-mono font-semibold">
+                        <span className={variance >= 0 ? "text-success" : "text-destructive"}>
+                          {variance >= 0 ? `+${money(variance)}` : `-${money(Math.abs(variance))}`}
+                        </span>
+                      </td>
+                      <td className="py-3.5 px-4 font-mono font-medium">
+                        <span className={cn(p.margin < 0 ? "text-destructive" : "text-foreground")}>
+                          {p.costAvailable ? `${money(p.margin)}${p.marginPercent != null ? ` (${Math.round(p.marginPercent)}%)` : ""}` : "—"}
+                        </span>
+                      </td>
+                      <td className="py-3.5 px-4 w-40">
+                        <div className="flex items-center gap-2">
+                          <div className="flex-1 h-2 rounded-full bg-surface-alt overflow-hidden">
+                            <div
+                              className="h-full rounded-full"
+                              style={{
+                                width: `${spendPct}%`,
+                                background: "linear-gradient(115deg, oklch(48% 0.23 295), oklch(58% 0.24 350), oklch(68% 0.18 50))",
+                              }}
+                            />
+                          </div>
+                          <span className="text-[11px] font-mono text-muted-foreground">{spendPct}%</span>
+                        </div>
+                      </td>
+                      <td className="py-3.5 px-5 text-right">
+                        <Badge variant={variance >= 0 ? "success" : "danger"}>
+                          {variance >= 0 ? "On Target" : "Over Budget"}
+                        </Badge>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Card>
+
       {/* Contract Minimums & Attrition Monitor */}
-      <Card className="flex min-w-0 flex-col gap-4 p-4 sm:p-5 border-amber-500/30 bg-gradient-to-br from-card via-card to-amber-500/[0.02] shadow-sm">
+      <Card className="flex min-w-0 flex-col gap-4 p-5 rounded-2xl border border-amber-500/30 bg-gradient-to-br from-card via-card to-amber-500/[0.03] shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <div className="flex items-center gap-2">
-              <h2 className="text-base sm:text-lg font-semibold tracking-tight">Contract Minimums & Attrition Monitor</h2>
+              <h2 className="font-sora text-base sm:text-lg font-bold text-foreground">
+                Contract Minimums & Attrition Monitor
+              </h2>
               {highRiskContractsCount > 0 ? (
-                <Badge variant="destructive" className="gap-1 font-semibold text-xs">
+                <Badge variant="danger" className="gap-1 font-semibold text-xs">
                   <ShieldAlertIcon className="size-3" />
                   {highRiskContractsCount} Attrition Risk
                 </Badge>
               ) : contractMinimumBudgets.length > 0 ? (
-                <Badge variant="secondary" className="gap-1 border-emerald-500/30 text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 text-xs">
+                <Badge variant="success" className="gap-1 text-xs">
                   <CheckCircle2Icon className="size-3" />
                   Commitments Tracked
                 </Badge>
@@ -405,7 +576,7 @@ export function FinancePage() {
             </p>
           </div>
           {canWrite ? (
-            <Button size="sm" onClick={() => setShowBudgetForm(true)} className="gap-1.5">
+            <Button size="sm" onClick={() => setShowBudgetForm(true)} className="gap-1.5 bg-[#270045] text-white hover:bg-[#3b006a]">
               <PlusIcon className="size-3.5" />
               Add Commitment
             </Button>
@@ -413,19 +584,19 @@ export function FinancePage() {
         </div>
 
         {/* Aggregate KPI Strip */}
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-          <div className="rounded-xl border bg-muted/30 p-3">
-            <div className="text-muted-foreground text-[11px] font-medium">Total Commitments</div>
-            <div className="mt-1 text-lg sm:text-xl font-bold tabular-nums">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <div className="rounded-xl border border-border bg-surface-alt/40 p-3.5">
+            <div className="text-muted-foreground text-[11px] font-semibold uppercase tracking-wider">Total Commitments</div>
+            <div className="mt-1 font-sora text-xl font-bold text-foreground tabular-nums">
               {money(totalContractCommitments)}
             </div>
             <div className="text-muted-foreground text-[10px] mt-0.5">
               {contractMinimumBudgets.length} active contract{contractMinimumBudgets.length === 1 ? "" : "s"}
             </div>
           </div>
-          <div className="rounded-xl border bg-muted/30 p-3">
-            <div className="text-muted-foreground text-[11px] font-medium">Credited Spend</div>
-            <div className="mt-1 text-lg sm:text-xl font-bold tabular-nums text-emerald-600 dark:text-emerald-400">
+          <div className="rounded-xl border border-border bg-surface-alt/40 p-3.5">
+            <div className="text-muted-foreground text-[11px] font-semibold uppercase tracking-wider">Credited Spend</div>
+            <div className="mt-1 font-sora text-xl font-bold text-success tabular-nums">
               {money(totalContractSpent)}
             </div>
             <div className="text-muted-foreground text-[10px] mt-0.5">
@@ -434,11 +605,11 @@ export function FinancePage() {
                 : "0%"}
             </div>
           </div>
-          <div className="rounded-xl border bg-muted/30 p-3">
-            <div className="text-muted-foreground text-[11px] font-medium">Shortfall Exposure</div>
+          <div className="rounded-xl border border-border bg-surface-alt/40 p-3.5">
+            <div className="text-muted-foreground text-[11px] font-semibold uppercase tracking-wider">Shortfall Exposure</div>
             <div className={cn(
-              "mt-1 text-lg sm:text-xl font-bold tabular-nums",
-              totalShortfallExposure > 0 ? "text-destructive" : "text-emerald-600 dark:text-emerald-400",
+              "mt-1 font-sora text-xl font-bold tabular-nums",
+              totalShortfallExposure > 0 ? "text-destructive" : "text-success",
             )}>
               {totalShortfallExposure > 0 ? money(totalShortfallExposure) : "$0 (Covered)"}
             </div>
@@ -446,9 +617,9 @@ export function FinancePage() {
               {totalShortfallExposure > 0 ? "Unfulfilled penalty risk" : "Zero penalty exposure"}
             </div>
           </div>
-          <div className="rounded-xl border bg-muted/30 p-3">
-            <div className="text-muted-foreground text-[11px] font-medium">Fulfillment Status</div>
-            <div className="mt-1 text-lg sm:text-xl font-bold tabular-nums">
+          <div className="rounded-xl border border-border bg-surface-alt/40 p-3.5">
+            <div className="text-muted-foreground text-[11px] font-semibold uppercase tracking-wider">Fulfillment Status</div>
+            <div className="mt-1 font-sora text-xl font-bold text-foreground tabular-nums">
               {highRiskContractsCount > 0 ? `${highRiskContractsCount} Critical` : "Healthy"}
             </div>
             <div className="text-muted-foreground text-[10px] mt-0.5">
@@ -459,7 +630,7 @@ export function FinancePage() {
 
         {/* Contract Minimums Breakdown List */}
         {contractMinimumBudgets.length === 0 ? (
-          <div className="rounded-xl border border-dashed p-6 text-center">
+          <div className="rounded-xl border border-dashed border-border p-6 text-center">
             <p className="text-sm font-medium text-foreground">No contracted minimums configured</p>
             <p className="text-xs text-muted-foreground mt-1">
               Add a contracted minimum to any project or event budget to monitor attrition risks and unspent commitment shortfalls.
@@ -479,17 +650,17 @@ export function FinancePage() {
                 <div
                   key={b.budgetId}
                   className={cn(
-                    "flex flex-col justify-between gap-3 rounded-xl border p-4 transition-all bg-card/60",
+                    "flex flex-col justify-between gap-3 rounded-xl border p-4 transition-all bg-card",
                     isHighRisk
                       ? "border-destructive/40 bg-destructive/[0.03] shadow-xs ring-1 ring-destructive/20"
                       : isWatch
-                        ? "border-amber-500/40 bg-amber-500/[0.02]"
-                        : "border-border/80",
+                        ? "border-warning/40 bg-warning/[0.02]"
+                        : "border-border",
                   )}
                 >
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
-                      <div className="font-semibold text-sm truncate">{b.projectName}</div>
+                      <div className="font-sora font-semibold text-sm truncate">{b.projectName}</div>
                       <div className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1.5">
                         <span className="font-mono text-[11px] font-medium">{b.currency}</span>
                         <span>·</span>
@@ -499,16 +670,16 @@ export function FinancePage() {
 
                     <div className="flex items-center gap-1.5 shrink-0">
                       {isHighRisk ? (
-                        <Badge variant="destructive" className="text-[10px] uppercase font-bold px-2 py-0.5 gap-1">
+                        <Badge variant="danger" className="text-[10px] uppercase font-bold px-2 py-0.5 gap-1">
                           <AlertCircleIcon className="size-3" />
                           High Risk ({coveredPct}%)
                         </Badge>
                       ) : isWatch ? (
-                        <Badge variant="secondary" className="border-amber-500/40 text-amber-600 dark:text-amber-400 bg-amber-500/10 text-[10px] uppercase font-bold px-2 py-0.5">
+                        <Badge variant="warning" className="text-[10px] uppercase font-bold px-2 py-0.5">
                           Watch ({coveredPct}%)
                         </Badge>
                       ) : (
-                        <Badge variant="secondary" className="border-emerald-500/30 text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 text-[10px] uppercase font-bold px-2 py-0.5 gap-1">
+                        <Badge variant="success" className="text-[10px] uppercase font-bold px-2 py-0.5 gap-1">
                           <CheckCircle2Icon className="size-3" />
                           Covered (100%)
                         </Badge>
@@ -535,18 +706,18 @@ export function FinancePage() {
                   {/* Dual-Tone Commitment Progress Track */}
                   <div className="space-y-1.5">
                     <div className="flex justify-between text-xs font-mono">
-                      <span className="text-muted-foreground">Fulfillment</span>
+                      <span className="text-muted-foreground font-sans">Fulfillment</span>
                       <span className="font-bold tabular-nums">{coveredPct}% of {money(minVal)}</span>
                     </div>
-                    <div className="relative h-2.5 w-full rounded-full bg-muted overflow-hidden">
+                    <div className="relative h-2.5 w-full rounded-full bg-surface-alt overflow-hidden">
                       <div
                         className={cn(
                           "h-full rounded-full transition-all duration-500",
                           isHighRisk
                             ? "bg-destructive"
                             : isWatch
-                              ? "bg-amber-500"
-                              : "bg-emerald-500",
+                              ? "bg-warning"
+                              : "bg-success",
                         )}
                         style={{ width: `${coveredPct}%` }}
                       />
@@ -554,7 +725,7 @@ export function FinancePage() {
                   </div>
 
                   {/* Financial Breakdown Strip */}
-                  <div className="grid grid-cols-3 gap-2 rounded-lg bg-muted/40 p-2 text-center text-xs font-mono">
+                  <div className="grid grid-cols-3 gap-2 rounded-lg bg-surface-alt/40 p-2.5 text-center text-xs font-mono">
                     <div>
                       <div className="text-[10px] text-muted-foreground uppercase font-sans">Spent</div>
                       <div className="font-semibold tabular-nums mt-0.5">{money(spentVal)}</div>
@@ -567,7 +738,7 @@ export function FinancePage() {
                       <div className="text-[10px] text-muted-foreground uppercase font-sans">Shortfall</div>
                       <div className={cn(
                         "font-bold tabular-nums mt-0.5",
-                        shortfallVal > 0 ? "text-destructive" : "text-emerald-600 dark:text-emerald-400",
+                        shortfallVal > 0 ? "text-destructive" : "text-success",
                       )}>
                         {shortfallVal > 0 ? `-${money(shortfallVal)}` : "Covered"}
                       </div>
@@ -576,53 +747,6 @@ export function FinancePage() {
                 </div>
               )
             })}
-          </div>
-        )}
-      </Card>
-
-      <Card className="flex min-w-0 flex-col gap-3 p-4">
-        <div>
-          <h2 className="font-semibold">Project profitability</h2>
-          <p className="text-muted-foreground text-xs">Planned budget compared with logged time cost and projected finish cost.</p>
-        </div>
-        {profitability.length === 0 ? (
-          <EmptyState
-            className="py-8"
-            title="No profitability data yet"
-            description="Add a project budget or log time to see margin and forecast metrics."
-          />
-        ) : (
-          <div className="space-y-2">
-            {profitability.map((project) => (
-              <div key={project.projectId} className="grid gap-2 rounded-xl border p-3 text-sm sm:grid-cols-[1.4fr_repeat(4,minmax(0,1fr))] sm:items-center">
-                <div>
-                  <div className="font-medium">{project.projectName}</div>
-                  <div className="text-muted-foreground text-xs">
-                    {project.actualHours.toFixed(1)}h logged{project.costAvailable ? "" : " · rate unavailable"}
-                  </div>
-                </div>
-                <div>
-                  <div className="text-muted-foreground text-xs">Planned</div>
-                  <div className="tabular-nums">{money(project.planned)}</div>
-                </div>
-                <div>
-                  <div className="text-muted-foreground text-xs">Time cost</div>
-                  <div className="tabular-nums">{project.costAvailable ? money(project.actualTimeCost) : "—"}</div>
-                </div>
-                <div>
-                  <div className="text-muted-foreground text-xs">Margin</div>
-                  <div className={cn("tabular-nums", project.margin < 0 && "text-destructive")}>
-                    {project.costAvailable ? `${money(project.margin)}${project.marginPercent != null ? ` (${Math.round(project.marginPercent)}%)` : ""}` : "—"}
-                  </div>
-                </div>
-                <div>
-                  <div className="text-muted-foreground text-xs">Forecast margin</div>
-                  <div className={cn("tabular-nums", project.forecastMargin < 0 && "text-destructive")}>
-                    {project.costAvailable ? `${money(project.forecastMargin)}${project.forecastMarginPercent != null ? ` (${Math.round(project.forecastMarginPercent)}%)` : ""}` : "—"}
-                  </div>
-                </div>
-              </div>
-            ))}
           </div>
         )}
       </Card>

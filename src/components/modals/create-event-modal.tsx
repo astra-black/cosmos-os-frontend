@@ -4,13 +4,13 @@ import { LoaderCircleIcon } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select } from "@/components/ui/select"
@@ -119,23 +119,27 @@ export function CreateEventModal({
     Boolean(name.trim()) && Boolean(type) && Boolean(location.trim()) && Boolean(startDate) && Boolean(endDate)
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg">
-        <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-          <DialogHeader>
-            <DialogTitle>Create Live Event</DialogTitle>
-            <DialogDescription>
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetContent
+        side="right"
+        className="w-full sm:max-w-lg p-0 flex flex-col h-full bg-card border-l border-border shadow-2xl"
+      >
+        <form onSubmit={handleSubmit} className="flex flex-col h-full overflow-hidden">
+          <SheetHeader className="p-6 border-b border-border bg-card pr-12 shrink-0">
+            <SheetTitle className="font-sora text-xl font-bold text-foreground">Create Live Event</SheetTitle>
+            <SheetDescription className="text-xs text-muted-foreground mt-1">
               Schedule an experiential production, brand activation, summit, or gala.
-            </DialogDescription>
-          </DialogHeader>
+            </SheetDescription>
+          </SheetHeader>
 
-          {error ? (
-            <div className="rounded-lg bg-destructive/10 p-3 text-xs text-destructive">
-              {error}
-            </div>
-          ) : null}
+          <div className="flex-1 overflow-y-auto p-6 space-y-4">
+            {error ? (
+              <div className="rounded-lg bg-destructive/10 p-3 text-xs text-destructive">
+                {error}
+              </div>
+            ) : null}
 
-          <div className="grid gap-3.5">
+            <div className="grid gap-3.5">
             <div className="grid gap-1.5">
               <Label htmlFor="event-name">Event Name *</Label>
               <Input
@@ -285,8 +289,9 @@ export function CreateEventModal({
               />
             </div>
           </div>
+          </div>
 
-          <DialogFooter className="mt-2">
+          <SheetFooter className="p-4 border-t border-border bg-surface-alt/40 flex flex-row items-center justify-end gap-2 shrink-0">
             <Button
               type="button"
               variant="outline"
@@ -299,9 +304,9 @@ export function CreateEventModal({
               {busy ? <LoaderCircleIcon className="size-4 animate-spin" /> : null}
               Create Event
             </Button>
-          </DialogFooter>
+          </SheetFooter>
         </form>
-      </DialogContent>
-    </Dialog>
+      </SheetContent>
+    </Sheet>
   )
 }

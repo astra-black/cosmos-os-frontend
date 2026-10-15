@@ -3,7 +3,7 @@ import { BotIcon, Loader2Icon, SendIcon, SparklesIcon } from "lucide-react"
 import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
@@ -107,19 +107,22 @@ export function AiOutreachModal({
         : `AI Vendor Outreach — ${targetName}`
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-xl">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetContent
+        side="right"
+        className="w-full sm:max-w-xl p-0 flex flex-col h-full bg-card border-l border-border shadow-2xl"
+      >
+        <SheetHeader className="p-6 border-b border-border bg-card pr-12 shrink-0">
+          <SheetTitle className="flex items-center gap-2 font-sora text-xl font-bold text-foreground">
             <SparklesIcon className="size-5 text-sky-400" />
             {title}
-          </DialogTitle>
-          <DialogDescription>
+          </SheetTitle>
+          <SheetDescription className="text-xs text-muted-foreground mt-1">
             Generate tailored copy using AI, review or customize the text, and dispatch directly.
-          </DialogDescription>
-        </DialogHeader>
+          </SheetDescription>
+        </SheetHeader>
 
-        <div className="grid gap-4 py-2">
+        <div className="flex-1 overflow-y-auto p-6 space-y-4">
           {!hasDrafted ? (
             <div className="flex flex-col items-center justify-center gap-3 rounded-xl border border-dashed p-8 text-center">
               <BotIcon className="size-10 text-sky-400/80" />
@@ -193,7 +196,7 @@ export function AiOutreachModal({
           )}
         </div>
 
-        <DialogFooter className="gap-2 sm:gap-0">
+        <SheetFooter className="p-4 border-t border-border bg-surface-alt/40 flex flex-row items-center justify-end gap-2 shrink-0">
           <Button
             type="button"
             variant="outline"
@@ -213,8 +216,8 @@ export function AiOutreachModal({
               SEND EMAIL
             </Button>
           )}
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        </SheetFooter>
+      </SheetContent>
+    </Sheet>
   )
 }
