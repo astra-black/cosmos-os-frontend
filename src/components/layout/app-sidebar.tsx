@@ -74,36 +74,28 @@ const navGroups: NavGroup[] = [
       { kind: "leaf", to: "/projects",   label: "Projects",      icon: FolderKanbanIcon },
       { kind: "leaf", to: "/tasks",      label: "Tasks",         icon: ListTodoIcon },
       { kind: "leaf", to: "/milestones", label: "Milestones",    icon: FlagIcon },
-      { kind: "leaf", to: "/campaigns",  label: "Campaigns",     icon: MegaphoneIcon },
-      { kind: "leaf", to: "/activity",   label: "Activity",      icon: ActivityIcon },
     ],
   },
   {
     kind: "group",
     label: "LIVE OPERATIONS",
     items: [
-      { kind: "leaf", to: "/events",        label: "Events",        icon: CalendarDaysIcon },
-      { kind: "leaf", to: "/spatial-stage", label: "Spatial Stage", icon: LayersIcon },
-      { kind: "leaf", to: "/cues",          label: "Cues",          icon: ClipboardListIcon },
-      { kind: "leaf", to: "/crew",          label: "Crew",          icon: UsersIcon },
-      { kind: "leaf", to: "/incidents",     label: "Incidents",     icon: ShieldAlertIcon },
+      { kind: "leaf", to: "/events",     label: "Events",        icon: CalendarDaysIcon },
     ],
   },
   {
     kind: "group",
     label: "FINANCE",
     items: [
-      { kind: "leaf", to: "/finance",    label: "Finance",       icon: TrendingUpIcon },
-      { kind: "leaf", to: "/billing",    label: "Billing",       icon: CreditCardIcon },
+      { kind: "leaf", to: "/finance",    label: "Budget & Profit", icon: TrendingUpIcon },
+      { kind: "leaf", to: "/billing",    label: "Invoices",        icon: FileTextIcon },
     ],
   },
   {
     kind: "group",
-    label: "CRM & NETWORK",
+    label: "NETWORK",
     items: [
-      { kind: "leaf", to: "/crm",        label: "Pipeline",      icon: WorkflowIcon },
-      { kind: "leaf", to: "/clients",    label: "Accounts",      icon: Building2Icon },
-      { kind: "leaf", to: "/contacts",   label: "Contacts",      icon: ContactIcon },
+      { kind: "leaf", to: "/crm",        label: "CRM Pipeline",  icon: WorkflowIcon },
       { kind: "leaf", to: "/vendors",    label: "Vendors",       icon: TruckIcon },
     ],
   },
@@ -111,9 +103,8 @@ const navGroups: NavGroup[] = [
     kind: "group",
     label: "COLLABORATE",
     items: [
-      { kind: "leaf", to: "/assets",     label: "Assets",        icon: ImagesIcon },
+      { kind: "leaf", to: "/assets",     label: "Files & Assets",icon: ImagesIcon },
       { kind: "leaf", to: "/approvals",  label: "Approvals",     icon: ShieldCheckIcon },
-      { kind: "leaf", to: "/portfolio",  label: "Portfolio",     icon: BriefcaseIcon },
     ],
   },
   {
@@ -121,9 +112,6 @@ const navGroups: NavGroup[] = [
     label: "PLATFORM",
     items: [
       { kind: "leaf", to: "/ai",         label: "Astrid AI",     icon: SparklesIcon },
-      { kind: "leaf", to: "/analytics",  label: "Analytics",     icon: BarChart3Icon },
-      { kind: "leaf", to: "/teams",      label: "Teams & Roles", icon: UsersRoundIcon },
-      { kind: "leaf", to: "/monitoring", label: "Monitoring",    icon: ShieldAlertIcon },
       { kind: "leaf", to: "/settings",   label: "Settings",      icon: SettingsIcon },
     ],
   },
