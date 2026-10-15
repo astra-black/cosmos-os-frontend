@@ -1,11 +1,11 @@
-import { useState } from "react"
+import { useState, useMemo } from "react"
+import { Link } from "react-router-dom"
 import { FlagIcon, PencilIcon, PlusIcon, RefreshCwIcon, Trash2Icon } from "lucide-react"
 import { toast } from "sonner"
 
 import { ConfirmationDialog } from "@/components/shared/confirmation-dialog"
 import { EmptyState } from "@/components/shared/empty-state"
 import { EntityFormDialog } from "@/components/shared/entity-form-dialog"
-import { PageHeader } from "@/components/shared/page-header"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
@@ -24,10 +24,20 @@ import { cn } from "@/lib/utils"
 
 const STATUSES: MilestoneStatus[] = ["upcoming", "done", "missed"]
 
-const statusTone: Record<MilestoneStatus, string> = {
-  upcoming: "bg-chart-2/15 text-chart-2",
-  done: "bg-chart-1/15 text-chart-1",
-  missed: "bg-destructive/15 text-destructive",
+function parseDate(dateStr?: string) {
+  if (!dateStr) return { month: "TBD", day: "--", year: "" }
+  const d = new Date(dateStr + "T00:00:00")
+  if (isNaN(d.getTime())) return { month: "TBD", day: "--", year: "" }
+  const month = d.toLocaleDateString("en-US", { month: "short" }).toUpperCase()
+  const day = String(d.getDate()).padStart(2, "0")
+  const year = d.getFullYear()
+  return { month, day, year }
+}
+
+function getMilestoneBadge(status: MilestoneStatus) {
+  if (status === "done") return <Badge variant="success">Done</Badge>
+  if (status === "missed") return <Badge variant="danger">Missed</Badge>
+  return <Badge variant="warning">Upcoming</Badge>
 }
 
 type MilestoneForm = {
@@ -70,6 +80,23 @@ export function MilestonesPage() {
   const [busy, setBusy] = useState(false)
   const [pendingMilestoneId, setPendingMilestoneId] = useState<string | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<Milestone | null>(null)
+  const [filterTab, setFilterTab] = useState<string>("All")
+
+  const filteredMilestones = useMemo(() => {
+    if (filterTab === "Upcoming") return milestones.filter((m) => m.status === "upcoming")
+    if (filterTab === "Done") return milestones.filter((m) => m.status === "done")
+    if (filterTab === "Missed") return milestones.filter((m) => m.status === "missed")
+    return milestones
+  }, [milestones, filterTab])
+
+  const tabCounts = useMemo(() => {
+    return {
+      All: milestones.length,
+      Upcoming: milestones.filter((m) => m.status === "upcoming").length,
+      Done: milestones.filter((m) => m.status === "done").length,
+      Missed: milestones.filter((m) => m.status === "missed").length,
+    }
+  }, [milestones])
 
   function updateForm(field: keyof MilestoneForm, value: string) {
     setForm((current) => ({ ...current, [field]: value }))
@@ -150,56 +177,183 @@ export function MilestonesPage() {
   }
 
   return (
-    <div className="flex flex-col gap-5">
-      <PageHeader
-        title="Milestones"
-        description="Track delivery dates and project checkpoints."
-        actions={canWrite ? <Button size="sm" variant={showCreate ? "default" : "outline"} onClick={showCreate ? cancelForm : startCreate}><PlusIcon className="size-3.5" />Add milestone</Button> : undefined}
-      />
+    <div className="flex flex-col gap-6 animate-in fade-in duration-200">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h1 className="font-sora text-2xl sm:text-3xl font-bold text-foreground tracking-tight">
+            Milestones & Schedule
+          </h1>
+          <p className="text-sm text-muted-foreground mt-0.5">
+            Key client deliverables, checkpoint approvals, and critical production dates.
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => void reload()}
+            className="gap-1.5"
+          >
+            <RefreshCwIcon className="size-3.5" />
+            Refresh
+          </Button>
+          {canWrite && (
+            <Button
+              size="sm"
+              onClick={startCreate}
+              className="gap-1.5 bg-[#270045] hover:bg-[#3b006a] text-white shadow-sm"
+            >
+              <PlusIcon className="size-4" />
+              New milestone
+            </Button>
+          )}
+        </div>
+      </div>
+
+      {/* Filter Tabs */}
+      <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
+        {(["All", "Upcoming", "Done", "Missed"] as const).map((tab) => {
+          const count = tabCounts[tab]
+          const isActive = filterTab === tab
+          return (
+            <button
+              key={tab}
+              onClick={() => setFilterTab(tab)}
+              className={cn(
+                "inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all select-none shrink-0",
+                isActive
+                  ? "bg-primary text-primary-foreground shadow-sm"
+                  : "bg-card text-muted-foreground border border-border hover:text-foreground hover:bg-surface-alt/80"
+              )}
+            >
+              <span>{tab}</span>
+              <span
+                className={cn(
+                  "px-1.5 py-0.2 rounded-full text-[10px] font-bold",
+                  isActive
+                    ? "bg-white/20 text-white"
+                    : "bg-surface-alt text-muted-foreground"
+                )}
+              >
+                {count}
+              </span>
+            </button>
+          )
+        })}
+      </div>
+
       {loading ? (
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">{[1, 2, 3].map((item) => <Skeleton key={item} className="h-40 rounded-xl" />)}</div>
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          {[1, 2, 3, 4, 5, 6].map((item) => (
+            <Skeleton key={item} className="h-44 rounded-2xl" />
+          ))}
+        </div>
       ) : error ? (
-        <Card className="flex flex-col items-center gap-3 p-10 text-center">
-          <p className="text-sm font-medium">Could not load milestones</p>
-          <p className="text-muted-foreground text-sm">{error}</p>
-          <Button size="sm" variant="outline" onClick={() => void reload()}><RefreshCwIcon className="size-3.5" />Retry</Button>
+        <Card className="flex flex-col items-center gap-3 p-10 text-center rounded-2xl">
+          <p className="font-sora text-sm font-semibold text-foreground">Could not load milestones</p>
+          <p className="text-muted-foreground text-xs">{error}</p>
+          <Button size="sm" variant="outline" onClick={() => void reload()}>
+            <RefreshCwIcon className="size-3.5" />
+            Retry
+          </Button>
         </Card>
-      ) : milestones.length === 0 ? (
-        <EmptyState icon={<FlagIcon className="size-5" />} title="No milestones yet" description="Create a milestone to start tracking delivery checkpoints." />
+      ) : filteredMilestones.length === 0 ? (
+        <EmptyState
+          icon={<FlagIcon className="size-5" />}
+          title={`No ${filterTab !== "All" ? filterTab.toLowerCase() : ""} milestones`}
+          description="Create a milestone checkpoint to start tracking critical delivery dates."
+        />
       ) : (
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-          {milestones.map((milestone) => {
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          {filteredMilestones.map((milestone) => {
             const project = projects.find((item) => item.projectId === milestone.projectId)
-            return <Card key={milestone.milestoneId} className="gap-3 p-4">
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <h2 className="truncate font-medium">{milestone.name}</h2>
-                  <p className="text-muted-foreground mt-1 text-xs">{milestone.milestoneId}</p>
+            const { month, day, year } = parseDate(milestone.dueDate)
+            return (
+              <div
+                key={milestone.milestoneId}
+                className="rounded-2xl border border-border bg-card p-5 shadow-[0_1px_3px_0_rgba(39,0,69,0.08)] flex flex-col justify-between gap-4 hover:border-primary/40 transition-all group"
+              >
+                <div className="flex items-start gap-4">
+                  {/* Big Date Tile */}
+                  <div className="flex flex-col items-center justify-center w-14 h-14 rounded-xl bg-surface-alt/80 border border-border shrink-0">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">{month}</span>
+                    <span className="font-sora text-xl font-bold text-foreground leading-none mt-0.5">{day}</span>
+                  </div>
+
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-start justify-between gap-2">
+                      <h3 className="font-sora font-semibold text-base text-foreground leading-tight truncate">
+                        {milestone.name}
+                      </h3>
+                      {getMilestoneBadge(milestone.status)}
+                    </div>
+
+                    <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                      {project ? (
+                        <Link
+                          to={`/projects/${project.projectId}`}
+                          className="inline-flex items-center text-xs text-primary font-medium hover:underline truncate"
+                        >
+                          {project.projectName}
+                        </Link>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">Unlinked project</span>
+                      )}
+                      {year && <span className="text-xs text-muted-foreground">· {year}</span>}
+                    </div>
+
+                    {milestone.notes ? (
+                      <p className="text-xs text-muted-foreground line-clamp-2 mt-2 leading-relaxed">
+                        {milestone.notes}
+                      </p>
+                    ) : null}
+                  </div>
                 </div>
-                <Badge className={cn("shrink-0 capitalize", statusTone[milestone.status])}>{milestone.status}</Badge>
+
+                {/* Actions & Sharing */}
+                <div className="flex items-center justify-between pt-3 border-t border-border mt-auto">
+                  <div className="flex items-center gap-1">
+                    {milestone.clientId ? (
+                      <ShareWithClientToggle
+                        clientId={milestone.clientId}
+                        entityType="milestone"
+                        entityId={milestone.milestoneId}
+                        clientVisible={milestone.clientVisible}
+                        size="sm"
+                      />
+                    ) : null}
+                  </div>
+
+                  {canWrite && (
+                    <div className="flex items-center gap-1">
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-8 text-xs px-2.5 gap-1 hover:text-primary"
+                        disabled={Boolean(pendingMilestoneId)}
+                        onClick={() => startEdit(milestone)}
+                      >
+                        <PencilIcon className="size-3.5" />
+                        Edit
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className="h-8 text-xs px-2 text-destructive hover:text-destructive hover:bg-destructive/10"
+                        disabled={Boolean(pendingMilestoneId)}
+                        onClick={() => setDeleteTarget(milestone)}
+                      >
+                        <Trash2Icon className="size-3.5" />
+                      </Button>
+                    </div>
+                  )}
+                </div>
               </div>
-              <div className="text-muted-foreground grid gap-1 text-xs">
-                <p><span className="text-foreground font-medium">DueDate:</span> {milestone.dueDate || "Not set"}</p>
-                <p><span className="text-foreground font-medium">Project:</span> {project?.projectName ?? milestone.projectId ?? "Not linked"}</p>
-                {milestone.notes ? <p className="line-clamp-2 pt-1">{milestone.notes}</p> : null}
-              </div>
-              {canWrite ? <div className="flex flex-wrap gap-2">
-                <Button className="self-start" size="sm" variant="ghost" disabled={Boolean(pendingMilestoneId)} onClick={() => startEdit(milestone)}><PencilIcon className="size-3.5" />Edit</Button>
-                <Button className="self-start" size="sm" variant="ghost" disabled={Boolean(pendingMilestoneId)} onClick={() => setDeleteTarget(milestone)}><Trash2Icon className="size-3.5 text-destructive" />Delete</Button>
-                {milestone.clientId ? (
-                  <ShareWithClientToggle
-                    clientId={milestone.clientId}
-                    entityType="milestone"
-                    entityId={milestone.milestoneId}
-                    clientVisible={milestone.clientVisible}
-                    size="sm"
-                  />
-                ) : null}
-              </div> : null}
-            </Card>
+            )
           })}
-         </div>
-       )}
+        </div>
+      )}
       <EntityFormDialog
         open={showCreate || Boolean(editingId)}
         onOpenChange={(open) => {

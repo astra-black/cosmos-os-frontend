@@ -303,12 +303,70 @@ export function AssetsPage() {
   }
 
   return (
-    <div className="flex flex-col gap-5">
-      <div className="flex flex-col gap-1">
-        <h1 className="text-xl font-semibold tracking-tight sm:text-2xl">Asset library</h1>
-        <p className="text-muted-foreground text-sm">
-          Delivery files by project — filters for status, type, and search.
-        </p>
+    <div className="flex flex-col gap-6 animate-in fade-in duration-200">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h1 className="font-sora text-2xl sm:text-3xl font-bold text-foreground tracking-tight">
+            Files & Assets
+          </h1>
+          <p className="text-sm text-muted-foreground mt-0.5">
+            Storage, digital media, contracts, proofs, and production assets.
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          {canRequest && (
+            <Button
+              size="sm"
+              disabled={uploadBusy}
+              onClick={() => fileRef.current?.click()}
+              className="gap-1.5 bg-[#270045] hover:bg-[#3b006a] text-white shadow-sm"
+            >
+              {uploadBusy ? (
+                <Loader2Icon className="size-3.5 animate-spin" />
+              ) : (
+                <UploadIcon className="size-3.5" />
+              )}
+              Upload file
+            </Button>
+          )}
+        </div>
+      </div>
+
+      {/* Filter Tabs */}
+      <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
+        {[
+          { id: "all", label: "All" },
+          { id: "approved", label: "Approved" },
+          { id: "in_review", label: "In Review" },
+          { id: "draft", label: "Draft" },
+          { id: "archived", label: "Archived" },
+        ].map((tab) => {
+          const isActive = statusFilter === tab.id
+          const count = tab.id === "all" ? assets.length : assets.filter((a) => a.status === tab.id).length
+          return (
+            <button
+              key={tab.id}
+              onClick={() => setStatusFilter(tab.id)}
+              className={cn(
+                "inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all select-none shrink-0",
+                isActive
+                  ? "bg-primary text-primary-foreground shadow-sm"
+                  : "bg-card text-muted-foreground border border-border hover:text-foreground hover:bg-surface-alt/80"
+              )}
+            >
+              <span>{tab.label}</span>
+              <span
+                className={cn(
+                  "px-1.5 py-0.2 rounded-full text-[10px] font-bold",
+                  isActive ? "bg-white/20 text-white" : "bg-surface-alt text-muted-foreground"
+                )}
+              >
+                {count}
+              </span>
+            </button>
+          )
+        })}
       </div>
 
       {error ? (
@@ -317,7 +375,7 @@ export function AssetsPage() {
 
       {/* Upload strip */}
       {canRequest ? (
-        <Card className="flex flex-col gap-3 p-3">
+        <Card className="flex flex-col gap-3 p-4 rounded-2xl border-border bg-card shadow-sm">
           <input
             ref={fileRef}
             type="file"
@@ -472,50 +530,44 @@ export function AssetsPage() {
                   type="button"
                   onClick={() => setSelectedId(id)}
                   className={cn(
-                    "bg-card flex flex-col gap-3 rounded-xl border p-3 text-left transition-colors sm:p-4",
-                    selected && "border-primary bg-primary/5",
+                    "rounded-2xl border p-4 text-left transition-all bg-card shadow-[0_1px_3px_0_rgba(39,0,69,0.08)] flex flex-col justify-between gap-3 group hover:border-primary/40",
+                    selected ? "border-primary ring-2 ring-primary/20 bg-primary/[0.02]" : "border-border"
                   )}
                 >
                   <div className="flex items-start gap-3">
-                    <div className="bg-primary/10 text-primary flex size-10 shrink-0 items-center justify-center rounded-lg">
-                      <FileIcon className="size-4" />
+                    <div className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-surface-alt border border-border text-foreground font-sora font-bold text-xs uppercase">
+                      {asset.fileType ? asset.fileType.slice(0, 3) : "DOC"}
                     </div>
                     <div className="min-w-0 flex-1">
-                      <div className="truncate font-medium">{asset.assetName}</div>
-                      <div className="text-muted-foreground font-mono text-xs">
-                        {asset.assetId}
+                      <div className="font-sora font-semibold text-sm text-foreground truncate group-hover:text-primary transition-colors">
+                        {asset.assetName}
                       </div>
+                      <p className="text-xs text-muted-foreground truncate mt-0.5">
+                        {asset.projectName || "No Project"} · v{asset.version || "1.0"}
+                      </p>
                     </div>
-                    {asset.status ? (
+                    {asset.status && (
                       <Badge
-                        className={cn(
-                          "h-5 shrink-0 capitalize",
-                          statusTone[asset.status] ?? "bg-muted",
-                        )}
+                        variant={
+                          asset.status === "approved"
+                            ? "success"
+                            : asset.status === "in_review"
+                            ? "warning"
+                            : "purple"
+                        }
+                        className="capitalize shrink-0"
                       >
                         {asset.status.replace("_", " ")}
                       </Badge>
-                    ) : null}
+                    )}
                   </div>
-                  <div className="text-muted-foreground grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
-                    <span className="uppercase">{asset.fileType || "—"}</span>
-                    <span className="text-right tabular-nums">
-                      {formatBytes(asset.fileSize)}
-                    </span>
-                    <span>v{asset.version || "—"}</span>
-                    <span className="truncate text-right">
-                      {asset.projectName || asset.projectId || "—"}
-                    </span>
+
+                  <div className="flex items-center justify-between text-xs text-muted-foreground pt-2 border-t border-border">
+                    <span className="font-mono text-[11px]">{formatBytes(asset.fileSize)}</span>
+                    <Badge variant={asset.clientVisible ? "purple" : "gray"} className="text-[10px]">
+                      {asset.clientVisible ? "Shared" : "Internal"}
+                    </Badge>
                   </div>
-                  {asset.tags && asset.tags.length > 0 ? (
-                    <div className="flex flex-wrap gap-1">
-                      {asset.tags.map((tag) => (
-                        <Badge key={tag} variant="outline" className="h-5 font-normal">
-                          {tag}
-                        </Badge>
-                      ))}
-                    </div>
-                  ) : null}
                 </button>
               )
             })}
@@ -536,67 +588,110 @@ export function AssetsPage() {
                 >
                   ← Assets
                 </Button>
-                <Card className="space-y-3 p-4">
+                <Card className="rounded-2xl border border-border bg-card p-5 shadow-lg space-y-4">
                   <div>
-                    <div className="font-medium">{selectedAsset.assetName}</div>
-                    <div className="text-muted-foreground font-mono text-xs">
+                    <h3 className="font-sora font-bold text-base text-foreground truncate">
+                      {selectedAsset.assetName}
+                    </h3>
+                    <p className="text-xs text-muted-foreground font-mono mt-0.5 truncate">
                       {selectedAsset.assetId}
-                    </div>
-                    <div className="text-muted-foreground mt-1 text-xs">
+                    </p>
+                    <div className="flex items-center gap-2 mt-2 flex-wrap">
                       {selectedAsset.projectId ? (
                         <Link
                           to={`/projects/${selectedAsset.projectId}`}
-                          className="text-primary underline-offset-2 hover:underline"
+                          className="text-xs text-primary font-medium hover:underline"
                         >
                           {selectedAsset.projectName || selectedAsset.projectId}
                         </Link>
                       ) : (
-                        (selectedAsset.projectName || "—")
+                        <span className="text-xs text-muted-foreground">
+                          {selectedAsset.projectName || "No project"}
+                        </span>
                       )}
-                      {selectedAsset.status
-                        ? ` · ${selectedAsset.status.replace("_", " ")}`
-                        : ""}
+                      <span className="text-xs text-muted-foreground">· v{selectedAsset.version || "1.0"}</span>
+                      {selectedAsset.status && (
+                        <Badge
+                          variant={
+                            selectedAsset.status === "approved"
+                              ? "success"
+                              : selectedAsset.status === "in_review"
+                              ? "warning"
+                              : "purple"
+                          }
+                          className="capitalize text-[10px]"
+                        >
+                          {selectedAsset.status.replace("_", " ")}
+                        </Badge>
+                      )}
                     </div>
                   </div>
+
                   {selectedAsset.fileUrl ? (
-                    <a
-                      href={fileHref(selectedAsset.fileUrl) || "#"}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="text-primary text-sm underline-offset-2 hover:underline"
-                    >
-                      Open file ({selectedAsset.originalFileName || selectedAsset.fileType})
-                    </a>
+                    <div className="p-3 rounded-xl bg-surface-alt/50 border border-border flex items-center justify-between">
+                      <span className="text-xs font-medium text-foreground truncate mr-2">
+                        {selectedAsset.originalFileName || selectedAsset.assetName}
+                      </span>
+                      <a
+                        href={fileHref(selectedAsset.fileUrl) || "#"}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-xs font-semibold text-primary hover:underline shrink-0"
+                      >
+                        Download ↗
+                      </a>
+                    </div>
                   ) : null}
-                   {canRequest ? (
-                     <div className="flex flex-wrap gap-2">
-                       <Button
-                         size="sm"
-                         disabled={requestBusy || Boolean(pendingAssetId)}
-                         onClick={() => void requestApproval(selectedAsset)}
-                       >
-                         {requestBusy ? <Loader2Icon className="size-3.5 animate-spin" /> : <CheckSquareIcon className="size-3.5" />}
-                         Request approval
-                       </Button>
-                        <Button size="sm" variant="outline" disabled={Boolean(pendingAssetId)} onClick={() => startEditAsset(selectedAsset)}>
-                         <PencilIcon className="size-3.5" />Edit
-                       </Button>
-                       <Button size="sm" variant="destructive" disabled={Boolean(pendingAssetId)} onClick={() => setDeleteTarget(selectedAsset)}>
-                         <Trash2Icon className="size-3.5" />Delete
-                       </Button>
-                     </div>
+
+                  {canRequest ? (
+                    <div className="flex flex-wrap gap-2 pt-2 border-t border-border">
+                      <Button
+                        size="sm"
+                        disabled={requestBusy || Boolean(pendingAssetId)}
+                        onClick={() => void requestApproval(selectedAsset)}
+                        className="bg-[#270045] hover:bg-[#3b006a] text-white"
+                      >
+                        {requestBusy ? (
+                          <Loader2Icon className="size-3.5 animate-spin" />
+                        ) : (
+                          <CheckSquareIcon className="size-3.5" />
+                        )}
+                        Request approval
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={Boolean(pendingAssetId)}
+                        onClick={() => startEditAsset(selectedAsset)}
+                        className="gap-1"
+                      >
+                        <PencilIcon className="size-3.5" />
+                        Edit
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="destructive"
+                        disabled={Boolean(pendingAssetId)}
+                        onClick={() => setDeleteTarget(selectedAsset)}
+                      >
+                        <Trash2Icon className="size-3.5" />
+                      </Button>
+                    </div>
                   ) : null}
+
                   {canRequest && selectedAsset.clientId ? (
-                    <ShareWithClientToggle
-                      clientId={selectedAsset.clientId}
-                      entityType="ASSET"
-                      entityId={assetId(selectedAsset)}
-                      clientVisible={selectedAsset.clientVisible}
-                      onChange={(v) => {
-                        selectedAsset.clientVisible = v
-                        void reloadAssets()
-                      }}
-                    />
+                    <div className="pt-2 border-t border-border">
+                      <ShareWithClientToggle
+                        clientId={selectedAsset.clientId}
+                        entityType="ASSET"
+                        entityId={assetId(selectedAsset)}
+                        clientVisible={selectedAsset.clientVisible}
+                        onChange={(v) => {
+                          selectedAsset.clientVisible = v
+                          void reloadAssets()
+                        }}
+                      />
+                    </div>
                   ) : null}
                   {canRequest ? (
                     <p className="text-muted-foreground text-xs">
@@ -618,8 +713,8 @@ export function AssetsPage() {
                 />
               </div>
             ) : (
-              <Card className="text-muted-foreground p-6 text-center text-sm">
-                Select an asset to view comments
+              <Card className="text-muted-foreground p-8 text-center text-sm rounded-2xl border-border bg-card">
+                Select an asset to view details and comments
               </Card>
             )}
           </div>
