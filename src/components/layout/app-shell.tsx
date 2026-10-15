@@ -87,8 +87,8 @@ export function AppShell({ incidentCount }: { incidentCount?: number }) {
       <SidebarProvider className={fullBleed ? "h-full min-h-0 overflow-hidden" : undefined}>
         <AppSidebar incidentCount={incidentCount} />
         <div className={cn("flex min-h-0 flex-1 flex-col", fullBleed && "h-full overflow-hidden")}>
-          <header className="bg-card sticky top-0 z-50 border-b shrink-0">
-            <div className="mx-auto flex max-w-7xl items-center justify-between gap-6 px-4 py-2 sm:px-6">
+          <header className="bg-card sticky top-0 z-50 border-b border-border shrink-0 shadow-sm">
+            <div className="mx-auto flex max-w-7xl items-center justify-between gap-6 px-4 py-2.5 sm:px-6">
               <div className="flex items-center gap-4">
                 <SidebarTrigger className="[&_svg]:size-5!" />
                 <Separator
@@ -98,7 +98,9 @@ export function AppShell({ incidentCount }: { incidentCount?: number }) {
                 <Breadcrumb className="hidden sm:block">
                   <BreadcrumbList>
                     <BreadcrumbItem>
-                      <BreadcrumbLink render={<Link to="/" />}>Cosmos OS</BreadcrumbLink>
+                      <BreadcrumbLink render={<Link to="/" />}>
+                        <span className="font-sora font-semibold text-primary">Cosmos OS</span>
+                      </BreadcrumbLink>
                     </BreadcrumbItem>
                     <BreadcrumbSeparator />
                     <BreadcrumbItem>
@@ -107,7 +109,7 @@ export function AppShell({ incidentCount }: { incidentCount?: number }) {
                   </BreadcrumbList>
                 </Breadcrumb>
                 {/* Compact title on small screens (breadcrumb is hidden) */}
-                <h1 className="truncate text-sm font-medium sm:hidden">{pageTitle}</h1>
+                <h1 className="truncate text-sm font-semibold font-sora sm:hidden">{pageTitle}</h1>
               </div>
               <div className="flex items-center gap-1">
                 <GlobalSearch />
@@ -118,7 +120,9 @@ export function AppShell({ incidentCount }: { incidentCount?: number }) {
                     render={
                       <Button variant="ghost" size="icon-lg">
                         <Avatar className="size-[inherit] rounded-[inherit] after:rounded-[inherit]">
-                          <AvatarFallback className="rounded-[inherit]">{initials}</AvatarFallback>
+                          <AvatarFallback className="rounded-[inherit] bg-primary/10 text-primary text-xs font-bold font-sora">
+                            {initials}
+                          </AvatarFallback>
                         </Avatar>
                       </Button>
                     }
@@ -127,7 +131,7 @@ export function AppShell({ incidentCount }: { incidentCount?: number }) {
                     <DropdownMenuGroup>
                       <DropdownMenuItem disabled>
                         <div className="flex flex-col">
-                          <span className="font-medium">{user?.name}</span>
+                          <span className="font-semibold font-sora">{user?.name}</span>
                           <span className="text-muted-foreground text-xs">{user?.email}</span>
                           <span className="text-muted-foreground text-xs capitalize">
                             {roleLabel(user?.role || "user")}
@@ -146,6 +150,13 @@ export function AppShell({ incidentCount }: { incidentCount?: number }) {
                 </DropdownMenu>
               </div>
             </div>
+            {/* Neon Studio signature gradient accent line */}
+            <div
+              className="h-[2px] w-full"
+              style={{
+                background: "linear-gradient(90deg, oklch(55% 0.2 255), oklch(48% 0.23 295), oklch(58% 0.24 350), oklch(68% 0.18 50))",
+              }}
+            />
           </header>
           <ShellMain fullBleed={fullBleed}>
             <Outlet />

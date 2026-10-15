@@ -1,76 +1,96 @@
+@import url('https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700&display=swap');
 @import "tailwindcss";
 @import "tw-animate-css";
-@import "@fontsource-variable/geist";
 
 @custom-variant dark (&:is(.dark *));
 
 :root {
-  --radius: 0.625rem;
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
+  --radius: 0.75rem;
+  /* Neon Studio Light Mode */
+  --background: oklch(97% 0.008 295);
+  --surface: oklch(100% 0 0);
+  --surface-alt: oklch(94% 0.02 295);
+  --foreground: oklch(20% 0.045 285);
+  --card: oklch(100% 0 0);
+  --card-foreground: oklch(20% 0.045 285);
+  --popover: oklch(100% 0 0);
+  --popover-foreground: oklch(20% 0.045 285);
+  --primary: oklch(50% 0.23 295);
+  --primary-foreground: oklch(99% 0.005 295);
+  --secondary: oklch(94% 0.02 295);
+  --secondary-foreground: oklch(20% 0.045 285);
+  --muted: oklch(94% 0.02 295);
+  --muted-foreground: oklch(45% 0.035 285);
+  --accent: oklch(94% 0.02 295);
+  --accent-foreground: oklch(20% 0.045 285);
+  --destructive: oklch(55% 0.22 25);
+  --border: oklch(88% 0.02 295);
+  --input: oklch(88% 0.02 295);
+  --ring: oklch(50% 0.23 295);
+  /* Semantic colors */
+  --success: oklch(55% 0.15 160);
+  --warning: oklch(70% 0.16 75);
+  --ns-pink: oklch(60% 0.24 350);
+  --ns-orange: oklch(68% 0.18 50);
+  --ns-blue: oklch(55% 0.2 255);
+  /* Sidebar (always dark) */
+  --sidebar: #0f0b1a;
+  --sidebar-foreground: rgba(255,255,255,0.65);
+  --sidebar-primary: #7a5cc2;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: rgba(255,255,255,0.06);
+  --sidebar-accent-foreground: #ffffff;
+  --sidebar-border: rgba(255,255,255,0.06);
+  --sidebar-ring: #7a5cc2;
+  /* Charts */
   --chart-1: oklch(0.646 0.222 41.116);
   --chart-2: oklch(0.6 0.118 184.704);
   --chart-3: oklch(0.398 0.07 227.392);
   --chart-4: oklch(0.828 0.189 84.429);
   --chart-5: oklch(0.769 0.188 70.08);
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
 }
 
 .dark {
-  --background: #060110;
-  --foreground: #EDE9F7;
-  --card: #0d0620;
-  --card-foreground: #EDE9F7;
-  --popover: #0d0620;
-  --popover-foreground: #EDE9F7;
-  --primary: #6E28FF;
-  --primary-foreground: #FFFFFF;
-  --secondary: #140b2a;
-  --secondary-foreground: #EDE9F7;
-  --muted: #140b2a;
-  --muted-foreground: #7E769B;
-  --accent: #9664FF;
-  --accent-foreground: #FFFFFF;
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: #241a42;
-  --input: #241a42;
-  --ring: #6E28FF;
-  --chart-1: #6E28FF;
-  --chart-2: #BE46FF;
-  --chart-3: #0088FF;
-  --chart-4: #63D516;
-  --chart-5: #FF9500;
-  --sidebar: #0d0620;
-  --sidebar-foreground: #B3ABC9;
-  --sidebar-primary: #6E28FF;
-  --sidebar-primary-foreground: #FFFFFF;
-  --sidebar-accent: #140b2a;
-  --sidebar-accent-foreground: #EDE9F7;
-  --sidebar-border: #241a42;
-  --sidebar-ring: #6E28FF;
+  /* Neon Studio Dark Mode */
+  --background: oklch(15% 0.035 285);
+  --surface: oklch(20% 0.045 285);
+  --surface-alt: oklch(25% 0.055 285);
+  --foreground: oklch(96% 0.01 295);
+  --card: oklch(20% 0.045 285);
+  --card-foreground: oklch(96% 0.01 295);
+  --popover: oklch(20% 0.045 285);
+  --popover-foreground: oklch(96% 0.01 295);
+  --primary: oklch(72% 0.17 295);
+  --primary-foreground: oklch(16% 0.04 285);
+  --secondary: oklch(25% 0.055 285);
+  --secondary-foreground: oklch(96% 0.01 295);
+  --muted: oklch(25% 0.055 285);
+  --muted-foreground: oklch(74% 0.03 290);
+  --accent: oklch(25% 0.055 285);
+  --accent-foreground: oklch(96% 0.01 295);
+  --destructive: oklch(70% 0.19 25);
+  --border: oklch(32% 0.05 285);
+  --input: oklch(32% 0.05 285);
+  --ring: oklch(72% 0.17 295);
+  --success: oklch(76% 0.16 160);
+  --warning: oklch(82% 0.14 80);
+  --ns-pink: oklch(72% 0.19 350);
+  --ns-orange: oklch(78% 0.15 55);
+  --ns-blue: oklch(72% 0.15 250);
+  /* Sidebar stays dark in both modes */
+  --sidebar: #0f0b1a;
+  --sidebar-foreground: rgba(255,255,255,0.65);
+  --sidebar-primary: #7a5cc2;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: rgba(255,255,255,0.06);
+  --sidebar-accent-foreground: #ffffff;
+  --sidebar-border: rgba(255,255,255,0.06);
+  --sidebar-ring: #7a5cc2;
+  --chart-1: oklch(0.646 0.222 41.116);
+  --chart-2: oklch(0.6 0.118 184.704);
+  --chart-3: oklch(0.398 0.07 227.392);
+  --chart-4: oklch(0.828 0.189 84.429);
+  --chart-5: oklch(0.769 0.188 70.08);
 }
 
 /* Premium dashboard card & widget styling overrides */
@@ -94,12 +114,16 @@
 }
 
 @theme inline {
-  --font-sans: "Geist Variable", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: 'Inter', ui-sans-serif, system-ui, sans-serif;
+  --font-sora: 'Sora', ui-sans-serif, system-ui, sans-serif;
   --radius-sm: calc(var(--radius) * 0.6);
   --radius-md: calc(var(--radius) * 0.8);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 2);
   --color-background: var(--background);
+  --color-surface: var(--surface);
+  --color-surface-alt: var(--surface-alt);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
   --color-card-foreground: var(--card-foreground);
@@ -117,6 +141,11 @@
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-ns-pink: var(--ns-pink);
+  --color-ns-orange: var(--ns-orange);
+  --color-ns-blue: var(--ns-blue);
   --color-chart-1: var(--chart-1);
   --color-chart-2: var(--chart-2);
   --color-chart-3: var(--chart-3);
@@ -138,8 +167,34 @@
   }
 
   body {
-    @apply bg-background text-foreground font-sans antialiased;
+    @apply bg-background text-foreground antialiased;
+    font-family: 'Inter', ui-sans-serif, system-ui, sans-serif;
   }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: 'Sora', ui-sans-serif, system-ui, sans-serif;
+  }
+}
+
+/* ── Neon Studio Utility Classes ─────────────────────────── */
+/* Multicolor brand gradient — progress bars, timeline, budget */
+.gradient-brand {
+  background: linear-gradient(115deg, oklch(48% 0.23 295), oklch(58% 0.24 350), oklch(68% 0.18 50));
+}
+/* Top-bar signature accent line */
+.gradient-topbar {
+  background: linear-gradient(90deg, oklch(55% 0.2 255), oklch(48% 0.23 295), oklch(58% 0.24 350), oklch(68% 0.18 50));
+}
+/* Card soft shadow */
+.card-shadow {
+  box-shadow: 0 1px 3px 0 rgba(39,0,69,0.08), 0 0 0 1px var(--border);
+}
+.dark .card-shadow {
+  box-shadow: 0 1px 8px 0 rgba(39,0,69,0.5), 0 0 0 1px var(--border);
+}
+/* Sora font helper */
+.font-sora {
+  font-family: 'Sora', ui-sans-serif, system-ui, sans-serif;
 }
 
 /* Astra Black Design System Custom Properties */
