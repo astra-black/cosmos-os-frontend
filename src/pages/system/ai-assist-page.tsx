@@ -35,6 +35,7 @@ type Msg = {
   at: number
   links?: { label: string; href: string }[]
   proposedAction?: AiAction
+  suggestions?: string[]
 }
 
 const MODES: {
@@ -217,7 +218,7 @@ export function AiAssistPage() {
     try {
       const res = await aiAssist(q, mode, undefined, selection)
       const data = res.data as
-        | { reply?: string; provider?: string; links?: { label: string; href: string }[]; proposedAction?: AiAction }
+        | { reply?: string; provider?: string; links?: { label: string; href: string }[]; proposedAction?: AiAction; suggestions?: string[] }
         | undefined
       setMessages((m) => [
         ...m,
@@ -230,6 +231,7 @@ export function AiAssistPage() {
           at: Date.now(),
           links: data?.links,
           proposedAction: data?.proposedAction,
+          suggestions: data?.suggestions,
         },
       ])
     } catch (err) {
@@ -288,7 +290,8 @@ export function AiAssistPage() {
     }
   }
 
-  const suggestions = PROMPTS[mode]
+  const latestAssistantMsg = [...messages].reverse().find((m) => m.role === "assistant" && m.suggestions && m.suggestions.length > 0)
+  const suggestions = latestAssistantMsg?.suggestions?.length ? latestAssistantMsg.suggestions : PROMPTS[mode]
   const showEmptyHints = messages.length <= 1 && !pending
 
   return (
@@ -537,6 +540,24 @@ export function AiAssistPage() {
                           >
                             {l.label} →
                           </Link>
+                        ))}
+                      </div>
+                    ) : null}
+
+                    {/* Interactive suggestions pills */}
+                    {m.suggestions && m.suggestions.length > 0 ? (
+                      <div className="mt-3 flex flex-wrap items-center gap-1.5 pt-2 border-t border-border/40">
+                        <span className="text-[11px] font-medium text-muted-foreground mr-1">Suggestions:</span>
+                        {m.suggestions.map((s, idx) => (
+                          <button
+                            key={idx}
+                            type="button"
+                            disabled={pending}
+                            onClick={() => void send(s)}
+                            className="rounded-full bg-surface-alt hover:bg-primary/15 hover:text-primary hover:border-primary/40 border border-border px-2.5 py-1 text-xs transition-all flex items-center gap-1 text-foreground font-medium shadow-2xs"
+                          >
+                            <span>{s}</span>
+                          </button>
                         ))}
                       </div>
                     ) : null}

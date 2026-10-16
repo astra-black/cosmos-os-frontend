@@ -199,8 +199,8 @@ export type AiAction =
   | { type: "create_opportunity"; name: string; clientId?: string; clientName?: string; value?: number; stage?: "lead" | "qualified" | "proposal" | "negotiation" | "won" | "lost"; nextStep?: string; notes?: string; summary?: string }
   | { type: "create_incident"; title: string; eventId?: string; eventName?: string; severity?: "critical" | "warning" | "info"; description?: string; summary?: string }
   | { type: "create_approval"; title: string; projectId?: string; projectName?: string; priority?: "low" | "medium" | "high" | "urgent"; notes?: string; summary?: string }
-  | { type: "update_task"; taskId: string; title?: string; status?: "todo" | "in_progress" | "review" | "done" | "blocked"; priority?: "low" | "medium" | "high" | "urgent"; dueDate?: string | null; description?: string; summary?: string }
-  | { type: "delete_task"; taskId: string; summary?: string }
+  | { type: "update_task"; taskId?: string; taskTitle?: string; title?: string; status?: "todo" | "in_progress" | "review" | "done" | "blocked"; priority?: "low" | "medium" | "high" | "urgent"; dueDate?: string | null; description?: string; summary?: string }
+  | { type: "delete_task"; taskId?: string; taskTitle?: string; summary?: string }
   | { type: "update_client"; clientId: string; name?: string; stage?: string; health?: string; notes?: string; summary?: string }
   | { type: "delete_client"; clientId: string; summary?: string }
   | { type: "update_vendor"; vendorId: string; name?: string; status?: "preferred" | "active" | "trial" | "inactive"; category?: string; notes?: string; summary?: string }
@@ -212,6 +212,7 @@ export type AiAssistData = {
   proposedAction?: AiAction
   actionResult?: unknown
   links?: { label: string; href: string }[]
+  suggestions?: string[]
 }
 
 export type AiRecordSelection = {
