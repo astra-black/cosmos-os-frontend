@@ -29,6 +29,34 @@ import { canPerform } from "@/lib/rbac"
 
 const ROLES = ["admin", "pm", "producer", "ops", "creative", "client"] as const
 
+function getAvatarColor(name: string) {
+  let hash = 0
+  for (let i = 0; i < name.length; i++) {
+    hash = name.charCodeAt(i) + ((hash << 5) - hash)
+  }
+  const h = Math.abs(hash) % 360
+  return `hsl(${h}, 65%, 45%)`
+}
+
+function getRoleBadgeClass(role: string) {
+  switch (role) {
+    case "admin":
+      return "bg-primary/15 text-primary"
+    case "pm":
+      return "bg-blue/15 text-blue"
+    case "producer":
+      return "bg-[#7a5cc2]/15 text-[#7a5cc2]"
+    case "ops":
+      return "bg-warning/15 text-warning"
+    case "creative":
+      return "bg-pink-500/15 text-pink-500"
+    case "client":
+      return "bg-muted text-muted-foreground"
+    default:
+      return "bg-surface-alt text-muted-foreground"
+  }
+}
+
 export function TeamsPage() {
   const { user } = useAuth()
   const canManageTeam = canPerform(user?.role, "manage_team")
@@ -146,7 +174,7 @@ export function TeamsPage() {
               resetInviteModal()
               setInviteOpen(true)
             }}
-            className="gap-2 shrink-0"
+            className="gap-2 shrink-0 bg-[#270045] hover:bg-[#3b0066] text-white"
           >
             <UserPlusIcon className="size-4" />
             Invite Member
@@ -158,50 +186,71 @@ export function TeamsPage() {
         <Card className="border-destructive/40 text-destructive px-4 py-3 text-sm">{error}</Card>
       ) : null}
 
-      <div className="bg-card flex flex-wrap items-center gap-x-6 gap-y-2 rounded-xl border px-4 py-3 text-sm">
-        <span>
-          <span className="text-muted-foreground">People </span>
-          <span className="font-semibold tabular-nums">{members.length}</span>
-        </span>
-        <span>
-          <span className="text-muted-foreground">Active </span>
-          <span className="font-semibold tabular-nums">
-            {members.filter((m) => m.status === "active").length}
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <div className="rounded-xl border border-border bg-card p-4 flex flex-col gap-1 shadow-[0_1px_3px_0_rgba(39,0,69,0.08)]">
+          <span className="text-xs text-muted-foreground uppercase tracking-wider">Total</span>
+          <span className="font-sora font-bold text-2xl text-foreground">{members.length}</span>
+        </div>
+        <div className="rounded-xl border border-border bg-card p-4 flex flex-col gap-1 shadow-[0_1px_3px_0_rgba(39,0,69,0.08)]">
+          <span className="text-xs text-muted-foreground uppercase tracking-wider">Admins</span>
+          <span className="font-sora font-bold text-2xl text-foreground">
+            {members.filter((m) => m.role === "admin").length}
           </span>
-        </span>
-        <span>
-          <span className="text-muted-foreground">Teams </span>
-          <span className="font-semibold tabular-nums">{teams.length}</span>
-        </span>
+        </div>
+        <div className="rounded-xl border border-border bg-card p-4 flex flex-col gap-1 shadow-[0_1px_3px_0_rgba(39,0,69,0.08)]">
+          <span className="text-xs text-muted-foreground uppercase tracking-wider">PMs</span>
+          <span className="font-sora font-bold text-2xl text-foreground">
+            {members.filter((m) => m.role === "pm").length}
+          </span>
+        </div>
+        <div className="rounded-xl border border-border bg-card p-4 flex flex-col gap-1 shadow-[0_1px_3px_0_rgba(39,0,69,0.08)]">
+          <span className="text-xs text-muted-foreground uppercase tracking-wider">Active</span>
+          <span className="font-sora font-bold text-2xl text-success">
+            {members.filter((m) => m.status === "active" && m.role !== "client").length}
+          </span>
+        </div>
       </div>
 
-      <div className="flex flex-wrap gap-1">
-        <Button
-          size="sm"
-          variant={teamFilter === "all" ? "default" : "outline"}
-          className="rounded-full"
-          onClick={() => setTeamFilter("all")}
-        >
-          All teams
-        </Button>
-        {teams.map((t) => (
-          <Button
-            key={t}
-            size="sm"
-            variant={teamFilter === t ? "default" : "outline"}
-            className="rounded-full"
-            onClick={() => setTeamFilter(t!)}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="text-sm text-muted-foreground">
+          Showing <span className="font-semibold text-foreground">{filtered.length}</span> {filtered.length === 1 ? "member" : "members"}
+        </div>
+        <div className="flex flex-wrap gap-1.5">
+          <button
+            type="button"
+            className={cn(
+              "rounded-full px-3 py-1 text-xs font-medium transition-colors",
+              teamFilter === "all"
+                ? "bg-[#270045] text-white border border-[#270045]"
+                : "border border-border bg-transparent text-foreground hover:bg-surface-alt"
+            )}
+            onClick={() => setTeamFilter("all")}
           >
-            {t}
-          </Button>
-        ))}
+            All teams
+          </button>
+          {teams.map((t) => (
+            <button
+              key={t}
+              type="button"
+              className={cn(
+                "rounded-full px-3 py-1 text-xs font-medium transition-colors",
+                teamFilter === t
+                  ? "bg-[#270045] text-white border border-[#270045]"
+                  : "border border-border bg-transparent text-foreground hover:bg-surface-alt"
+              )}
+              onClick={() => setTeamFilter(t!)}
+            >
+              {t}
+            </button>
+          ))}
+        </div>
       </div>
 
       {loading ? (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          <Skeleton className="h-32 rounded-xl" />
-          <Skeleton className="h-32 rounded-xl" />
-          <Skeleton className="h-32 rounded-xl" />
+          <Skeleton className="h-28 rounded-xl" />
+          <Skeleton className="h-28 rounded-xl" />
+          <Skeleton className="h-28 rounded-xl" />
         </div>
       ) : filtered.length === 0 ? (
         <EmptyState icon={<UsersIcon className="size-8 opacity-40" />} title="No members" />
@@ -215,39 +264,59 @@ export function TeamsPage() {
               .slice(0, 2)
               .toUpperCase()
             return (
-              <Card key={member.memberId} className="flex flex-col gap-3 p-4">
-                <div className="flex items-start gap-3">
-                  <Avatar>
-                    <AvatarFallback>{initials}</AvatarFallback>
-                  </Avatar>
-                  <div className="min-w-0 flex-1">
-                    <div className="font-medium">{member.name}</div>
-                    <div className="text-muted-foreground truncate text-xs">{member.email}</div>
-                    <div className="text-muted-foreground mt-0.5 text-xs">{member.title}</div>
+              <div
+                key={member.memberId}
+                className="rounded-xl border border-border bg-card p-4 flex items-center gap-4 shadow-[0_1px_3px_0_rgba(39,0,69,0.08)]"
+              >
+                <div
+                  className="size-11 rounded-full flex items-center justify-center text-white font-sora font-semibold text-sm shrink-0 shadow-xs"
+                  style={{ backgroundColor: getAvatarColor(member.name) }}
+                >
+                  {initials}
+                </div>
+
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <span className="font-sora font-semibold text-sm text-foreground truncate">
+                      {member.name}
+                    </span>
+                    {member.status === "invited" ? (
+                      <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-warning/15 text-warning shrink-0">
+                        Invited
+                      </span>
+                    ) : null}
                   </div>
-                  <Badge
-                    variant="secondary"
-                    className={cn(
-                      "capitalize",
-                      member.status === "invited" && "opacity-70",
-                    )}
-                  >
-                    {member.status}
-                  </Badge>
+                  <div className="text-muted-foreground truncate text-xs mt-0.5">
+                    {member.title ? `${member.title} · ` : ""}{member.team || "No team"}
+                  </div>
+                  <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                    <span
+                      className={cn(
+                        "rounded-full px-2 py-0.5 text-[11px] font-medium capitalize inline-flex items-center gap-1",
+                        getRoleBadgeClass(member.role)
+                      )}
+                    >
+                      <ShieldIcon className="size-2.5" />
+                      {member.role}
+                    </span>
+                    <span className="text-[11px] text-muted-foreground truncate font-mono">
+                      {member.email}
+                    </span>
+                  </div>
                 </div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <Badge variant="outline">{member.team || "—"}</Badge>
-                  <Badge className="gap-1 capitalize">
-                    <ShieldIcon className="size-3" />
-                    {member.role}
-                  </Badge>
-                </div>
+
                 {canManageTeam ? (
-                  <Button size="sm" variant="outline" onClick={() => cycleRole(member)}>
-                    Cycle role
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="text-xs text-muted-foreground hover:text-foreground shrink-0 h-8 px-2 hover:bg-surface-alt"
+                    onClick={() => cycleRole(member)}
+                    title="Cycle role"
+                  >
+                    Cycle
                   </Button>
                 ) : null}
-              </Card>
+              </div>
             )
           })}
         </div>

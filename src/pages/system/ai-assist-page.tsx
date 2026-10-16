@@ -292,19 +292,22 @@ export function AiAssistPage() {
   const showEmptyHints = messages.length <= 1 && !pending
 
   return (
-    <div className="mx-auto grid h-[calc(100dvh-8rem)] w-full max-w-7xl gap-4 lg:grid-cols-[280px_minmax(0,1fr)]">
-      <Card className="hidden min-h-0 flex-col gap-4 p-4 lg:flex">
-        <div className="flex items-center gap-3">
-          <div className="bg-primary text-primary-foreground flex size-10 shrink-0 items-center justify-center rounded-xl">
+    <div className="flex gap-4 h-[calc(100vh-5.5rem)]">
+      {/* Left context rail */}
+      <div className="hidden lg:flex w-52 shrink-0 flex-col gap-3">
+        {/* Header card */}
+        <div className="rounded-xl border border-border bg-card p-4 flex items-center gap-3 shadow-[0_1px_3px_0_rgba(39,0,69,0.08)]">
+          <div className="size-9 rounded-xl bg-gradient-to-tr from-[#270045] to-[#7a5cc2] flex items-center justify-center text-white shrink-0">
             <SparkOrbit className="size-5" />
           </div>
           <div className="min-w-0">
-            <h1 className="truncate text-lg font-semibold tracking-tight">Astrid</h1>
-            <p className="text-muted-foreground text-xs">Agency intelligence hub</p>
+            <h1 className="font-sora font-semibold text-base leading-tight truncate">Astrid</h1>
+            <p className="text-[11px] text-muted-foreground truncate">Agency Intelligence</p>
           </div>
         </div>
 
-        <div className="grid gap-2">
+        {/* Mode buttons */}
+        <div className="rounded-xl border border-border bg-card p-2 flex flex-col gap-1 shadow-[0_1px_3px_0_rgba(39,0,69,0.08)]">
           {MODES.map((m) => {
             const Icon = m.icon
             const active = mode === m.id
@@ -314,104 +317,34 @@ export function AiAssistPage() {
                 type="button"
                 onClick={() => switchMode(m.id)}
                 className={cn(
-                  "flex items-center gap-3 rounded-xl border px-3 py-3 text-left transition-colors",
+                  "flex items-center gap-2.5 px-3 py-2 text-xs font-medium text-left transition-colors",
                   active
-                    ? "border-primary bg-primary text-primary-foreground"
-                    : "border-border bg-background hover:bg-muted/60",
+                    ? "bg-[#270045] text-white rounded-xl"
+                    : "text-muted-foreground hover:bg-surface-alt rounded-xl"
                 )}
               >
                 <Icon className="size-4 shrink-0" />
-                <span className="min-w-0">
-                  <span className="block truncate text-sm font-medium">{m.label}</span>
-                  <span className={cn("block truncate text-xs", active ? "text-primary-foreground/75" : "text-muted-foreground")}>
-                    {m.hint}
-                  </span>
-                </span>
+                <span className="truncate">{m.label}</span>
               </button>
             )
           })}
         </div>
 
-        <div className="mt-auto rounded-xl border bg-muted/30 p-3">
-          <div className="mb-2 flex items-center gap-2 text-xs font-semibold">
-            <PanelLeftIcon className="size-3.5" />
-            Prompt library
-          </div>
-          <div className="grid gap-1.5">
-            {suggestions.map((s) => (
+        {/* Context selector card */}
+        <div className="rounded-xl border border-border bg-card p-3 flex flex-col gap-2.5 shadow-[0_1px_3px_0_rgba(39,0,69,0.08)] overflow-y-auto max-h-[45vh]">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold text-foreground">Scope Context</span>
+            {Object.keys(selection).length > 0 && (
               <button
-                key={s}
                 type="button"
-                disabled={pending}
-                onClick={() => void send(s)}
-                className="hover:bg-background rounded-lg px-2.5 py-2 text-left text-xs leading-snug transition-colors"
+                onClick={() => setSelection({})}
+                className="text-[10px] text-muted-foreground hover:text-foreground"
               >
-                {s}
+                Clear
               </button>
-            ))}
+            )}
           </div>
-        </div>
-      </Card>
-
-      <div className="flex min-h-0 flex-col gap-3">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-          <div className="flex items-start gap-3 lg:hidden">
-            <div className="bg-primary/10 text-primary flex size-10 shrink-0 items-center justify-center rounded-xl ring-1 ring-white/10">
-              <SparkOrbit className="size-5" />
-            </div>
-            <div className="min-w-0">
-              <h1 className="text-xl font-semibold tracking-tight sm:text-2xl">Astrid</h1>
-              <p className="text-muted-foreground text-sm">Agency intelligence hub</p>
-            </div>
-          </div>
-          <div className="hidden min-w-0 lg:block">
-            <h1 className="text-2xl font-semibold tracking-tight">AI command center</h1>
-            <p className="text-muted-foreground text-sm">
-              Ask across live ops, CRM, delivery, and finance without leaving the workspace.
-            </p>
-          </div>
-          <Button size="sm" variant="outline" className="w-fit" onClick={clearChat}>
-            <RotateCcwIcon className="size-3.5" />
-            Clear
-          </Button>
-        </div>
-
-        <div className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-0.5 lg:hidden">
-          {MODES.map((m) => {
-            const Icon = m.icon
-            const active = mode === m.id
-            return (
-              <button
-                key={m.id}
-                type="button"
-                onClick={() => switchMode(m.id)}
-                className={cn(
-                  "flex shrink-0 items-center gap-2 rounded-full border px-3 py-1.5 text-left text-xs transition-colors",
-                  active
-                    ? "border-primary bg-primary text-primary-foreground"
-                    : "border-border bg-card text-muted-foreground hover:bg-muted/60 hover:text-foreground",
-                )}
-              >
-                <Icon className="size-3.5 shrink-0" />
-                <span className="font-medium">{m.label}</span>
-              </button>
-            )
-          })}
-        </div>
-
-        <Card className="border-border/80 p-3 sm:p-4">
-          <div className="mb-2 flex items-center justify-between gap-3">
-            <div>
-              <p className="text-sm font-semibold">Scope this conversation</p>
-              <p className="text-muted-foreground text-xs">
-                Selected records are sent as trusted IDs so AI can read or propose changes to the right records.
-              </p>
-            </div>
-            <Button size="sm" variant="ghost" onClick={() => setSelection({})} disabled={!Object.keys(selection).length}>
-              Clear
-            </Button>
-          </div>
-          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="flex flex-col gap-2">
             <RecordSelect
               label="Project"
               value={selection.projectId}
@@ -467,63 +400,140 @@ export function AiAssistPage() {
               }}
             />
           </div>
-        </Card>
+        </div>
 
-      <Card className="border-border/80 flex min-h-0 flex-1 flex-col overflow-hidden p-0 shadow-sm">
+        {/* Clear chat button at bottom */}
+        <Button
+          variant="outline"
+          size="sm"
+          className="w-full mt-auto rounded-xl gap-2 border-border text-muted-foreground hover:text-foreground"
+          onClick={clearChat}
+        >
+          <RotateCcwIcon className="size-3.5" />
+          Clear chat
+        </Button>
+      </div>
+
+      {/* Main chat */}
+      <div className="flex flex-1 flex-col rounded-xl border border-border bg-card overflow-hidden shadow-[0_1px_3px_0_rgba(39,0,69,0.08)]">
+        {/* Top bar */}
+        <div className="border-b border-border px-4 py-3 flex items-center justify-between gap-3 bg-surface-alt/30 shrink-0">
+          <div className="flex items-center gap-2.5">
+            <div className="size-7 rounded-full bg-gradient-to-tr from-[#270045] to-[#7a5cc2] flex items-center justify-center text-white shrink-0">
+              <SparkOrbit className="size-4" />
+            </div>
+            <div>
+              <span className="font-sora font-semibold text-sm text-foreground">
+                {MODES.find((m) => m.id === mode)?.label}
+              </span>
+              <span className="text-muted-foreground text-xs ml-2 hidden sm:inline">
+                · {MODES.find((m) => m.id === mode)?.hint}
+              </span>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button
+              size="sm"
+              variant="ghost"
+              className="text-xs text-muted-foreground hover:text-foreground h-8 gap-1.5"
+              onClick={clearChat}
+            >
+              <RotateCcwIcon className="size-3.5" />
+              Clear
+            </Button>
+          </div>
+        </div>
+
+        {/* Mobile mode switcher pills */}
+        <div className="flex gap-1.5 overflow-x-auto p-2 border-b border-border lg:hidden shrink-0 bg-card">
+          {MODES.map((m) => {
+            const Icon = m.icon
+            const active = mode === m.id
+            return (
+              <button
+                key={m.id}
+                type="button"
+                onClick={() => switchMode(m.id)}
+                className={cn(
+                  "flex shrink-0 items-center gap-1.5 rounded-full px-2.5 py-1 text-xs transition-colors",
+                  active
+                    ? "bg-[#270045] text-white"
+                    : "border border-border text-muted-foreground hover:bg-surface-alt hover:text-foreground"
+                )}
+              >
+                <Icon className="size-3 shrink-0" />
+                <span>{m.label}</span>
+              </button>
+            )
+          })}
+        </div>
+
+        {/* Scroller */}
         <div
           ref={scrollerRef}
-          className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-3 py-4 sm:px-5 sm:py-5"
+          className="flex-1 overflow-y-auto p-4 space-y-4"
         >
           {messages.map((m) => {
             const isUser = m.role === "user"
-            return (
-              <div
-                key={m.id}
-                className={cn("flex gap-2.5", isUser ? "flex-row-reverse" : "flex-row")}
-              >
-                {!isUser ? (
-                  <div className="bg-muted text-foreground mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-full ring-1 ring-white/10">
-                    <SparkOrbit className="size-4" />
+            if (isUser) {
+              return (
+                <div key={m.id} className="flex flex-col items-end">
+                  <div className="bg-[#270045] text-white rounded-2xl rounded-tr-sm px-4 py-3 max-w-[80%] text-sm leading-relaxed whitespace-pre-wrap ml-auto">
+                    {renderText(m.text)}
                   </div>
-                ) : null}
-                <div
-                  className={cn(
-                    "group relative max-w-[min(100%,28rem)] sm:max-w-[min(100%,32rem)]",
-                    isUser && "items-end",
-                  )}
-                >
-                  <div
-                    className={cn(
-                      "rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed",
-                      isUser
-                        ? "bg-primary text-primary-foreground rounded-br-md"
-                        : "bg-muted/80 text-foreground rounded-bl-md ring-1 ring-border/50",
-                    )}
-                  >
+                  <div className="text-muted-foreground mt-1 text-[10px] px-1">
+                    {new Date(m.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                  </div>
+                </div>
+              )
+            }
+
+            return (
+              <div key={m.id} className="flex items-start gap-2.5 group">
+                <div className="h-6 w-6 rounded-full bg-gradient-to-tr from-[#270045] to-[#7a5cc2] flex items-center justify-center text-white shrink-0 mt-0.5">
+                  <SparkOrbit className="size-3.5" />
+                </div>
+                <div className="flex flex-col gap-1 max-w-[85%]">
+                  <div className="bg-surface border border-border rounded-2xl rounded-tl-sm px-4 py-3 text-sm leading-relaxed text-foreground">
                     <div className="whitespace-pre-wrap">{renderText(m.text)}</div>
+
+                    {/* Proposed action card */}
                     {m.proposedAction ? (
-                      <div className="mt-3 rounded-xl border bg-background/70 p-3">
-                        <p className="text-xs font-semibold">Ready to do this?</p>
+                      <div className="mt-3 rounded-xl border border-primary/30 bg-primary/5 p-3">
+                        <p className="text-xs font-semibold text-foreground">Proposed Action</p>
                         <p className="text-muted-foreground mt-1 text-xs">
                           {m.proposedAction.summary || actionDescription(m.proposedAction)}
                         </p>
-                        <div className="mt-2 flex gap-2">
-                          <Button size="sm" disabled={pending} onClick={() => void confirmAction(m.id, m.proposedAction!)}>
+                        <div className="mt-2.5 flex items-center gap-2">
+                          <Button
+                            size="sm"
+                            className="bg-[#270045] hover:bg-[#3b0066] text-white h-7 text-xs px-3"
+                            disabled={pending}
+                            onClick={() => void confirmAction(m.id, m.proposedAction!)}
+                          >
                             Confirm
                           </Button>
-                          <Button size="sm" variant="outline" disabled={pending} onClick={() => dismissAction(m.id)}>
-                            Dismiss
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-7 text-xs px-3 border-border"
+                            disabled={pending}
+                            onClick={() => dismissAction(m.id)}
+                          >
+                            Reject
                           </Button>
                         </div>
                       </div>
                     ) : null}
-                    {m.links && m.links.length > 0 && !isUser ? (
+
+                    {/* Link pills */}
+                    {m.links && m.links.length > 0 ? (
                       <div className="mt-2.5 flex flex-wrap gap-1.5">
                         {m.links.map((l) => (
                           <Link
                             key={l.href}
                             to={l.href}
-                            className="bg-background/60 hover:bg-background inline-flex rounded-full border px-2.5 py-0.5 text-[11px] font-medium transition-colors"
+                            className="rounded-full bg-surface-alt border border-border px-3 py-1 text-xs hover:bg-primary/10 hover:text-primary transition-colors"
                           >
                             {l.label} →
                           </Link>
@@ -531,33 +541,24 @@ export function AiAssistPage() {
                       </div>
                     ) : null}
                   </div>
-                  <div
-                    className={cn(
-                      "text-muted-foreground mt-1 flex items-center gap-2 px-1 text-[10px]",
-                      isUser && "justify-end",
-                    )}
-                  >
+
+                  <div className="text-muted-foreground flex items-center gap-2 px-1 text-[10px]">
                     <span>
-                      {new Date(m.at).toLocaleTimeString([], {
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      })}
+                      {new Date(m.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                     </span>
-                    {m.provider ? <span className="opacity-70">· {m.provider}</span> : null}
-                    {!isUser ? (
-                      <button
-                        type="button"
-                        className="hover:text-foreground inline-flex items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100"
-                        onClick={() => void copyMsg(m)}
-                        aria-label="Copy reply"
-                      >
-                        {copiedId === m.id ? (
-                          <CheckIcon className="size-3" />
-                        ) : (
-                          <ClipboardIcon className="size-3" />
-                        )}
-                      </button>
-                    ) : null}
+                    {m.provider ? <span>· {m.provider}</span> : null}
+                    <button
+                      type="button"
+                      className="hover:text-foreground inline-flex items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100"
+                      onClick={() => void copyMsg(m)}
+                      aria-label="Copy reply"
+                    >
+                      {copiedId === m.id ? (
+                        <CheckIcon className="size-3 text-success" />
+                      ) : (
+                        <ClipboardIcon className="size-3" />
+                      )}
+                    </button>
                   </div>
                 </div>
               </div>
@@ -565,56 +566,40 @@ export function AiAssistPage() {
           })}
 
           {pending ? (
-            <div className="flex gap-2.5">
-              <div className="bg-muted flex size-8 shrink-0 items-center justify-center rounded-full">
-                <SparkOrbit className="size-4 animate-pulse" />
+            <div className="flex items-start gap-2.5">
+              <div className="h-6 w-6 rounded-full bg-gradient-to-tr from-[#270045] to-[#7a5cc2] flex items-center justify-center text-white shrink-0 mt-0.5 animate-pulse">
+                <SparkOrbit className="size-3.5" />
               </div>
-              <div className="bg-muted/80 text-muted-foreground flex items-center gap-2 rounded-2xl rounded-bl-md px-3.5 py-2.5 text-sm ring-1 ring-border/50">
+              <div className="bg-surface border border-border rounded-2xl rounded-tl-sm px-4 py-2.5 text-sm text-muted-foreground flex items-center gap-2">
                 <span className="flex gap-1">
-                  <span className="bg-foreground/40 size-1.5 animate-bounce rounded-full [animation-delay:0ms]" />
-                  <span className="bg-foreground/40 size-1.5 animate-bounce rounded-full [animation-delay:120ms]" />
-                  <span className="bg-foreground/40 size-1.5 animate-bounce rounded-full [animation-delay:240ms]" />
+                  <span className="bg-primary/60 size-1.5 animate-bounce rounded-full [animation-delay:0ms]" />
+                  <span className="bg-primary/60 size-1.5 animate-bounce rounded-full [animation-delay:120ms]" />
+                  <span className="bg-primary/60 size-1.5 animate-bounce rounded-full [animation-delay:240ms]" />
                 </span>
                 Thinking…
               </div>
             </div>
           ) : null}
-
-          {showEmptyHints ? (
-            <div className="mt-1 grid gap-2 sm:grid-cols-3">
-              {suggestions.map((s) => (
-                <button
-                  key={s}
-                  type="button"
-                  disabled={pending}
-                  onClick={() => void send(s)}
-                  className="bg-card hover:bg-muted/50 border-border rounded-xl border px-3 py-2.5 text-left text-xs leading-snug transition-colors"
-                >
-                  {s}
-                </button>
-              ))}
-            </div>
-          ) : null}
         </div>
 
-        {/* Composer */}
-        <div className="border-border bg-card/80 border-t p-3 backdrop-blur-sm sm:p-4">
-          {!showEmptyHints ? (
-            <div className="mb-2 flex gap-1.5 overflow-x-auto pb-0.5">
-              {suggestions.slice(0, 2).map((s) => (
-                <button
-                  key={s}
-                  type="button"
-                  disabled={pending}
-                  onClick={() => void send(s)}
-                  className="text-muted-foreground hover:text-foreground hover:bg-muted shrink-0 rounded-full border px-2.5 py-1 text-[11px] transition-colors"
-                >
-                  {s.length > 42 ? `${s.slice(0, 40)}…` : s}
-                </button>
-              ))}
-            </div>
-          ) : null}
-          <div className="bg-background focus-within:ring-ring/40 flex items-end gap-2 rounded-2xl border p-1.5 shadow-xs focus-within:ring-2">
+        {/* Quick prompts */}
+        <div className="px-4 pb-2 flex gap-2 overflow-x-auto scrollbar-none shrink-0">
+          {suggestions.map((s) => (
+            <button
+              key={s}
+              type="button"
+              disabled={pending}
+              onClick={() => void send(s)}
+              className="rounded-full bg-surface-alt border border-border px-3 py-1.5 text-xs hover:bg-primary/10 hover:text-primary shrink-0 transition-colors whitespace-nowrap"
+            >
+              {s}
+            </button>
+          ))}
+        </div>
+
+        {/* Input area */}
+        <div className="border-t border-border p-3 shrink-0">
+          <div className="flex items-end gap-2 bg-surface-alt rounded-xl border border-border px-3 py-2">
             <textarea
               ref={inputRef}
               rows={1}
@@ -635,14 +620,14 @@ export function AiAssistPage() {
                       ? "Ask about budgets or time…"
                       : "Message Astrid…"
               }
-              className="placeholder:text-muted-foreground max-h-[120px] min-h-[40px] flex-1 resize-none bg-transparent px-3 py-2.5 text-sm outline-none"
+              className="placeholder:text-muted-foreground max-h-[120px] min-h-[36px] flex-1 resize-none bg-transparent py-1 text-sm outline-none border-none focus:ring-0 leading-normal"
               disabled={pending}
             />
-            <Button
-              size="icon"
-              className="mb-0.5 size-9 shrink-0 rounded-xl"
+            <button
+              type="button"
               disabled={pending || !prompt.trim()}
               onClick={() => void send(prompt)}
+              className="h-8 w-8 rounded-lg bg-[#270045] hover:bg-[#3b0066] text-white flex items-center justify-center shrink-0 disabled:opacity-40 transition-colors"
               aria-label="Send"
             >
               {pending ? (
@@ -650,16 +635,9 @@ export function AiAssistPage() {
               ) : (
                 <ArrowUpIcon className="size-4" />
               )}
-            </Button>
+            </button>
           </div>
-          <p className="text-muted-foreground mt-2 text-center text-[10px]">
-            Mode:{" "}
-            <span className="text-foreground/80 font-medium">
-              {MODES.find((m) => m.id === mode)?.label}
-            </span>
-          </p>
         </div>
-      </Card>
       </div>
     </div>
   )

@@ -19,6 +19,7 @@ import { createCampaign, deleteCampaign, updateCampaign } from "@/lib/api/agency
 import { ApiError } from "@/lib/api/client"
 import { useAuth } from "@/lib/auth"
 import { canPerform } from "@/lib/rbac"
+import { cn } from "@/lib/utils"
 import type { Campaign, CampaignStatus } from "@/types/agency"
 
 const CAMPAIGN_STATUSES: CampaignStatus[] = ["planning", "active", "completed", "on_hold"]
@@ -183,7 +184,11 @@ export function CampaignsPage() {
         description="Client programs that group projects — budget, dates, and ownership."
         actions={
           canWrite ? (
-            <Button size="sm" onClick={() => { setForm(emptyForm()); setEditingId(null); setShowCreate(true) }}>
+            <Button
+              size="sm"
+              className="bg-[#270045] hover:bg-[#3b0066] text-white"
+              onClick={() => { setForm(emptyForm()); setEditingId(null); setShowCreate(true) }}
+            >
               <PlusIcon className="size-3.5" />
               New campaign
             </Button>
@@ -200,28 +205,50 @@ export function CampaignsPage() {
         </Card>
       ) : null}
 
-      <div className="bg-card flex flex-wrap items-center gap-3 rounded-xl border px-4 py-3 text-sm">
-        <span>
-          <span className="text-muted-foreground">Programs </span>
-          <span className="font-semibold tabular-nums">{filtered.length}</span>
-        </span>
-        <span>
-          <span className="text-muted-foreground">Budget </span>
-          <span className="font-semibold tabular-nums">
-            ${Math.round(totalBudget / 1000)}k
-          </span>
-        </span>
-        <div className="ml-auto flex flex-wrap gap-1">
-           {["all", ...CAMPAIGN_STATUSES].map((s) => (
-            <Button
+      <div className="bg-card rounded-xl border border-border p-4 flex flex-wrap gap-6 shadow-[0_1px_3px_0_rgba(39,0,69,0.08)]">
+        <div>
+          <div className="text-xs text-muted-foreground uppercase">Total Campaigns</div>
+          <div className="font-sora font-bold text-lg">{campaigns.length}</div>
+        </div>
+        <div>
+          <div className="text-xs text-muted-foreground uppercase">Active</div>
+          <div className="font-sora font-bold text-lg text-success">
+            {campaigns.filter((c) => c.status === "active").length}
+          </div>
+        </div>
+        <div>
+          <div className="text-xs text-muted-foreground uppercase">Total Budget</div>
+          <div className="font-sora font-bold text-lg tabular-nums">
+            ${Math.round(campaigns.reduce((s, c) => s + (c.budget ?? 0), 0) / 1000)}k
+          </div>
+        </div>
+        <div>
+          <div className="text-xs text-muted-foreground uppercase">Completed</div>
+          <div className="font-sora font-bold text-lg">
+            {campaigns.filter((c) => c.status === "completed").length}
+          </div>
+        </div>
+      </div>
+
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="text-sm text-muted-foreground">
+          Showing <span className="font-semibold text-foreground">{filtered.length}</span> {filtered.length === 1 ? "campaign" : "campaigns"}
+        </div>
+        <div className="flex flex-wrap gap-1.5">
+          {["all", ...CAMPAIGN_STATUSES].map((s) => (
+            <button
               key={s}
-              size="sm"
-              variant={statusFilter === s ? "default" : "outline"}
-              className="rounded-full capitalize"
+              type="button"
+              className={cn(
+                "rounded-full px-3 py-1 text-xs font-medium capitalize transition-colors",
+                statusFilter === s
+                  ? "bg-[#270045] text-white border border-[#270045]"
+                  : "border border-border bg-transparent text-foreground hover:bg-surface-alt"
+              )}
               onClick={() => setStatusFilter(s)}
             >
-              {s}
-            </Button>
+              {s.replace("_", " ")}
+            </button>
           ))}
         </div>
       </div>
@@ -238,21 +265,68 @@ export function CampaignsPage() {
           description="Create a program for a client to group delivery work."
         />
       ) : (
-        <div className="grid gap-3 md:grid-cols-2">
+        <div className="grid gap-4 md:grid-cols-2">
           {filtered.map((campaign) => {
             const projectIds = campaign.projectIds ?? []
             const projectCount = projectIds.length
             return (
-              <Card key={campaign.campaignId} className="flex flex-col gap-4 p-5">
-                <div className="flex items-start justify-between gap-2">
+              <div
+                key={campaign.campaignId}
+                className="rounded-xl border border-border bg-card overflow-hidden flex flex-col shadow-[0_1px_3px_0_rgba(39,0,69,0.08)]"
+              >
+                {/* Card top */}
+                <div className="rounded-t-xl px-4 py-3.5 flex items-start justify-between bg-gradient-to-r from-[#270045] to-[#1a002e] gap-2">
                   <div className="min-w-0">
-                    <div className="text-muted-foreground font-mono text-xs">
+                    <div className="text-white/60 font-mono text-[11px]">
                       {campaign.campaignId.length > 12 ? `#${campaign.campaignId.slice(0, 8)}` : campaign.campaignId}
                     </div>
-                    <h2 className="mt-0.5 text-base font-semibold leading-snug">
+                    <h2 className="font-sora font-semibold text-sm text-white leading-snug truncate mt-0.5">
                       {campaign.name}
                     </h2>
-                    <p className="text-muted-foreground mt-1 text-sm">
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span
+                      className={cn(
+                        "rounded-full px-2.5 py-0.5 text-xs font-medium capitalize",
+                        campaign.status === "active" && "bg-success/20 text-success",
+                        campaign.status === "planning" && "bg-blue/20 text-blue",
+                        campaign.status === "completed" && "bg-white/15 text-white text-xs",
+                        campaign.status === "on_hold" && "bg-warning/20 text-warning"
+                      )}
+                    >
+                      {campaign.status.replace("_", " ")}
+                    </span>
+                    {canWrite ? (
+                      <div className="flex items-center gap-0.5">
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="size-7 text-white/60 hover:text-white hover:bg-white/10"
+                          disabled={Boolean(savingId) || Boolean(deletingId)}
+                          onClick={() => startEdit(campaign)}
+                          aria-label={`Edit ${campaign.name}`}
+                        >
+                          <PencilIcon className="size-3.5" />
+                        </Button>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="size-7 text-white/60 hover:text-white hover:bg-white/10"
+                          disabled={deletingId === campaign.campaignId || Boolean(savingId)}
+                          onClick={() => setDeleteTarget({ id: campaign.campaignId, name: campaign.name })}
+                          aria-label={`Delete ${campaign.name}`}
+                        >
+                          <Trash2Icon className="size-3.5" />
+                        </Button>
+                      </div>
+                    ) : null}
+                  </div>
+                </div>
+
+                {/* Card body */}
+                <div className="px-4 py-3 flex flex-col gap-3 flex-1">
+                  <div>
+                    <div className="text-sm font-medium">
                       {campaign.clientId ? (
                         <Link
                           to={`/clients/${campaign.clientId}`}
@@ -263,55 +337,55 @@ export function CampaignsPage() {
                       ) : (
                         campaign.clientName || "—"
                       )}
-                    </p>
+                    </div>
+                    {campaign.objective ? (
+                      <p className="text-sm text-muted-foreground mt-1 line-clamp-2 leading-relaxed">
+                        {campaign.objective}
+                      </p>
+                    ) : null}
                   </div>
-                  <div className="flex items-center gap-2">
-                    <Badge className="capitalize shrink-0">{campaign.status}</Badge>
-                     {canWrite ? <><Button size="icon" variant="ghost" className="size-7" disabled={Boolean(savingId) || Boolean(deletingId)} onClick={() => startEdit(campaign)} aria-label={`Edit ${campaign.name}`}><PencilIcon className="size-3.5" /></Button><Button size="icon" variant="ghost" className="size-7 text-destructive" disabled={deletingId === campaign.campaignId || Boolean(savingId)} onClick={() => setDeleteTarget({ id: campaign.campaignId, name: campaign.name })} aria-label={`Delete ${campaign.name}`}><Trash2Icon className="size-3.5" /></Button></> : null}
+
+                  {/* Date range + budget (text-xs grid grid-cols-2) */}
+                  <div className="text-muted-foreground grid grid-cols-2 gap-2 text-xs">
+                    <span>
+                      {campaign.startDate
+                        ? new Date(campaign.startDate).toLocaleDateString()
+                        : "—"}{" "}
+                      →{" "}
+                      {campaign.endDate ? new Date(campaign.endDate).toLocaleDateString() : "—"}
+                    </span>
+                    <span className="text-right font-medium text-foreground tabular-nums">
+                      {campaign.budget != null ? `$${campaign.budget.toLocaleString()}` : "—"}
+                    </span>
+                    <span>Owner: {campaign.owner || "—"}</span>
+                    <span className="text-right">{projectCount} projects</span>
+                  </div>
+
+                  {/* Linked project IDs */}
+                  {projectCount > 0 ? (
+                    <div className="flex flex-wrap gap-1.5">
+                      {projectIds.slice(0, 6).map((pid) => (
+                        <Link
+                          key={pid}
+                          to={`/projects/${pid}`}
+                          className="rounded-full bg-surface-alt border border-border text-[11px] font-mono px-2 py-0.5 hover:bg-primary/10 hover:text-primary transition-colors"
+                        >
+                          {pid}
+                        </Link>
+                      ))}
+                    </div>
+                  ) : null}
+
+                  {/* Progress bar */}
+                  <div className="mt-auto pt-1">
+                    <div className="text-muted-foreground mb-1 flex justify-between text-xs">
+                      <span>Linked projects</span>
+                      <span className="tabular-nums font-mono">{projectCount} / 10</span>
+                    </div>
+                    <Progress value={Math.min((projectCount / 10) * 100, 100)} />
                   </div>
                 </div>
-                {campaign.objective ? (
-                  <p className="text-muted-foreground text-sm leading-relaxed">
-                    {campaign.objective}
-                  </p>
-                ) : null}
-                <div className="text-muted-foreground grid grid-cols-2 gap-2 text-xs">
-                  <span>
-                    {campaign.startDate
-                      ? new Date(campaign.startDate).toLocaleDateString()
-                      : "—"}{" "}
-                    →{" "}
-                    {campaign.endDate ? new Date(campaign.endDate).toLocaleDateString() : "—"}
-                  </span>
-                  <span className="text-right tabular-nums">
-                    {campaign.budget != null ? `$${campaign.budget.toLocaleString()}` : "—"}
-                  </span>
-                  <span>Owner: {campaign.owner || "—"}</span>
-                  <span className="text-right">{projectCount} projects</span>
-                </div>
-                {projectCount > 0 ? (
-                  <div className="flex flex-wrap gap-1.5">
-                    {projectIds.slice(0, 6).map((pid) => (
-                      <Button
-                        key={pid}
-                        size="sm"
-                        variant="outline"
-                        className="h-7 rounded-full font-mono text-[11px]"
-                        render={<Link to={`/projects/${pid}`} />}
-                      >
-                        {pid}
-                      </Button>
-                    ))}
-                  </div>
-                ) : null}
-                <div>
-                  <div className="text-muted-foreground mb-1 flex justify-between text-xs">
-                    <span>Linked projects</span>
-                    <span className="tabular-nums">{projectCount}</span>
-                  </div>
-                  <Progress value={Math.min(projectCount * 25, 100)} />
-                </div>
-              </Card>
+              </div>
             )
           })}
         </div>

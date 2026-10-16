@@ -317,11 +317,11 @@ export function SettingsPage() {
   ]
 
   return (
-    <div className="mx-auto flex w-full max-w-4xl flex-col gap-6">
+    <div className="mx-auto flex w-full max-w-5xl flex-col gap-6">
       {/* Header */}
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-xl font-semibold tracking-tight sm:text-2xl">Settings & Workspace</h1>
+          <h1 className="font-sora text-xl font-bold tracking-tight sm:text-2xl text-foreground">Settings & Workspace</h1>
           <p className="text-muted-foreground text-sm">
             Manage your personal profile, agency configuration, security, and preferences.
           </p>
@@ -336,433 +336,479 @@ export function SettingsPage() {
         </div>
       </div>
 
-      {/* Tabs Bar */}
-      <div className="flex gap-1 overflow-x-auto border-b pb-2">
-        {navItems.map((item) => {
-          const Icon = item.icon
-          const isActive = activeTab === item.id
-          return (
-            <button
-              key={item.id}
-              type="button"
-              onClick={() => setActiveTab(item.id)}
-              className={cn(
-                "flex shrink-0 items-center gap-2 rounded-lg px-3.5 py-2 text-xs font-medium transition-colors",
-                isActive
-                  ? "bg-primary text-primary-foreground shadow-xs"
-                  : "text-muted-foreground hover:bg-muted hover:text-foreground",
-              )}
-            >
-              <Icon className="size-4" />
-              {item.label}
-            </button>
-          )
-        })}
-      </div>
+      <div className="flex flex-col lg:flex-row gap-6 items-start">
+        {/* Left tab nav (desktop) + top scroll (mobile) */}
+        <div className="w-full lg:w-56 shrink-0 flex flex-row lg:flex-col gap-1 overflow-x-auto lg:overflow-visible pb-2 lg:pb-0 scrollbar-none">
+          {navItems.map((item) => {
+            const Icon = item.icon
+            const isActive = activeTab === item.id
+            return (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => setActiveTab(item.id)}
+                className={cn(
+                  "flex shrink-0 items-center gap-2.5 px-3.5 py-2.5 text-xs font-medium transition-colors text-left",
+                  isActive
+                    ? "bg-primary/10 text-primary rounded-lg font-semibold"
+                    : "text-muted-foreground hover:bg-surface-alt rounded-lg"
+                )}
+              >
+                <Icon className="size-4 shrink-0" />
+                <span className="whitespace-nowrap">{item.label}</span>
+              </button>
+            )
+          })}
+        </div>
 
-      {/* Tab 1: Account Profile */}
-      {activeTab === "account" && (
-        <Card className="flex flex-col gap-5 p-6">
-          <div className="flex items-center gap-2.5">
-            <UserIcon className="size-5 text-primary" />
-            <div>
-              <h2 className="font-semibold text-base">Personal Profile</h2>
-              <p className="text-muted-foreground text-xs">Your identity across team workspaces and notifications.</p>
-            </div>
-          </div>
+        {/* Tab content area */}
+        <div className="flex-1 min-w-0 w-full flex flex-col gap-6">
+          {/* Tab 1: Account Profile */}
+          {activeTab === "account" && (
+            <div className="rounded-xl border border-border bg-card p-6 shadow-[0_1px_3px_0_rgba(39,0,69,0.08)] flex flex-col gap-5">
+              <div className="flex items-center gap-2.5">
+                <div className="size-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center shrink-0">
+                  <UserIcon className="size-4" />
+                </div>
+                <div>
+                  <h2 className="font-sora font-semibold text-base text-foreground">Personal Profile</h2>
+                  <p className="text-muted-foreground text-xs">Your identity across team workspaces and notifications.</p>
+                </div>
+              </div>
 
-          <Separator />
+              <Separator />
 
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
-            <Avatar className="size-16 ring-2 ring-primary/20">
-              {photoUrl ? <AvatarImage src={photoUrl} alt="Profile photo" /> : null}
-              <AvatarFallback className="text-lg font-semibold">{initials}</AvatarFallback>
-            </Avatar>
-            <div>
-              <div className="flex items-center gap-2">
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
+                <Avatar className="size-16 ring-2 ring-primary/20">
+                  {photoUrl ? <AvatarImage src={photoUrl} alt="Profile photo" /> : null}
+                  <AvatarFallback className="text-lg font-semibold">{initials}</AvatarFallback>
+                </Avatar>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={photoState === "uploading"}
+                      onClick={() => photoRef.current?.click()}
+                    >
+                      <UploadIcon className="size-3.5" />
+                      {photoState === "uploading" ? "Uploading…" : "Upload Avatar"}
+                    </Button>
+                    <input
+                      ref={photoRef}
+                      className="hidden"
+                      type="file"
+                      accept="image/*"
+                      onChange={(e) => void onPhotoSelected(e.target.files?.[0])}
+                    />
+                  </div>
+                  <p className="text-muted-foreground mt-1 text-xs">PNG, JPG, or WebP up to 5 MB.</p>
+                  {photoState === "error" ? <p className="text-destructive mt-1 text-xs">{photoError}</p> : null}
+                </div>
+              </div>
+
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="grid gap-1.5 sm:col-span-2">
+                  <Label htmlFor="account-name">Display Name *</Label>
+                  <Input
+                    id="account-name"
+                    value={name}
+                    maxLength={100}
+                    onChange={(e) => setName(e.target.value)}
+                    disabled={profileState === "saving"}
+                  />
+                </div>
+
+                <div className="grid gap-1.5">
+                  <Label>Email Address</Label>
+                  <Input value={user?.email || "—"} disabled className="bg-muted/50 font-mono" />
+                </div>
+
+                <div className="grid gap-1.5">
+                  <Label>Assigned Role</Label>
+                  <div className="flex h-9 items-center">
+                    <Badge variant="secondary" className="gap-1 capitalize font-medium">
+                      <ShieldIcon className="size-3" />
+                      {user?.role || "Member"}
+                    </Badge>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between pt-2">
                 <Button
                   type="button"
-                  variant="outline"
-                  size="sm"
-                  disabled={photoState === "uploading"}
-                  onClick={() => photoRef.current?.click()}
+                  className="bg-[#270045] hover:bg-[#3b0066] text-white"
+                  disabled={profileState === "saving" || !name.trim()}
+                  onClick={() => void saveProfile()}
                 >
-                  <UploadIcon className="size-3.5" />
-                  {photoState === "uploading" ? "Uploading…" : "Upload Avatar"}
+                  {profileState === "saving" ? <LoaderCircleIcon className="size-4 animate-spin" /> : null}
+                  Save Profile Changes
                 </Button>
-                <input
-                  ref={photoRef}
-                  className="hidden"
-                  type="file"
-                  accept="image/*"
-                  onChange={(e) => void onPhotoSelected(e.target.files?.[0])}
-                />
+                {profileError ? <p className="text-destructive text-xs">{profileError}</p> : null}
               </div>
-              <p className="text-muted-foreground mt-1 text-xs">PNG, JPG, or WebP up to 5 MB.</p>
-              {photoState === "error" ? <p className="text-destructive mt-1 text-xs">{photoError}</p> : null}
             </div>
-          </div>
+          )}
 
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="grid gap-1.5 sm:col-span-2">
-              <Label htmlFor="account-name">Display Name *</Label>
-              <Input
-                id="account-name"
-                value={name}
-                maxLength={100}
-                onChange={(e) => setName(e.target.value)}
-                disabled={profileState === "saving"}
-              />
-            </div>
-
-            <div className="grid gap-1.5">
-              <Label>Email Address</Label>
-              <Input value={user?.email || "—"} disabled className="bg-muted/50 font-mono" />
-            </div>
-
-            <div className="grid gap-1.5">
-              <Label>Assigned Role</Label>
-              <div className="flex h-9 items-center">
-                <Badge variant="secondary" className="gap-1 capitalize font-medium">
-                  <ShieldIcon className="size-3" />
-                  {user?.role || "Member"}
+          {/* Tab 2: Agency & Workspace */}
+          {activeTab === "agency" && (
+            <div className="rounded-xl border border-border bg-card p-6 shadow-[0_1px_3px_0_rgba(39,0,69,0.08)] flex flex-col gap-5">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2.5">
+                  <div className="size-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center shrink-0">
+                    <Building2Icon className="size-4" />
+                  </div>
+                  <div>
+                    <h2 className="font-sora font-semibold text-base text-foreground">Agency & Organization</h2>
+                    <p className="text-muted-foreground text-xs">Workspace branding, seat allocations, and billing contact.</p>
+                  </div>
+                </div>
+                <Badge variant="default" className="capitalize">
+                  {subscriptionPlan} Tier
                 </Badge>
               </div>
-            </div>
-          </div>
 
-          <div className="flex items-center justify-between pt-2">
-            <Button
-              type="button"
-              disabled={profileState === "saving" || !name.trim()}
-              onClick={() => void saveProfile()}
-            >
-              {profileState === "saving" ? <LoaderCircleIcon className="size-4 animate-spin" /> : null}
-              Save Profile Changes
-            </Button>
-            {profileError ? <p className="text-destructive text-xs">{profileError}</p> : null}
-          </div>
-        </Card>
-      )}
+              <Separator />
 
-      {/* Tab 2: Agency & Workspace */}
-      {activeTab === "agency" && (
-        <Card className="flex flex-col gap-5 p-6">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2.5">
-              <Building2Icon className="size-5 text-primary" />
-              <div>
-                <h2 className="font-semibold text-base">Agency & Organization</h2>
-                <p className="text-muted-foreground text-xs">Workspace branding, seat allocations, and billing contact.</p>
+              {/* Logo Upload */}
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
+                <div className="flex size-16 items-center justify-center rounded-xl border bg-muted/30 p-1">
+                  {agencyLogoPreview ? (
+                    <img
+                      src={agencyLogoPreview}
+                      alt="Agency logo"
+                      className="size-full rounded-lg object-contain"
+                    />
+                  ) : (
+                    <Building2Icon className="size-8 text-muted-foreground/50" />
+                  )}
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={!isAdmin || agencyLogoState === "uploading"}
+                      onClick={() => agencyLogoRef.current?.click()}
+                    >
+                      <UploadIcon className="size-3.5" />
+                      {agencyLogoState === "uploading" ? "Uploading…" : "Change Logo"}
+                    </Button>
+                    <input
+                      ref={agencyLogoRef}
+                      className="hidden"
+                      type="file"
+                      accept="image/*"
+                      onChange={(e) => void onAgencyLogoSelected(e.target.files?.[0])}
+                    />
+                  </div>
+                  <p className="text-muted-foreground mt-1 text-xs">PNG, SVG, or JPG up to 2 MB.</p>
+                  {agencyLogoError ? <p className="text-destructive mt-1 text-xs">{agencyLogoError}</p> : null}
+                </div>
               </div>
-            </div>
-            <Badge variant="default" className="capitalize">
-              {subscriptionPlan} Tier
-            </Badge>
-          </div>
 
-          <Separator />
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="grid gap-1.5">
+                  <Label htmlFor="agency-name">Agency Legal Name *</Label>
+                  <Input
+                    id="agency-name"
+                    value={agencyName}
+                    onChange={(e) => setAgencyName(e.target.value)}
+                    disabled={!isAdmin || agencyState === "saving"}
+                  />
+                </div>
 
-          {/* Logo Upload */}
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
-            <div className="flex size-16 items-center justify-center rounded-xl border bg-muted/30 p-1">
-              {agencyLogoPreview ? (
-                <img
-                  src={agencyLogoPreview}
-                  alt="Agency logo"
-                  className="size-full rounded-lg object-contain"
-                />
+                <div className="grid gap-1.5">
+                  <Label htmlFor="agency-slug">Workspace Identifier (Slug)</Label>
+                  <Input
+                    id="agency-slug"
+                    value={agencySlug}
+                    disabled
+                    className="bg-muted/50 font-mono"
+                  />
+                </div>
+
+                <div className="grid gap-1.5">
+                  <Label htmlFor="agency-domain">Custom Domain / Subdomain</Label>
+                  <Input
+                    id="agency-domain"
+                    placeholder="acme.cosmos.app"
+                    value={domain}
+                    onChange={(e) => setDomain(e.target.value)}
+                    disabled={!isAdmin || agencyState === "saving"}
+                  />
+                </div>
+
+                <div className="grid gap-1.5">
+                  <Label htmlFor="billing-email">Billing Contact Email</Label>
+                  <Input
+                    id="billing-email"
+                    type="email"
+                    placeholder="billing@agency.com"
+                    value={billingContactEmail}
+                    onChange={(e) => setBillingContactEmail(e.target.value)}
+                    disabled={!isAdmin || agencyState === "saving"}
+                  />
+                </div>
+              </div>
+
+              {/* Seat Quota Box */}
+              <div className="rounded-xl border bg-muted/20 p-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <UsersIcon className="size-4 text-primary" />
+                    <span className="text-xs font-semibold">Seat Utilization</span>
+                  </div>
+                  <span className="font-mono text-xs font-medium">
+                    {agencyData?.seatsUsed ?? 1} / {maxUsers} seats used
+                  </span>
+                </div>
+                <div className="mt-2.5 h-2 w-full overflow-hidden rounded-full bg-muted">
+                  <div
+                    className="h-full bg-primary transition-all duration-300"
+                    style={{
+                      width: `${Math.min(100, Math.round(((agencyData?.seatsUsed ?? 1) / Math.max(1, maxUsers)) * 100))}%`,
+                    }}
+                  />
+                </div>
+              </div>
+
+              {isAdmin ? (
+                <div className="flex items-center justify-between pt-2">
+                  <Button
+                    type="button"
+                    className="bg-[#270045] hover:bg-[#3b0066] text-white"
+                    disabled={agencyState === "saving" || !agencyName.trim()}
+                    onClick={() => void saveAgency()}
+                  >
+                    {agencyState === "saving" ? <LoaderCircleIcon className="size-4 animate-spin" /> : null}
+                    Save Agency Settings
+                  </Button>
+                  {agencyError ? <p className="text-destructive text-xs">{agencyError}</p> : null}
+                </div>
               ) : (
-                <Building2Icon className="size-8 text-muted-foreground/50" />
+                <p className="text-muted-foreground text-xs">
+                  Only workspace administrators can modify organization properties.
+                </p>
               )}
             </div>
-            <div>
-              <div className="flex items-center gap-2">
+          )}
+
+          {/* Tab 3: Security & Passwords */}
+          {activeTab === "security" && (
+            <div className="rounded-xl border border-border bg-card p-6 shadow-[0_1px_3px_0_rgba(39,0,69,0.08)] flex flex-col gap-5">
+              <div className="flex items-center gap-2.5">
+                <div className="size-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center shrink-0">
+                  <KeyIcon className="size-4" />
+                </div>
+                <div>
+                  <h2 className="font-sora font-semibold text-base text-foreground">Security & Passwords</h2>
+                  <p className="text-muted-foreground text-xs">Update your account password and security credentials.</p>
+                </div>
+              </div>
+
+              <Separator />
+
+              <div className="grid max-w-md gap-3.5">
+                <div className="grid gap-1.5">
+                  <Label htmlFor="current-pass">Current Password</Label>
+                  <Input
+                    id="current-pass"
+                    type="password"
+                    value={currentPassword}
+                    onChange={(e) => setCurrentPassword(e.target.value)}
+                    disabled={passwordState === "saving"}
+                  />
+                </div>
+
+                <div className="grid gap-1.5">
+                  <Label htmlFor="new-pass">New Password (8+ characters)</Label>
+                  <Input
+                    id="new-pass"
+                    type="password"
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    disabled={passwordState === "saving"}
+                  />
+                </div>
+
+                <div className="grid gap-1.5">
+                  <Label htmlFor="confirm-pass">Confirm New Password</Label>
+                  <Input
+                    id="confirm-pass"
+                    type="password"
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    disabled={passwordState === "saving"}
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between pt-2">
                 <Button
                   type="button"
-                  variant="outline"
-                  size="sm"
-                  disabled={!isAdmin || agencyLogoState === "uploading"}
-                  onClick={() => agencyLogoRef.current?.click()}
+                  className="bg-[#270045] hover:bg-[#3b0066] text-white"
+                  disabled={passwordState === "saving" || !currentPassword || !newPassword}
+                  onClick={() => void savePassword()}
                 >
-                  <UploadIcon className="size-3.5" />
-                  {agencyLogoState === "uploading" ? "Uploading…" : "Change Logo"}
+                  {passwordState === "saving" ? <LoaderCircleIcon className="size-4 animate-spin" /> : null}
+                  Update Password
                 </Button>
-                <input
-                  ref={agencyLogoRef}
-                  className="hidden"
-                  type="file"
-                  accept="image/*"
-                  onChange={(e) => void onAgencyLogoSelected(e.target.files?.[0])}
-                />
+                {passwordError ? <p className="text-destructive text-xs">{passwordError}</p> : null}
               </div>
-              <p className="text-muted-foreground mt-1 text-xs">PNG, SVG, or JPG up to 2 MB.</p>
-              {agencyLogoError ? <p className="text-destructive mt-1 text-xs">{agencyLogoError}</p> : null}
             </div>
-          </div>
-
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="grid gap-1.5">
-              <Label htmlFor="agency-name">Agency Legal Name *</Label>
-              <Input
-                id="agency-name"
-                value={agencyName}
-                onChange={(e) => setAgencyName(e.target.value)}
-                disabled={!isAdmin || agencyState === "saving"}
-              />
-            </div>
-
-            <div className="grid gap-1.5">
-              <Label htmlFor="agency-slug">Workspace Identifier (Slug)</Label>
-              <Input
-                id="agency-slug"
-                value={agencySlug}
-                disabled
-                className="bg-muted/50 font-mono"
-              />
-            </div>
-
-            <div className="grid gap-1.5">
-              <Label htmlFor="agency-domain">Custom Domain / Subdomain</Label>
-              <Input
-                id="agency-domain"
-                placeholder="acme.cosmos.app"
-                value={domain}
-                onChange={(e) => setDomain(e.target.value)}
-                disabled={!isAdmin || agencyState === "saving"}
-              />
-            </div>
-
-            <div className="grid gap-1.5">
-              <Label htmlFor="billing-email">Billing Contact Email</Label>
-              <Input
-                id="billing-email"
-                type="email"
-                placeholder="billing@agency.com"
-                value={billingContactEmail}
-                onChange={(e) => setBillingContactEmail(e.target.value)}
-                disabled={!isAdmin || agencyState === "saving"}
-              />
-            </div>
-          </div>
-
-          {/* Seat Quota Box */}
-          <div className="rounded-xl border bg-muted/20 p-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <UsersIcon className="size-4 text-primary" />
-                <span className="text-xs font-semibold">Seat Utilization</span>
-              </div>
-              <span className="font-mono text-xs font-medium">
-                {agencyData?.seatsUsed ?? 1} / {maxUsers} seats used
-              </span>
-            </div>
-            <div className="mt-2.5 h-2 w-full overflow-hidden rounded-full bg-muted">
-              <div
-                className="h-full bg-primary transition-all duration-300"
-                style={{
-                  width: `${Math.min(100, Math.round(((agencyData?.seatsUsed ?? 1) / Math.max(1, maxUsers)) * 100))}%`,
-                }}
-              />
-            </div>
-          </div>
-
-          {isAdmin ? (
-            <div className="flex items-center justify-between pt-2">
-              <Button
-                type="button"
-                disabled={agencyState === "saving" || !agencyName.trim()}
-                onClick={() => void saveAgency()}
-              >
-                {agencyState === "saving" ? <LoaderCircleIcon className="size-4 animate-spin" /> : null}
-                Save Agency Settings
-              </Button>
-              {agencyError ? <p className="text-destructive text-xs">{agencyError}</p> : null}
-            </div>
-          ) : (
-            <p className="text-muted-foreground text-xs">
-              Only workspace administrators can modify organization properties.
-            </p>
           )}
-        </Card>
-      )}
 
-      {/* Tab 3: Security & Passwords */}
-      {activeTab === "security" && (
-        <Card className="flex flex-col gap-5 p-6">
-          <div className="flex items-center gap-2.5">
-            <KeyIcon className="size-5 text-primary" />
-            <div>
-              <h2 className="font-semibold text-base">Security & Authentication</h2>
-              <p className="text-muted-foreground text-xs">Update your account password and security credentials.</p>
-            </div>
-          </div>
-
-          <Separator />
-
-          <div className="grid max-w-md gap-3.5">
-            <div className="grid gap-1.5">
-              <Label htmlFor="current-pass">Current Password</Label>
-              <Input
-                id="current-pass"
-                type="password"
-                value={currentPassword}
-                onChange={(e) => setCurrentPassword(e.target.value)}
-                disabled={passwordState === "saving"}
-              />
-            </div>
-
-            <div className="grid gap-1.5">
-              <Label htmlFor="new-pass">New Password (8+ characters)</Label>
-              <Input
-                id="new-pass"
-                type="password"
-                value={newPassword}
-                onChange={(e) => setNewPassword(e.target.value)}
-                disabled={passwordState === "saving"}
-              />
-            </div>
-
-            <div className="grid gap-1.5">
-              <Label htmlFor="confirm-pass">Confirm New Password</Label>
-              <Input
-                id="confirm-pass"
-                type="password"
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                disabled={passwordState === "saving"}
-              />
-            </div>
-          </div>
-
-          <div className="flex items-center justify-between pt-2">
-            <Button
-              type="button"
-              disabled={passwordState === "saving" || !currentPassword || !newPassword}
-              onClick={() => void savePassword()}
-            >
-              {passwordState === "saving" ? <LoaderCircleIcon className="size-4 animate-spin" /> : null}
-              Update Password
-            </Button>
-            {passwordError ? <p className="text-destructive text-xs">{passwordError}</p> : null}
-          </div>
-        </Card>
-      )}
-
-      {/* Tab 4: Theme & Display */}
-      {activeTab === "appearance" && (
-        <Card className="flex flex-col gap-5 p-6">
-          <div className="flex items-center gap-2.5">
-            <PaletteIcon className="size-5 text-primary" />
-            <div>
-              <h2 className="font-semibold text-base">Interface Appearance</h2>
-              <p className="text-muted-foreground text-xs">Customize the color scheme and visual theme of Cosmos OS.</p>
-            </div>
-          </div>
-
-          <Separator />
-
-          <div className="grid grid-cols-3 gap-3">
-            <button
-              type="button"
-              onClick={() => setTheme("dark")}
-              className={cn(
-                "flex flex-col items-center gap-2.5 rounded-xl border p-4 text-center transition-all",
-                theme === "dark"
-                  ? "border-primary bg-primary/10 text-primary shadow-xs ring-2 ring-primary/20"
-                  : "border-border hover:bg-muted",
-              )}
-            >
-              <MoonIcon className="size-6" />
-              <div>
-                <div className="text-xs font-semibold">Dark Mode</div>
-                <div className="text-muted-foreground text-[10px]">High contrast studio palette</div>
-              </div>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setTheme("light")}
-              className={cn(
-                "flex flex-col items-center gap-2.5 rounded-xl border p-4 text-center transition-all",
-                theme === "light"
-                  ? "border-primary bg-primary/10 text-primary shadow-xs ring-2 ring-primary/20"
-                  : "border-border hover:bg-muted",
-              )}
-            >
-              <SunIcon className="size-6" />
-              <div>
-                <div className="text-xs font-semibold">Light Mode</div>
-                <div className="text-muted-foreground text-[10px]">Clean daylight clarity</div>
-              </div>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setTheme("system")}
-              className={cn(
-                "flex flex-col items-center gap-2.5 rounded-xl border p-4 text-center transition-all",
-                theme === "system"
-                  ? "border-primary bg-primary/10 text-primary shadow-xs ring-2 ring-primary/20"
-                  : "border-border hover:bg-muted",
-              )}
-            >
-              <LayersIcon className="size-6" />
-              <div>
-                <div className="text-xs font-semibold">System Sync</div>
-                <div className="text-muted-foreground text-[10px]">Follows OS configuration</div>
-              </div>
-            </button>
-          </div>
-        </Card>
-      )}
-
-      {/* Tab 5: System & Health */}
-      {activeTab === "system" && (
-        <Card className="flex flex-col gap-5 p-6">
-          <div className="flex items-center gap-2.5">
-            <ServerIcon className="size-5 text-primary" />
-            <div>
-              <h2 className="font-semibold text-base">System Connectivity & Health</h2>
-              <p className="text-muted-foreground text-xs">Service status and workspace connection details.</p>
-            </div>
-          </div>
-
-          <Separator />
-
-          <div className="grid gap-3 sm:grid-cols-2">
-            <div className="flex items-center justify-between rounded-xl border p-3.5">
+          {/* Tab 4: Theme & Display */}
+          {activeTab === "appearance" && (
+            <div className="rounded-xl border border-border bg-card p-6 shadow-[0_1px_3px_0_rgba(39,0,69,0.08)] flex flex-col gap-5">
               <div className="flex items-center gap-2.5">
-                {healthOk ? (
-                  <CheckCircle2Icon className="size-5 text-emerald-500" />
-                ) : (
-                  <XCircleIcon className="size-5 text-destructive" />
-                )}
+                <div className="size-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center shrink-0">
+                  <PaletteIcon className="size-4" />
+                </div>
                 <div>
-                  <div className="text-xs font-semibold">Core service</div>
-                  <div className="text-muted-foreground text-[10px]">{apiBase}</div>
+                  <h2 className="font-sora font-semibold text-base text-foreground">Theme & Display</h2>
+                  <p className="text-muted-foreground text-xs">Customize the color scheme and visual theme of Cosmos OS.</p>
                 </div>
               </div>
-              <Badge variant={healthOk ? "default" : "destructive"} className="text-[10px] uppercase">
-                {health?.status || (healthOk ? "Online" : "Disconnected")}
-              </Badge>
-            </div>
 
-            <div className="flex items-center justify-between rounded-xl border p-3.5">
+              <Separator />
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <button
+                  type="button"
+                  onClick={() => setTheme("light")}
+                  className={cn(
+                    "flex flex-col items-center gap-3 rounded-xl border p-5 text-center transition-all",
+                    theme === "light"
+                      ? "border-primary bg-primary/10 text-primary shadow-xs ring-2 ring-primary/20"
+                      : "border-border bg-card hover:bg-surface-alt text-foreground"
+                  )}
+                >
+                  <div className="size-10 rounded-full bg-surface-alt border border-border flex items-center justify-center text-foreground">
+                    <SunIcon className="size-5" />
+                  </div>
+                  <div>
+                    <div className="font-sora text-sm font-semibold">Light Mode</div>
+                    <div className="text-muted-foreground text-[11px] mt-0.5">Clean daylight clarity</div>
+                  </div>
+                  {theme === "light" ? (
+                    <span className="mt-auto px-2 py-0.5 rounded-full text-[10px] font-medium bg-primary text-primary-foreground">
+                      Active
+                    </span>
+                  ) : null}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setTheme("dark")}
+                  className={cn(
+                    "flex flex-col items-center gap-3 rounded-xl border p-5 text-center transition-all",
+                    theme === "dark"
+                      ? "border-primary bg-primary/10 text-primary shadow-xs ring-2 ring-primary/20"
+                      : "border-border bg-card hover:bg-surface-alt text-foreground"
+                  )}
+                >
+                  <div className="size-10 rounded-full bg-surface-alt border border-border flex items-center justify-center text-foreground">
+                    <MoonIcon className="size-5" />
+                  </div>
+                  <div>
+                    <div className="font-sora text-sm font-semibold">Dark Mode</div>
+                    <div className="text-muted-foreground text-[11px] mt-0.5">High contrast studio palette</div>
+                  </div>
+                  {theme === "dark" ? (
+                    <span className="mt-auto px-2 py-0.5 rounded-full text-[10px] font-medium bg-primary text-primary-foreground">
+                      Active
+                    </span>
+                  ) : null}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setTheme("system")}
+                  className={cn(
+                    "flex flex-col items-center gap-3 rounded-xl border p-5 text-center transition-all",
+                    theme === "system"
+                      ? "border-primary bg-primary/10 text-primary shadow-xs ring-2 ring-primary/20"
+                      : "border-border bg-card hover:bg-surface-alt text-foreground"
+                  )}
+                >
+                  <div className="size-10 rounded-full bg-surface-alt border border-border flex items-center justify-center text-foreground">
+                    <LayersIcon className="size-5" />
+                  </div>
+                  <div>
+                    <div className="font-sora text-sm font-semibold">System Sync</div>
+                    <div className="text-muted-foreground text-[11px] mt-0.5">Follows OS configuration</div>
+                  </div>
+                  {theme === "system" ? (
+                    <span className="mt-auto px-2 py-0.5 rounded-full text-[10px] font-medium bg-primary text-primary-foreground">
+                      Active
+                    </span>
+                  ) : null}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Tab 5: System & Health */}
+          {activeTab === "system" && (
+            <div className="rounded-xl border border-border bg-card p-6 shadow-[0_1px_3px_0_rgba(39,0,69,0.08)] flex flex-col gap-5">
               <div className="flex items-center gap-2.5">
-                <CheckCircle2Icon className="size-5 text-emerald-500" />
+                <div className="size-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center shrink-0">
+                  <ServerIcon className="size-4" />
+                </div>
                 <div>
-                  <div className="text-xs font-semibold">Workspace data isolation</div>
-                  <div className="text-muted-foreground text-[10px]">Active</div>
+                  <h2 className="font-sora font-semibold text-base text-foreground">System Connectivity & Health</h2>
+                  <p className="text-muted-foreground text-xs">Service status and workspace connection details.</p>
                 </div>
               </div>
-              <Badge variant="default" className="text-[10px] uppercase">
-                Isolated
-              </Badge>
+
+              <Separator />
+
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="flex items-center justify-between rounded-xl border border-border p-4 bg-surface-alt/40">
+                  <div className="flex items-center gap-3">
+                    {healthOk ? (
+                      <CheckCircle2Icon className="size-5 text-emerald-500" />
+                    ) : (
+                      <XCircleIcon className="size-5 text-destructive" />
+                    )}
+                    <div>
+                      <div className="text-xs font-semibold text-foreground">Core Service</div>
+                      <div className="text-muted-foreground text-[11px] truncate max-w-[180px] sm:max-w-[220px]">
+                        {apiBase}
+                      </div>
+                    </div>
+                  </div>
+                  <span
+                    className={cn(
+                      "px-2 py-0.5 rounded-full text-[10px] font-medium uppercase",
+                      healthOk ? "bg-success/15 text-success" : "bg-destructive/15 text-destructive"
+                    )}
+                  >
+                    {health?.status || (healthOk ? "Online" : "Disconnected")}
+                  </span>
+                </div>
+
+                <div className="flex items-center justify-between rounded-xl border border-border p-4 bg-surface-alt/40">
+                  <div className="flex items-center gap-3">
+                    <CheckCircle2Icon className="size-5 text-emerald-500" />
+                    <div>
+                      <div className="text-xs font-semibold text-foreground">Workspace Data Isolation</div>
+                      <div className="text-muted-foreground text-[11px]">Active tenant sandbox</div>
+                    </div>
+                  </div>
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-medium uppercase bg-success/15 text-success">
+                    Isolated
+                  </span>
+                </div>
+              </div>
             </div>
-          </div>
-        </Card>
-      )}
+          )}
+        </div>
+      </div>
     </div>
   )
 }
