@@ -515,7 +515,7 @@ export function CrmPipelinePage() {
                         </span>
                         <span
                           className={cn(
-                            "rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider",
+                            "rounded-full px-2 py-0.5 text-[10px] font-bold",
                             deal.stage === "won"
                               ? "bg-success/15 text-success border border-success/20"
                               : deal.stage === "lost"
@@ -527,7 +527,7 @@ export function CrmPipelinePage() {
                               : "bg-surface-alt text-muted-foreground border border-border"
                           )}
                         >
-                          {deal.probability}% win prob
+                          {deal.probability}%
                         </span>
                       </div>
 
@@ -632,7 +632,7 @@ export function CrmPipelinePage() {
                           ) : (
                             <RocketIcon className="size-3.5" />
                           )}
-                          Start delivery (create project)
+                          Start delivery
                         </Button>
                       ) : null}
                     </article>

@@ -64,8 +64,8 @@ function CosmosAiIcon({ className }: { className?: string }) {
 }
 
 /**
- * Magic UI–style dock: monochrome icons in soft circular tiles.
- * Visible only when the sidebar is closed (collapsed / mobile sheet shut).
+ * Magic UI–style dock: visible in both light and dark mode.
+ * Only shown when the sidebar is collapsed / mobile sheet is closed.
  */
 const MODULES = [
   { to: "/", label: "Home", icon: LayoutDashboardIcon },
@@ -101,12 +101,16 @@ function DockLink({
   return (
     <DockIcon
       className={cn(
-        "bg-black/10 transition-colors duration-150 dark:bg-white/10",
-        "hover:bg-white hover:text-black dark:hover:bg-white dark:hover:text-black",
-        active && "bg-white/90 text-black ring-1 ring-white dark:bg-white/90",
-        accent &&
-          !active &&
-          "bg-white/15 ring-1 ring-white/25 dark:bg-white/15 dark:ring-white/30",
+        // Light mode: foreground tint bg so icons are visible on the light card backdrop
+        "bg-foreground/[0.07] text-foreground transition-colors duration-150",
+        // Dark mode: white tint
+        "dark:bg-white/10 dark:text-white",
+        // Hover
+        "hover:bg-foreground/[0.12] dark:hover:bg-white/20",
+        // Active: brand dark purple, white icon — crisp in both modes
+        active && "!bg-[#270045] !text-white",
+        // Accent ring for AI button
+        accent && !active && "ring-1 ring-foreground/20 dark:ring-white/25",
       )}
     >
       <Tooltip>
@@ -145,11 +149,12 @@ export function AppDock() {
         "animate-in fade-in slide-in-from-bottom-2 duration-200",
       )}
     >
-      {/* Desktop: Magic UI magnifying dock */}
+      {/* Desktop: magnifying dock inside a white/dark pill card */}
       <div className="pointer-events-auto max-sm:hidden">
         <TooltipProvider delay={200}>
-          <div>
-            <Dock direction="bottom" iconSize={48} magnification={0.5} distance={100}>
+          {/* Card backdrop gives contrast in light mode */}
+          <div className="rounded-2xl border border-border bg-card/95 px-2 py-1.5 shadow-lg backdrop-blur-xl dark:bg-card/85">
+            <Dock direction="bottom" iconSize={44} magnification={0.45} distance={90}>
               {MODULES.map((item) => (
                 <DockLink
                   key={item.to}
@@ -186,9 +191,9 @@ export function AppDock() {
         </TooltipProvider>
       </div>
 
-      {/* Mobile: compact dock */}
+      {/* Mobile: compact pill dock — card bg for contrast */}
       <nav className="pointer-events-auto sm:hidden" aria-label="Primary modules">
-        <div className="bg-background/90 border-border flex items-center gap-0.5 rounded-2xl border px-1.5 py-1 shadow-lg backdrop-blur-xl">
+        <div className="flex items-center gap-0.5 rounded-2xl border border-border bg-card/95 px-1.5 py-1 shadow-lg backdrop-blur-xl">
           {MODULES.slice(0, 4).map((item) => {
             const active = isActive(pathname, item.to)
             return (
@@ -199,9 +204,8 @@ export function AppDock() {
                 aria-current={active ? "page" : undefined}
                 className={cn(
                   "flex size-11 flex-col items-center justify-center gap-0.5 rounded-xl transition-colors",
-                  "bg-transparent text-muted-foreground",
-                  "active:bg-white/20",
-                  active && "bg-white text-black ring-1 ring-white dark:bg-white dark:text-black",
+                  "text-muted-foreground hover:text-foreground hover:bg-surface-alt",
+                  active && "bg-[#270045] text-white",
                 )}
               >
                 <item.icon className="size-4 shrink-0" />
@@ -217,9 +221,8 @@ export function AppDock() {
             aria-current={aiActive ? "page" : undefined}
             className={cn(
               "flex size-11 flex-col items-center justify-center gap-0.5 rounded-xl transition-colors",
-              "text-muted-foreground ring-1 ring-white/20",
-              "active:bg-white/20",
-              aiActive && "bg-white text-black ring-1 ring-white dark:bg-white dark:text-black",
+              "text-muted-foreground hover:text-foreground hover:bg-surface-alt",
+              aiActive && "bg-[#270045] text-white",
             )}
           >
             <CosmosAiIcon className="size-4 shrink-0" />
@@ -230,10 +233,9 @@ export function AppDock() {
             aria-label="Settings"
             aria-current={isActive(pathname, "/settings") ? "page" : undefined}
             className={cn(
-              "flex size-11 flex-col items-center justify-center gap-0.5 rounded-xl",
-              "text-muted-foreground",
-              isActive(pathname, "/settings") &&
-                "bg-white text-black ring-1 ring-white dark:bg-white dark:text-black",
+              "flex size-11 flex-col items-center justify-center gap-0.5 rounded-xl transition-colors",
+              "text-muted-foreground hover:text-foreground hover:bg-surface-alt",
+              isActive(pathname, "/settings") && "bg-[#270045] text-white",
             )}
           >
             <SettingsIcon className="size-4 shrink-0" />

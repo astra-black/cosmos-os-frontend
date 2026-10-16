@@ -589,6 +589,21 @@ export function ClientsPage() {
         </Card>
       ) : null}
 
+      {/* KPI tiles */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        {[
+          { label: "Active Accounts", value: clients.filter(c => c.stage === "active").length },
+          { label: "Total ARR", value: money(clients.reduce((s, c) => s + (c.arr ?? 0), 0)) },
+          { label: "Open Pipeline", value: clients.filter(c => !["won","lost","churned"].includes(c.stage)).length },
+          { label: "Churned", value: clients.filter(c => c.stage === "churned").length },
+        ].map(tile => (
+          <div key={tile.label} className="rounded-xl border border-border bg-card p-4 flex flex-col gap-1 shadow-[0_1px_3px_0_rgba(39,0,69,0.08)]">
+            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">{tile.label}</p>
+            <p className="font-sora text-2xl font-bold text-foreground">{tile.value}</p>
+          </div>
+        ))}
+      </div>
+
       <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
         <Input
           value={search}

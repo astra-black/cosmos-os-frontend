@@ -183,7 +183,7 @@ export function AppSidebar({ incidentCount }: { incidentCount?: number }) {
               Astra Black
             </p>
             <p className="text-[11px] leading-tight truncate text-sidebar-foreground/50">
-              AB 360 Client Workspace
+              Agency OS
             </p>
           </div>
         </div>
