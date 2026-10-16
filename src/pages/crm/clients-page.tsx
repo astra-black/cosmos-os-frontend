@@ -54,6 +54,28 @@ import { cn } from "@/lib/utils"
 const STAGES = ["prospect", "onboarding", "active", "paused", "churned"] as const
 const HEALTH_OPTIONS = ["strong", "watch", "new", "risk"] as const
 const DEAL_STAGES = ["lead", "qualified", "proposal", "negotiation", "won", "lost"] as const
+
+function stageBadgeVariant(stage: string): "success" | "warning" | "blue" | "orange" | "secondary" | "default" {
+  switch (stage.toLowerCase()) {
+    case "active":
+    case "won":
+      return "success"
+    case "prospect":
+    case "lead":
+      return "blue"
+    case "onboarding":
+    case "proposal":
+    case "negotiation":
+      return "orange"
+    case "paused":
+      return "warning"
+    case "churned":
+    case "lost":
+      return "secondary"
+    default:
+      return "default"
+  }
+}
 type Tab = "overview" | "contacts" | "deals" | "activity" | "comments"
 type ClientForm = {
   name: string
@@ -643,34 +665,44 @@ export function ClientsPage() {
             {filtered.length === 0 ? (
               <EmptyState title="No accounts" description="Adjust filters or add an account." />
             ) : (
-              filtered.map((client) => (
-                <button
-                  key={client.clientId}
-                  type="button"
-                  onClick={() => {
-                    selectClient(client.clientId)
-                    setTab("overview")
-                  }}
-                  className={cn(
-                    "bg-card hover:bg-muted/50 rounded-xl border p-3 text-left transition-colors",
-                    selectedId === client.clientId && "border-primary bg-primary/5",
-                  )}
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0">
-                      <div className="truncate font-medium">{client.name}</div>
-                      <div className="text-muted-foreground text-xs">{client.industry}</div>
+              filtered.map((client) => {
+                const charCode = (client.name || "?").charCodeAt(0) || 65
+                const avatarBg = `hsl(${charCode * 15}deg 60% 45%)`
+                return (
+                  <button
+                    key={client.clientId}
+                    type="button"
+                    onClick={() => {
+                      selectClient(client.clientId)
+                      setTab("overview")
+                    }}
+                    className={cn(
+                      "bg-card hover:bg-surface-alt/70 rounded-xl border border-border p-3.5 text-left transition-all shadow-[0_1px_3px_0_rgba(39,0,69,0.06)] flex flex-col gap-2.5",
+                      selectedId === client.clientId && "border-primary bg-primary/5 ring-1 ring-primary/20",
+                    )}
+                  >
+                    <div className="flex items-start gap-3">
+                      <div
+                        className="h-9 w-9 rounded-full flex items-center justify-center text-xs font-bold text-white shrink-0 shadow-sm"
+                        style={{ background: avatarBg }}
+                      >
+                        {client.name ? client.name.slice(0, 2).toUpperCase() : "??"}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate font-sora font-semibold text-sm text-foreground">{client.name}</div>
+                        <div className="text-muted-foreground text-xs truncate">{client.industry || "General"}</div>
+                      </div>
+                      <Badge variant={stageBadgeVariant(client.stage)} className="capitalize shrink-0 text-[10px]">
+                        {client.stage}
+                      </Badge>
                     </div>
-                    <Badge variant="secondary" className="capitalize shrink-0">
-                      {client.stage}
-                    </Badge>
-                  </div>
-                  <div className="text-muted-foreground mt-2 flex justify-between text-[11px]">
-                    <span>{client.accountLead}</span>
-                    <span className="tabular-nums">{money(client.arr)}</span>
-                  </div>
-                </button>
-              ))
+                    <div className="text-muted-foreground flex items-center justify-between text-xs pt-1.5 border-t border-border/40">
+                      <span className="truncate max-w-[120px]">{client.accountLead || "Unassigned"}</span>
+                      <span className="tabular-nums font-semibold text-foreground">{money(client.arr)}</span>
+                    </div>
+                  </button>
+                )
+              })
             )}
           </aside>
 
@@ -690,72 +722,90 @@ export function ClientsPage() {
                 >
                   ← Accounts
                 </Button>
-                <Card className="p-4 sm:p-5">
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <h2 className="text-lg font-semibold">{selected.name}</h2>
-                      <p className="text-muted-foreground font-mono text-xs">
-                        {selected.clientId}
-                      </p>
+                <Card className="overflow-hidden border border-border bg-card shadow-[0_1px_3px_0_rgba(39,0,69,0.08)]">
+                  {/* Purple header banner */}
+                  <div
+                    className="h-16 w-full"
+                    style={{ background: "linear-gradient(135deg, #270045 0%, #1a002e 100%)" }}
+                  />
+                  <div className="p-5 flex flex-col gap-4">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div className="flex items-center gap-3.5">
+                        <div
+                          className="h-12 w-12 rounded-xl flex items-center justify-center text-base font-bold text-white shrink-0 shadow-md"
+                          style={{ background: `hsl(${((selected.name || "?").charCodeAt(0) || 65) * 15}deg 60% 45%)` }}
+                        >
+                          {selected.name ? selected.name.slice(0, 2).toUpperCase() : "??"}
+                        </div>
+                        <div className="min-w-0">
+                          <h2 className="font-sora text-xl font-bold text-foreground leading-tight">{selected.name}</h2>
+                          <p className="text-muted-foreground font-mono text-xs mt-0.5">
+                            {selected.clientId}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Badge variant={stageBadgeVariant(selected.stage)} className="capitalize">{selected.stage}</Badge>
+                        <Badge variant="outline" className="capitalize">
+                          {selected.health}
+                        </Badge>
+                        {selected.stage !== "churned" ? (
+                          <Button size="sm" variant="outline" onClick={() => advanceStage(selected)}>
+                            Advance stage
+                          </Button>
+                        ) : null}
+                        {canWriteCrm ? (
+                          <>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="gap-1.5 border-sky-700/50 bg-sky-950/30 text-sky-400 hover:bg-sky-900/40"
+                              onClick={() => setPortalModalOpen(true)}
+                            >
+                              <KeyRoundIcon className="size-3.5" />
+                              Portal & Access
+                            </Button>
+                            <Button size="icon" variant="ghost" className="size-8" onClick={() => openEditClient(selected)} aria-label={`Edit ${selected.name}`}>
+                              <PencilIcon className="size-3.5" />
+                            </Button>
+                            <Button size="icon" variant="ghost" className="size-8 text-destructive" disabled={deleting} onClick={() => handleDelete(selected)} aria-label={`Delete ${selected.name}`}>
+                              <Trash2Icon className="size-3.5" />
+                            </Button>
+                          </>
+                        ) : null}
+                      </div>
                     </div>
-                    <div className="flex flex-wrap gap-2">
-                      <Badge className="capitalize">{selected.stage}</Badge>
-                      <Badge variant="outline" className="capitalize">
-                        {selected.health}
-                      </Badge>
-                       {selected.stage !== "churned" ? (
-                         <Button size="sm" variant="outline" onClick={() => advanceStage(selected)}>
-                           Advance stage
-                         </Button>
-                       ) : null}
-                       {canWriteCrm ? (
-                         <>
-                           <Button
-                           size="sm"
-                           variant="outline"
-                           className="gap-1.5 border-sky-700/50 bg-sky-950/30 text-sky-400 hover:bg-sky-900/40"
-                           onClick={() => setPortalModalOpen(true)}
-                         >
-                           <KeyRoundIcon className="size-3.5" />
-                           Portal & Access
-                         </Button>
-                         <Button size="icon" variant="ghost" className="size-8" onClick={() => openEditClient(selected)} aria-label={`Edit ${selected.name}`}>
-                             <PencilIcon className="size-3.5" />
-                           </Button>
-                           <Button size="icon" variant="ghost" className="size-8 text-destructive" disabled={deleting} onClick={() => handleDelete(selected)} aria-label={`Delete ${selected.name}`}>
-                             <Trash2Icon className="size-3.5" />
-                           </Button>
-                         </>
-                       ) : null}
-                    </div>
-                  </div>
-                  <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
-                    <div className="bg-muted/40 rounded-lg p-3">
-                      <div className="text-muted-foreground text-[11px]">ARR</div>
-                      <div className="font-semibold tabular-nums">{money(selected.arr)}</div>
-                    </div>
-                    <div className="bg-muted/40 rounded-lg p-3">
-                      <div className="text-muted-foreground text-[11px]">Open pipeline</div>
-                      <div className="font-semibold tabular-nums">{money(openDealValue)}</div>
-                    </div>
-                    <div className="bg-muted/40 rounded-lg p-3">
-                      <div className="text-muted-foreground text-[11px]">Contacts</div>
-                      <div className="font-semibold tabular-nums">{contacts.length}</div>
-                    </div>
-                    <div className="bg-muted/40 rounded-lg p-3">
-                      <div className="text-muted-foreground text-[11px]">Deals</div>
-                      <div className="font-semibold tabular-nums">{deals.length}</div>
+                    <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
+                      <div className="bg-surface-alt rounded-xl p-3 border border-border/50">
+                        <div className="text-muted-foreground text-[11px] font-medium uppercase tracking-wide">ARR</div>
+                        <div className="font-sora text-lg font-bold text-foreground tabular-nums mt-0.5">{money(selected.arr)}</div>
+                      </div>
+                      <div className="bg-surface-alt rounded-xl p-3 border border-border/50">
+                        <div className="text-muted-foreground text-[11px] font-medium uppercase tracking-wide">Open pipeline</div>
+                        <div className="font-sora text-lg font-bold text-foreground tabular-nums mt-0.5">{money(openDealValue)}</div>
+                      </div>
+                      <div className="bg-surface-alt rounded-xl p-3 border border-border/50">
+                        <div className="text-muted-foreground text-[11px] font-medium uppercase tracking-wide">Contacts</div>
+                        <div className="font-sora text-lg font-bold text-foreground tabular-nums mt-0.5">{contacts.length}</div>
+                      </div>
+                      <div className="bg-surface-alt rounded-xl p-3 border border-border/50">
+                        <div className="text-muted-foreground text-[11px] font-medium uppercase tracking-wide">Deals</div>
+                        <div className="font-sora text-lg font-bold text-foreground tabular-nums mt-0.5">{deals.length}</div>
+                      </div>
                     </div>
                   </div>
                 </Card>
 
-                <div className="-mx-1 flex gap-1 overflow-x-auto px-1 pb-0.5 sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0">
+                <div className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-0.5 sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0">
                   {tabs.map((t) => (
                     <Button
                       key={t.id}
                       size="sm"
-                      variant={tab === t.id ? "default" : "outline"}
-                      className="shrink-0 rounded-full"
+                      variant={tab === t.id ? "brand" : "outline"}
+                      className={cn(
+                        "shrink-0 rounded-full text-xs font-semibold px-3.5",
+                        tab === t.id ? "bg-[#270045] text-white hover:bg-[#3a006b]" : "bg-transparent text-foreground hover:bg-surface-alt"
+                      )}
                       onClick={() => setTab(t.id)}
                     >
                       {t.label}
