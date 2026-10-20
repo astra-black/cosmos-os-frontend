@@ -147,54 +147,100 @@ function OpportunityFormFields({
   form,
   clients,
   onChange,
+  validationError,
 }: {
   form: OpportunityForm
   clients: AgencyClient[]
   onChange: (field: keyof OpportunityForm, value: string) => void
+  validationError?: string | null
 }) {
   return (
-    <div className="grid gap-4 sm:grid-cols-2">
-      <div className="grid gap-2 sm:col-span-2">
-        <Label htmlFor="opportunity-form-name">Name</Label>
-        <Input id="opportunity-form-name" value={form.name} onChange={(e) => onChange("name", e.target.value)} placeholder="Opportunity name" required />
-      </div>
-      <div className="grid gap-2">
-        <Label htmlFor="opportunity-form-client">Client</Label>
-        <Select id="opportunity-form-client" value={form.clientId} onChange={(e) => onChange("clientId", e.target.value)}>
+    <div className="space-y-6">
+      {validationError ? (
+        <div role="alert" className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2.5 text-sm text-destructive">
+          <p className="font-medium">Check the highlighted details before saving.</p>
+          <p className="mt-0.5 text-xs text-destructive/80">{validationError}</p>
+        </div>
+      ) : null}
+      <section className="space-y-3">
+        <div>
+          <p className="text-sm font-semibold text-foreground">Opportunity basics</p>
+          <p className="text-xs text-muted-foreground">Identify the account and the current stage of the deal.</p>
+        </div>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid gap-2 sm:col-span-2">
+            <Label htmlFor="opportunity-form-name">Opportunity name <span className="text-destructive">*</span></Label>
+            <Input
+              id="opportunity-form-name"
+              value={form.name}
+              onChange={(e) => onChange("name", e.target.value)}
+              placeholder="e.g. Website redesign — Acme"
+              autoFocus
+              required
+              className="h-10"
+            />
+          </div>
+          <div className="grid gap-2">
+            <Label htmlFor="opportunity-form-client">Client</Label>
+            <Select id="opportunity-form-client" value={form.clientId} onChange={(e) => onChange("clientId", e.target.value)} className="h-10">
           <option value="">Unassigned</option>
           {clients.map((client) => <option key={client.clientId} value={client.clientId}>{client.name}</option>)}
-        </Select>
-      </div>
-      <div className="grid gap-2">
-        <Label htmlFor="opportunity-form-stage">Stage</Label>
-        <Select id="opportunity-form-stage" value={form.stage} onChange={(e) => onChange("stage", e.target.value)}>
+            </Select>
+          </div>
+          <div className="grid gap-2">
+            <Label htmlFor="opportunity-form-stage">Stage</Label>
+            <Select id="opportunity-form-stage" value={form.stage} onChange={(e) => onChange("stage", e.target.value)} className="h-10">
           {STAGES.map((stage) => <option key={stage.id} value={stage.id}>{stage.label}</option>)}
-        </Select>
-      </div>
-      <div className="grid gap-2">
-        <Label htmlFor="opportunity-form-value">Value</Label>
-        <Input id="opportunity-form-value" type="number" min="0" step="any" value={form.value} onChange={(e) => onChange("value", e.target.value)} placeholder="0" required />
-      </div>
-      <div className="grid gap-2">
-        <Label htmlFor="opportunity-form-probability">Probability</Label>
-        <Input id="opportunity-form-probability" type="number" min="0" max="100" step="1" value={form.probability} onChange={(e) => onChange("probability", e.target.value)} placeholder="0-100" required />
-      </div>
-      <div className="grid gap-2">
-        <Label htmlFor="opportunity-form-source">Source</Label>
-        <Input id="opportunity-form-source" value={form.source} onChange={(e) => onChange("source", e.target.value)} placeholder="Referral, inbound, ..." />
-      </div>
-      <div className="grid gap-2">
-        <Label htmlFor="opportunity-form-close">Expected close</Label>
-        <Input id="opportunity-form-close" type="date" value={form.expectedClose} onChange={(e) => onChange("expectedClose", e.target.value)} />
-      </div>
-      <div className="grid gap-2 sm:col-span-2">
-        <Label htmlFor="opportunity-form-next-step">Next step</Label>
-        <Input id="opportunity-form-next-step" value={form.nextStep} onChange={(e) => onChange("nextStep", e.target.value)} placeholder="Schedule proposal review" />
-      </div>
-      <div className="grid gap-2 sm:col-span-2">
-        <Label htmlFor="opportunity-form-notes">Notes</Label>
-        <Textarea id="opportunity-form-notes" value={form.notes} onChange={(e) => onChange("notes", e.target.value)} placeholder="Opportunity notes" />
-      </div>
+            </Select>
+          </div>
+        </div>
+      </section>
+
+      <section className="space-y-3 border-t border-border/60 pt-5">
+        <div>
+          <p className="text-sm font-semibold text-foreground">Commercials</p>
+          <p className="text-xs text-muted-foreground">Use the values your team uses for forecasting.</p>
+        </div>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid gap-2">
+            <Label htmlFor="opportunity-form-value">Estimated value <span className="text-destructive">*</span></Label>
+            <Input id="opportunity-form-value" type="number" inputMode="decimal" min="0" step="any" value={form.value} onChange={(e) => onChange("value", e.target.value)} placeholder="0" required className="h-10" />
+            <p className="text-[11px] text-muted-foreground">Enter 0 if the value is not confirmed yet.</p>
+          </div>
+          <div className="grid gap-2">
+            <Label htmlFor="opportunity-form-probability">Probability <span className="text-destructive">*</span></Label>
+            <div className="relative">
+              <Input id="opportunity-form-probability" type="number" inputMode="numeric" min="0" max="100" step="1" value={form.probability} onChange={(e) => onChange("probability", e.target.value)} placeholder="0–100" required className="h-10 pr-8" />
+              <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-xs text-muted-foreground">%</span>
+            </div>
+          </div>
+          <div className="grid gap-2">
+            <Label htmlFor="opportunity-form-source">Source</Label>
+            <Input id="opportunity-form-source" value={form.source} onChange={(e) => onChange("source", e.target.value)} placeholder="Referral, inbound, Apollo..." className="h-10" />
+          </div>
+          <div className="grid gap-2">
+            <Label htmlFor="opportunity-form-close">Expected close</Label>
+            <Input id="opportunity-form-close" type="date" value={form.expectedClose} onChange={(e) => onChange("expectedClose", e.target.value)} className="h-10" />
+          </div>
+        </div>
+      </section>
+
+      <section className="space-y-3 border-t border-border/60 pt-5">
+        <div>
+          <p className="text-sm font-semibold text-foreground">Next action</p>
+          <p className="text-xs text-muted-foreground">Keep the next step specific so the pipeline stays actionable.</p>
+        </div>
+        <div className="grid gap-4">
+          <div className="grid gap-2">
+            <Label htmlFor="opportunity-form-next-step">Next step</Label>
+            <Input id="opportunity-form-next-step" value={form.nextStep} onChange={(e) => onChange("nextStep", e.target.value)} placeholder="Schedule proposal review" className="h-10" />
+          </div>
+          <div className="grid gap-2">
+            <Label htmlFor="opportunity-form-notes">Notes</Label>
+            <Textarea id="opportunity-form-notes" value={form.notes} onChange={(e) => onChange("notes", e.target.value)} placeholder="Context, decision makers, risks, or follow-up details..." className="min-h-28 resize-y" />
+          </div>
+        </div>
+      </section>
     </div>
   )
 }
@@ -220,6 +266,7 @@ export function CrmPipelinePage() {
   const [creating, setCreating] = useState(false)
   const [editingDeal, setEditingDeal] = useState<Opportunity | null>(null)
   const [form, setForm] = useState<OpportunityForm>(emptyOpportunityForm)
+  const [formError, setFormError] = useState<string | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<Opportunity | null>(null)
   const [aiModalOpen, setAiModalOpen] = useState(false)
   const [aiModalMode, setAiModalMode] = useState<"proposal" | "followup">("proposal")
@@ -364,12 +411,14 @@ export function CrmPipelinePage() {
 
   function openCreate() {
     setForm(emptyOpportunityForm())
+    setFormError(null)
     setEditingDeal(null)
     setShowCreate(true)
   }
 
   function openEdit(deal: Opportunity) {
     setForm(opportunityFormFromDeal(deal))
+    setFormError(null)
     setEditingDeal(deal)
     setShowCreate(false)
   }
@@ -392,9 +441,11 @@ export function CrmPipelinePage() {
     if (!canWriteCrm) return
     const validationError = validateOpportunityForm(form)
     if (validationError) {
+      setFormError(validationError)
       toast.error(validationError)
       return
     }
+    setFormError(null)
     setCreating(true)
     try {
       await createOpportunity({ ...opportunityPayload(form), owner: "Unassigned" })
@@ -412,9 +463,11 @@ export function CrmPipelinePage() {
     if (!editingDeal || !canWriteCrm) return
     const validationError = validateOpportunityForm(form)
     if (validationError) {
+      setFormError(validationError)
       toast.error(validationError)
       return
     }
+    setFormError(null)
     setCreating(true)
     try {
       await updateOpportunity(editingDeal.opportunityId, opportunityPayload(form))
@@ -919,7 +972,11 @@ export function CrmPipelinePage() {
         <OpportunityFormFields
           form={form}
           clients={clients}
-          onChange={(field, value) => setForm((current) => ({ ...current, [field]: value }))}
+          validationError={formError}
+          onChange={(field, value) => {
+            setFormError(null)
+            setForm((current) => ({ ...current, [field]: value }))
+          }}
         />
       </EntityFormDialog>
       <ConfirmationDialog
