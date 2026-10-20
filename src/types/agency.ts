@@ -472,6 +472,15 @@ export type Opportunity = {
     title?: string
     email?: string
     phone?: string
+    emailStatus?: string
+    linkedinUrl?: string
+    twitterUrl?: string
+    department?: string
+    seniority?: string
+    country?: string
+    state?: string
+    city?: string
+    apolloId?: string
   } | null
   stage: OpportunityStage | string
   value: number

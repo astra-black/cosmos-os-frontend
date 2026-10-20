@@ -32,7 +32,8 @@ const Toaster = ({ ...props }: ToasterProps) => {
       }
       toastOptions={{
         classNames: {
-          toast: "cn-toast",
+          toast:
+            "cn-toast w-[calc(100vw-2rem)] max-w-[calc(100vw-2rem)] sm:w-[356px] sm:max-w-[356px] overflow-hidden",
         },
       }}
       {...props}

@@ -38,6 +38,10 @@ export type ParsedDealProfile = {
   contactEmail: string | null
   contactPhone: string | null
   linkedinUrl: string | null
+  twitterUrl: string | null
+  emailStatus: string | null
+  department: string | null
+  seniority: string | null
   location: string | null
   companyName: string
   companyWebsite: string | null
@@ -51,7 +55,11 @@ export function parseDealProfile(deal: Opportunity): ParsedDealProfile {
   let contactTitle = deal.contactTitle || deal.primaryContact?.title || null
   let contactEmail = deal.contactEmail || deal.primaryContact?.email || null
   let contactPhone = deal.contactPhone || deal.primaryContact?.phone || null
-  let linkedinUrl: string | null = null
+  let linkedinUrl: string | null = deal.primaryContact?.linkedinUrl || null
+  let twitterUrl: string | null = deal.primaryContact?.twitterUrl || null
+  let emailStatus: string | null = deal.primaryContact?.emailStatus || null
+  let department: string | null = deal.primaryContact?.department || null
+  let seniority: string | null = deal.primaryContact?.seniority || null
   let location: string | null = null
   let companyWebsite: string | null = null
   let companyIndustry: string | null = deal.clientIndustry || null
@@ -70,13 +78,19 @@ export function parseDealProfile(deal: Opportunity): ParsedDealProfile {
     if (!contactPhone && phoneMatch) contactPhone = phoneMatch[1].trim()
 
     const linkedinMatch = notesText.match(/LinkedIn:\s*([^\s\n\r]+)/i)
-    if (linkedinMatch) {
+    if (!linkedinUrl && linkedinMatch) {
       let lUrl = linkedinMatch[1].trim()
       if (lUrl && !lUrl.startsWith("http://") && !lUrl.startsWith("https://")) {
         lUrl = `https://${lUrl}`
       }
       linkedinUrl = lUrl
     }
+    const twitterMatch = notesText.match(/Twitter:\s*([^\s\n\r]+)/i)
+    if (!twitterUrl && twitterMatch) twitterUrl = twitterMatch[1].trim()
+    const departmentMatch = notesText.match(/Department:\s*([^\n\r]+)/i)
+    if (!department && departmentMatch) department = departmentMatch[1].trim()
+    const seniorityMatch = notesText.match(/Seniority:\s*([^\n\r]+)/i)
+    if (!seniority && seniorityMatch) seniority = seniorityMatch[1].trim()
 
     const locationMatch = notesText.match(/Location:\s*([^\n\r]+)/i)
     if (locationMatch) location = locationMatch[1].trim()
@@ -123,7 +137,7 @@ export function parseDealProfile(deal: Opportunity): ParsedDealProfile {
         if (!l) return false
         if (/^Apollo\s*ID:/i.test(l)) return false
         if (/^Source:\s*Apollo/i.test(l)) return false
-        if (/^(Title|Company|Industry|Location|LinkedIn|Email|Phone|Website|Employees):/i.test(l))
+        if (/^(Title|Company|Industry|Location|LinkedIn|Twitter|Department|Seniority|Email|Phone|Website|Employees):/i.test(l))
           return false
         return true
       })
@@ -136,6 +150,10 @@ export function parseDealProfile(deal: Opportunity): ParsedDealProfile {
     contactEmail,
     contactPhone,
     linkedinUrl,
+    twitterUrl,
+    emailStatus,
+    department,
+    seniority,
     location,
     companyName,
     companyWebsite,
@@ -287,6 +305,21 @@ export function DealDetailsSheet({
               </a>
             )}
 
+            {profile.twitterUrl && (
+              <a
+                href={profile.twitterUrl.startsWith("http") ? profile.twitterUrl : `https://${profile.twitterUrl}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className={cn(
+                  buttonVariants({ variant: "outline", size: "sm" }),
+                  "h-9 px-3.5 border-border hover:bg-surface-alt text-xs font-medium gap-2 rounded-xl"
+                )}
+              >
+                X / Twitter
+                <ExternalLinkIcon className="size-3 text-muted-foreground" />
+              </a>
+            )}
+
             {onEdit && (
               <Button
                 size="sm"
@@ -415,6 +448,29 @@ export function DealDetailsSheet({
                     <p className="text-[10px] text-muted-foreground font-medium">Location</p>
                     <p className="text-xs text-foreground font-medium">{profile.location}</p>
                   </div>
+                </div>
+              )}
+
+              {(profile.department || profile.seniority || profile.emailStatus) && (
+                <div className="grid grid-cols-2 gap-2">
+                  {profile.department && (
+                    <div className="p-2 rounded-xl bg-card border border-border/60">
+                      <p className="text-[10px] text-muted-foreground font-medium">Department</p>
+                      <p className="text-xs font-semibold text-foreground mt-0.5 truncate">{profile.department}</p>
+                    </div>
+                  )}
+                  {profile.seniority && (
+                    <div className="p-2 rounded-xl bg-card border border-border/60">
+                      <p className="text-[10px] text-muted-foreground font-medium">Seniority</p>
+                      <p className="text-xs font-semibold text-foreground mt-0.5 truncate">{profile.seniority}</p>
+                    </div>
+                  )}
+                  {profile.emailStatus && (
+                    <div className="p-2 rounded-xl bg-card border border-border/60 col-span-2">
+                      <p className="text-[10px] text-muted-foreground font-medium">Email Status</p>
+                      <p className="text-xs font-semibold text-foreground mt-0.5 capitalize">{profile.emailStatus}</p>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
