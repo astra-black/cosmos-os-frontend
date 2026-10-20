@@ -458,6 +458,17 @@ export type Opportunity = {
   clientId?: string | null
   clientName?: string
   contactId?: string | null
+  contactName?: string | null
+  contactTitle?: string | null
+  contactEmail?: string | null
+  contactPhone?: string | null
+  primaryContact?: {
+    id: string
+    name: string
+    title?: string
+    email?: string
+    phone?: string
+  } | null
   stage: OpportunityStage | string
   value: number
   probability: number

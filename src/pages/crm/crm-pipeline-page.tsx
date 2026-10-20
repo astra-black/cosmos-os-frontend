@@ -3,14 +3,18 @@ import { useNavigate } from "react-router-dom"
 import {
   ArrowRightIcon,
   CalendarIcon,
+  CopyIcon,
   Loader2Icon,
+  MailIcon,
   PencilIcon,
+  PhoneIcon,
   PlusIcon,
   RocketIcon,
   SparklesIcon,
   Trash2Icon,
   TrendingUpIcon,
   SearchIcon,
+  UserIcon,
 } from "lucide-react"
 import { toast } from "sonner"
 
@@ -41,6 +45,42 @@ import { useAuth } from "@/lib/auth"
 import { canPerform } from "@/lib/rbac"
 import type { AgencyClient, CrmSummary, Opportunity } from "@/types/agency"
 import { cn } from "@/lib/utils"
+
+function getDealContact(deal: Opportunity) {
+  let name = deal.contactName || deal.primaryContact?.name
+  let title = deal.contactTitle || deal.primaryContact?.title
+  let email = deal.contactEmail || deal.primaryContact?.email
+  let phone = deal.contactPhone || deal.primaryContact?.phone
+
+  if (!email && deal.notes) {
+    const emailMatch = deal.notes.match(/Email:\s*([^\s\n\r]+)/i)
+    if (emailMatch) email = emailMatch[1].trim()
+  }
+  if (!title && deal.notes) {
+    const titleMatch = deal.notes.match(/Title:\s*([^\n\r]+)/i)
+    if (titleMatch) title = titleMatch[1].trim()
+  }
+  if (!phone && deal.notes) {
+    const phoneMatch = deal.notes.match(/Phone:\s*([^\n\r]+)/i)
+    if (phoneMatch) phone = phoneMatch[1].trim()
+  }
+  if (!name && deal.name?.includes(" — ")) {
+    name = deal.name.split(" — ").slice(1).join(" — ").trim()
+  }
+  return { name, title, email, phone }
+}
+
+function cleanDealNotes(notes?: string | null): string {
+  if (!notes) return ""
+  return notes
+    .replace(/Apollo\s*ID:[^\n\r]*/gi, "")
+    .replace(/Source:\s*Apollo[^\n\r]*/gi, "")
+    .replace(/Email:\s*[^\n\r]*/gi, "")
+    .replace(/Title:\s*[^\n\r]*/gi, "")
+    .replace(/Company:\s*[^\n\r]*/gi, "")
+    .replace(/\n\s*\n+/g, "\n")
+    .trim()
+}
 
 const STAGES = [
   { id: "lead", label: "Lead", next: "qualified" },
@@ -466,12 +506,6 @@ export function CrmPipelinePage() {
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-1.5">
                     <span className="font-sora text-sm font-semibold text-foreground tracking-tight">{lane.label}</span>
-                    {lane.id === "lead" && (
-                      <span className="inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-medium bg-sky-500/10 text-sky-400 border border-sky-500/20">
-                        <SparklesIcon className="size-2.5" />
-                        Apollo
-                      </span>
-                    )}
                   </div>
                   <div className="flex items-center gap-1.5">
                     {lane.id === "lead" && canWriteCrm ? (
@@ -480,10 +514,10 @@ export function CrmPipelinePage() {
                         variant="ghost"
                         onClick={() => setLeadExtractionModalOpen(true)}
                         className="h-6 px-1.5 text-[11px] font-medium text-sky-400 hover:text-sky-300 hover:bg-sky-500/15 gap-1 rounded-md"
-                        title="Source leads with Apollo"
+                        title="Find leads"
                       >
                         <PlusIcon className="size-3" />
-                        Source
+                        Find Leads
                       </Button>
                     ) : null}
                     <span className="rounded-full px-2 py-0.5 text-xs font-semibold bg-surface border border-border text-foreground tabular-nums shadow-2xs">
@@ -505,7 +539,7 @@ export function CrmPipelinePage() {
                       </div>
                       <p className="text-xs text-foreground font-semibold">No active leads</p>
                       <p className="text-[11px] text-muted-foreground leading-snug max-w-[170px]">
-                        Extract verified prospects from Apollo directly into this pipeline.
+                        Search and import verified prospective clients directly into this pipeline.
                       </p>
                       {canWriteCrm ? (
                         <Button
@@ -515,7 +549,7 @@ export function CrmPipelinePage() {
                           className="mt-1 h-7 text-xs border-sky-500/40 text-sky-400 hover:bg-sky-500/20 gap-1.5 rounded-lg font-medium"
                         >
                           <SearchIcon className="size-3" />
-                          Source Leads
+                          Find Leads
                         </Button>
                       ) : null}
                     </div>
@@ -525,189 +559,257 @@ export function CrmPipelinePage() {
                     </div>
                   )
                 ) : (
-                  lane.items.map((deal) => (
-                    <article
-                      key={deal.opportunityId}
-                      className="rounded-xl border border-border bg-card p-4 shadow-[0_1px_3px_0_rgba(39,0,69,0.08)] hover:shadow-md hover:border-primary/30 transition-all flex flex-col gap-2.5"
-                    >
-                      {/* Top: Deal title + probability + actions */}
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="min-w-0 flex-1">
-                          {deal.source?.toLowerCase().includes("apollo") ? (
-                            <div className="mb-1">
-                              <span className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-medium bg-sky-500/10 text-sky-400 border border-sky-500/20">
-                                <SparklesIcon className="size-2.5" />
-                                Apollo Prospect
-                              </span>
+                  lane.items.map((deal) => {
+                    const contact = getDealContact(deal)
+                    const companyName = deal.clientName || (deal.name.includes(" — ") ? deal.name.split(" — ")[0].trim() : deal.name)
+                    const opportunitySubject = deal.name.includes(" — ") ? deal.name.split(" — ").slice(1).join(" — ").trim() : (deal.clientName ? deal.name : null)
+                    const cleanNotes = cleanDealNotes(deal.notes)
+
+                    return (
+                      <article
+                        key={deal.opportunityId}
+                        className="rounded-xl border border-border/80 bg-card p-3.5 shadow-2xs hover:shadow-md hover:border-primary/40 transition-all flex flex-col gap-2.5"
+                      >
+                        {/* Top: Company Name + Actions */}
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0 flex-1">
+                            <h3 className="font-sora text-sm font-bold text-foreground leading-snug truncate" title={companyName}>
+                              {companyName}
+                            </h3>
+                            {opportunitySubject && opportunitySubject !== contact.name ? (
+                              <p className="text-xs text-muted-foreground truncate mt-0.5" title={opportunitySubject}>
+                                {opportunitySubject}
+                              </p>
+                            ) : null}
+                          </div>
+
+                          {canWriteCrm ? (
+                            <div className="flex items-center gap-0.5 shrink-0">
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                className="size-6 text-muted-foreground hover:text-foreground"
+                                onClick={() => openEdit(deal)}
+                                aria-label={`Edit ${deal.name}`}
+                              >
+                                <PencilIcon className="size-3" />
+                              </Button>
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                className="size-6 text-muted-foreground hover:text-destructive"
+                                disabled={deletingId === deal.opportunityId}
+                                onClick={() => handleDelete(deal)}
+                                aria-label={`Delete ${deal.name}`}
+                              >
+                                <Trash2Icon className="size-3" />
+                              </Button>
                             </div>
                           ) : null}
-                          <h3 className="font-sora text-sm font-semibold text-foreground leading-snug line-clamp-2">
-                            {deal.name}
-                          </h3>
-                          <p className="text-xs text-muted-foreground mt-0.5 truncate">
-                            {deal.clientName || "Unassigned client"}
-                          </p>
                         </div>
 
+                        {/* Contact Details Block */}
+                        {(contact.name || contact.email || contact.phone) && (
+                          <div className="rounded-lg bg-surface-alt/70 border border-border/60 p-2 text-xs flex flex-col gap-1">
+                            {contact.name && (
+                              <div className="flex items-center justify-between gap-1">
+                                <div className="flex items-center gap-1.5 min-w-0">
+                                  <UserIcon className="size-3 text-primary/70 shrink-0" />
+                                  <span className="font-semibold text-foreground truncate">{contact.name}</span>
+                                </div>
+                                {contact.title && (
+                                  <span className="text-[10px] text-muted-foreground font-medium truncate max-w-[110px]" title={contact.title}>
+                                    {contact.title}
+                                  </span>
+                                )}
+                              </div>
+                            )}
+
+                            {contact.email && (
+                              <div className="flex items-center justify-between gap-1 pt-0.5">
+                                <a
+                                  href={`mailto:${contact.email}`}
+                                  className="text-sky-400 hover:text-sky-300 hover:underline flex items-center gap-1 truncate font-mono text-[11px]"
+                                  title={`Send email to ${contact.email}`}
+                                >
+                                  <MailIcon className="size-3 shrink-0" />
+                                  <span className="truncate">{contact.email}</span>
+                                </a>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    navigator.clipboard.writeText(contact.email!)
+                                    toast.success("Email copied to clipboard")
+                                  }}
+                                  className="text-muted-foreground hover:text-foreground p-0.5 rounded shrink-0"
+                                  title="Copy email"
+                                >
+                                  <CopyIcon className="size-3" />
+                                </button>
+                              </div>
+                            )}
+
+                            {contact.phone && (
+                              <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
+                                <PhoneIcon className="size-2.5 shrink-0" />
+                                <span>{contact.phone}</span>
+                              </div>
+                            )}
+                          </div>
+                        )}
+
+                        {/* Commercials + Probability */}
+                        <div className="flex items-center justify-between gap-2 pt-1 border-t border-border/40">
+                          <span className="font-sora text-sm font-bold text-foreground tabular-nums">
+                            {deal.value > 0 ? money(deal.value) : <span className="text-xs text-muted-foreground font-normal">TBD</span>}
+                          </span>
+                          <span
+                            className={cn(
+                              "rounded-full px-2 py-0.5 text-[10px] font-bold tabular-nums",
+                              deal.stage === "won"
+                                ? "bg-success/15 text-success border border-success/20"
+                                : deal.stage === "lost"
+                                ? "bg-destructive/15 text-destructive border border-destructive/20"
+                                : deal.probability >= 70
+                                ? "bg-success/15 text-success border border-success/20"
+                                : deal.probability >= 40
+                                ? "bg-amber-500/15 text-amber-400 border border-amber-500/20"
+                                : "bg-surface-alt text-muted-foreground border border-border"
+                            )}
+                          >
+                            {deal.probability}%
+                          </span>
+                        </div>
+
+                        {/* Meta: Close date & Owner */}
+                        <div className="text-[11px] text-muted-foreground flex items-center justify-between gap-1">
+                          <span className="truncate">{deal.owner || "Unassigned"}</span>
+                          {deal.expectedClose && (
+                            <span className="flex items-center gap-1 shrink-0">
+                              <CalendarIcon className="size-3 text-muted-foreground" />
+                              {new Date(deal.expectedClose).toLocaleDateString()}
+                            </span>
+                          )}
+                        </div>
+
+                        {/* Next Step / Notes snippet */}
+                        {deal.nextStep ? (
+                          <p className="text-[11px] text-muted-foreground bg-surface/80 p-1.5 rounded-md border border-border/50 line-clamp-2">
+                            <span className="font-semibold text-foreground">Next:</span> {deal.nextStep}
+                          </p>
+                        ) : cleanNotes ? (
+                          <p className="text-[11px] text-muted-foreground bg-surface/60 p-1.5 rounded-md border border-border/40 line-clamp-2 italic">
+                            {cleanNotes.split("\n")[0]}
+                          </p>
+                        ) : null}
+
+                        {/* Action buttons */}
                         {canWriteCrm ? (
-                          <div className="flex items-center gap-0.5 shrink-0">
-                            <Button
-                              size="icon"
-                              variant="ghost"
-                              className="size-6 text-muted-foreground hover:text-foreground"
-                              onClick={() => openEdit(deal)}
-                              aria-label={`Edit ${deal.name}`}
-                            >
-                              <PencilIcon className="size-3" />
-                            </Button>
-                            <Button
-                              size="icon"
-                              variant="ghost"
-                              className="size-6 text-muted-foreground hover:text-destructive"
-                              disabled={deletingId === deal.opportunityId}
-                              onClick={() => handleDelete(deal)}
-                              aria-label={`Delete ${deal.name}`}
-                            >
-                              <Trash2Icon className="size-3" />
-                            </Button>
+                          <div className="flex flex-col gap-1.5 pt-1">
+                            <div className="flex items-center gap-1.5">
+                              {contact.email ? (
+                                <Button
+                                  size="sm"
+                                  className="h-7 flex-1 text-xs bg-sky-600 hover:bg-sky-500 text-white gap-1 rounded-lg font-medium shadow-2xs"
+                                  onClick={() => {
+                                    setAiTargetDeal(deal)
+                                    setAiModalMode(lane.id === "lead" ? "proposal" : "followup")
+                                    setAiModalOpen(true)
+                                  }}
+                                >
+                                  <MailIcon className="size-3" />
+                                  Send Email
+                                </Button>
+                              ) : null}
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-7 flex-1 gap-1 text-[11px] border-border text-foreground hover:bg-surface-alt rounded-lg"
+                                onClick={() => {
+                                  setAiTargetDeal(deal)
+                                  setAiModalMode("proposal")
+                                  setAiModalOpen(true)
+                                }}
+                              >
+                                <SparklesIcon className="size-3 text-sky-400" />
+                                {lane.id === "lead" ? "AI Pitch" : "Proposal"}
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-7 px-2 text-[11px] border-border text-foreground hover:bg-surface-alt rounded-lg"
+                                onClick={() => {
+                                  setAiTargetDeal(deal)
+                                  setAiModalMode("followup")
+                                  setAiModalOpen(true)
+                                }}
+                                title="Compose follow-up"
+                              >
+                                Follow-up
+                              </Button>
+                            </div>
+
+                            {/* Stage Transitions */}
+                            {lane.next ? (
+                              <Button
+                                size="sm"
+                                className="h-7 w-full text-xs bg-[#270045] text-white hover:bg-[#3a006b] rounded-lg shadow-xs"
+                                disabled={busyId === deal.opportunityId}
+                                onClick={() => moveDeal(deal, lane.next!)}
+                              >
+                                {busyId === deal.opportunityId ? (
+                                  <Loader2Icon className="size-3 animate-spin" />
+                                ) : (
+                                  <div className="flex items-center justify-center gap-1">
+                                    <span>Move to {lane.next}</span>
+                                    <ArrowRightIcon className="size-3" />
+                                  </div>
+                                )}
+                              </Button>
+                            ) : null}
+
+                            {lane.id === "negotiation" ? (
+                              <div className="flex gap-1.5">
+                                <Button
+                                  size="sm"
+                                  className="h-7 flex-1 text-xs bg-success/20 text-success hover:bg-success/30 border border-success/30 rounded-lg font-semibold"
+                                  disabled={busyId === deal.opportunityId}
+                                  onClick={() => moveDeal(deal, "won")}
+                                >
+                                  Won
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="h-7 flex-1 text-xs border-destructive/30 text-destructive hover:bg-destructive/10 rounded-lg font-semibold"
+                                  disabled={busyId === deal.opportunityId}
+                                  onClick={() => moveDeal(deal, "lost")}
+                                >
+                                  Lost
+                                </Button>
+                              </div>
+                            ) : null}
+
+                            {lane.id === "won" ? (
+                              <Button
+                                size="sm"
+                                className="h-8 w-full text-xs bg-[#7a5cc2] text-white hover:bg-[#6a4eb2] rounded-lg shadow-xs gap-1.5"
+                                disabled={busyId === deal.opportunityId}
+                                onClick={() => void startDelivery(deal)}
+                              >
+                                {busyId === deal.opportunityId ? (
+                                  <Loader2Icon className="size-3.5 animate-spin" />
+                                ) : (
+                                  <RocketIcon className="size-3.5" />
+                                )}
+                                Start delivery
+                              </Button>
+                            ) : null}
                           </div>
                         ) : null}
-                      </div>
-
-                      {/* Deal Value + Probability Pill */}
-                      <div className="flex items-center justify-between gap-2 pt-1 border-t border-border/50">
-                        <span className="font-sora text-base font-bold text-foreground tabular-nums">
-                          {money(deal.value)}
-                        </span>
-                        <span
-                          className={cn(
-                            "rounded-full px-2 py-0.5 text-[10px] font-bold",
-                            deal.stage === "won"
-                              ? "bg-success/15 text-success border border-success/20"
-                              : deal.stage === "lost"
-                              ? "bg-destructive/15 text-destructive border border-destructive/20"
-                              : deal.probability >= 70
-                              ? "bg-success/15 text-success border border-success/20"
-                              : deal.probability >= 40
-                              ? "bg-orange/15 text-orange border border-orange/20"
-                              : "bg-surface-alt text-muted-foreground border border-border"
-                          )}
-                        >
-                          {deal.probability}%
-                        </span>
-                      </div>
-
-                      {/* Meta: Close date & Owner */}
-                      <div className="text-[11px] text-muted-foreground flex items-center justify-between gap-1">
-                        <span className="truncate">{deal.owner || "Unassigned"}</span>
-                        {deal.expectedClose && (
-                          <span className="flex items-center gap-1 shrink-0">
-                            <CalendarIcon className="size-3 text-muted-foreground" />
-                            {new Date(deal.expectedClose).toLocaleDateString()}
-                          </span>
-                        )}
-                      </div>
-
-                      {deal.nextStep ? (
-                        <p className="text-[11px] text-muted-foreground bg-surface-alt/60 p-2 rounded-lg border border-border/60 line-clamp-2">
-                          <span className="font-semibold text-foreground">Next:</span> {deal.nextStep}
-                        </p>
-                      ) : null}
-
-                      {/* AI Assistance Buttons */}
-                      {canWriteCrm ? (
-                        <div className="flex gap-1.5 pt-1">
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className={cn(
-                              "h-7 flex-1 gap-1 text-[11px] rounded-lg",
-                              deal.source?.toLowerCase().includes("apollo")
-                                ? "border-sky-500/40 text-sky-400 hover:bg-sky-500/15"
-                                : "border-primary/30 text-primary hover:bg-primary/10"
-                            )}
-                            onClick={() => {
-                              setAiTargetDeal(deal)
-                              setAiModalMode("proposal")
-                              setAiModalOpen(true)
-                            }}
-                          >
-                            <SparklesIcon className="size-3" />
-                            {deal.source?.toLowerCase().includes("apollo") ? "AI Pitch" : "Proposal"}
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="h-7 flex-1 gap-1 text-[11px] border-border/80 text-foreground hover:bg-surface-alt rounded-lg"
-                            onClick={() => {
-                              setAiTargetDeal(deal)
-                              setAiModalMode("followup")
-                              setAiModalOpen(true)
-                            }}
-                          >
-                            Follow-up
-                          </Button>
-                        </div>
-                      ) : null}
-
-                      {/* Stage Transitions */}
-                      {canWriteCrm && lane.next ? (
-                        <Button
-                          size="sm"
-                          className="h-7 w-full text-xs bg-[#270045] text-white hover:bg-[#3a006b] rounded-lg shadow-xs"
-                          disabled={busyId === deal.opportunityId}
-                          onClick={() => moveDeal(deal, lane.next!)}
-                        >
-                          {busyId === deal.opportunityId ? (
-                            <Loader2Icon className="size-3 animate-spin" />
-                          ) : (
-                            <div className="flex items-center justify-center gap-1">
-                              <span>Move to {lane.next}</span>
-                              <ArrowRightIcon className="size-3" />
-                            </div>
-                          )}
-                        </Button>
-                      ) : null}
-
-                      {canWriteCrm && lane.id === "negotiation" ? (
-                        <div className="flex gap-1.5">
-                          <Button
-                            size="sm"
-                            className="h-7 flex-1 text-xs bg-success/20 text-success hover:bg-success/30 border border-success/30 rounded-lg font-semibold"
-                            disabled={busyId === deal.opportunityId}
-                            onClick={() => moveDeal(deal, "won")}
-                          >
-                            Won
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="h-7 flex-1 text-xs border-destructive/30 text-destructive hover:bg-destructive/10 rounded-lg font-semibold"
-                            disabled={busyId === deal.opportunityId}
-                            onClick={() => moveDeal(deal, "lost")}
-                          >
-                            Lost
-                          </Button>
-                        </div>
-                      ) : null}
-
-                      {canWriteCrm && lane.id === "won" ? (
-                        <Button
-                          size="sm"
-                          className="h-8 w-full text-xs bg-[#7a5cc2] text-white hover:bg-[#6a4eb2] rounded-lg shadow-xs gap-1.5"
-                          disabled={busyId === deal.opportunityId}
-                          onClick={() => void startDelivery(deal)}
-                        >
-                          {busyId === deal.opportunityId ? (
-                            <Loader2Icon className="size-3.5 animate-spin" />
-                          ) : (
-                            <RocketIcon className="size-3.5" />
-                          )}
-                          Start delivery
-                        </Button>
-                      ) : null}
-                    </article>
-                  ))
+                      </article>
+                    )
+                  })
                 )}
               </div>
             </section>
@@ -753,6 +855,8 @@ export function CrmPipelinePage() {
           mode={aiModalMode}
           targetId={aiTargetDeal.opportunityId}
           targetName={aiTargetDeal.name}
+          recipientEmail={getDealContact(aiTargetDeal).email || undefined}
+          recipientName={getDealContact(aiTargetDeal).name || undefined}
         />
       )}
       <LeadExtractionModal
