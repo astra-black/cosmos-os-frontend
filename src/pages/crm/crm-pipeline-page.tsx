@@ -464,10 +464,32 @@ export function CrmPipelinePage() {
             >
               <header className="mb-3 space-y-1 px-1.5 pt-1">
                 <div className="flex items-center justify-between">
-                  <span className="font-sora text-sm font-semibold text-foreground tracking-tight">{lane.label}</span>
-                  <span className="rounded-full px-2 py-0.5 text-xs font-semibold bg-surface border border-border text-foreground tabular-nums shadow-2xs">
-                    {lane.items.length}
-                  </span>
+                  <div className="flex items-center gap-1.5">
+                    <span className="font-sora text-sm font-semibold text-foreground tracking-tight">{lane.label}</span>
+                    {lane.id === "lead" && (
+                      <span className="inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[10px] font-medium bg-sky-500/10 text-sky-400 border border-sky-500/20">
+                        <SparklesIcon className="size-2.5" />
+                        Apollo
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    {lane.id === "lead" && canWriteCrm ? (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => setLeadExtractionModalOpen(true)}
+                        className="h-6 px-1.5 text-[11px] font-medium text-sky-400 hover:text-sky-300 hover:bg-sky-500/15 gap-1 rounded-md"
+                        title="Source leads with Apollo"
+                      >
+                        <PlusIcon className="size-3" />
+                        Source
+                      </Button>
+                    ) : null}
+                    <span className="rounded-full px-2 py-0.5 text-xs font-semibold bg-surface border border-border text-foreground tabular-nums shadow-2xs">
+                      {lane.items.length}
+                    </span>
+                  </div>
                 </div>
                 <div className="text-xs font-semibold text-muted-foreground tabular-nums">
                   {money(lane.value)}
@@ -476,9 +498,32 @@ export function CrmPipelinePage() {
 
               <div className="flex flex-1 flex-col gap-2.5 overflow-y-auto">
                 {lane.items.length === 0 ? (
-                  <div className="flex flex-1 flex-col items-center justify-center p-6 text-center rounded-xl border border-dashed border-border/60 bg-surface/40 my-2">
-                    <p className="text-xs text-muted-foreground font-medium">No deals in {lane.label}</p>
-                  </div>
+                  lane.id === "lead" ? (
+                    <div className="flex flex-1 flex-col items-center justify-center p-5 text-center rounded-xl border border-dashed border-sky-500/30 bg-sky-500/5 my-2 gap-2">
+                      <div className="size-9 rounded-full bg-sky-500/10 flex items-center justify-center text-sky-400">
+                        <SparklesIcon className="size-4.5" />
+                      </div>
+                      <p className="text-xs text-foreground font-semibold">No active leads</p>
+                      <p className="text-[11px] text-muted-foreground leading-snug max-w-[170px]">
+                        Extract verified prospects from Apollo directly into this pipeline.
+                      </p>
+                      {canWriteCrm ? (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => setLeadExtractionModalOpen(true)}
+                          className="mt-1 h-7 text-xs border-sky-500/40 text-sky-400 hover:bg-sky-500/20 gap-1.5 rounded-lg font-medium"
+                        >
+                          <SearchIcon className="size-3" />
+                          Source Leads
+                        </Button>
+                      ) : null}
+                    </div>
+                  ) : (
+                    <div className="flex flex-1 flex-col items-center justify-center p-6 text-center rounded-xl border border-dashed border-border/60 bg-surface/40 my-2">
+                      <p className="text-xs text-muted-foreground font-medium">No deals in {lane.label}</p>
+                    </div>
+                  )
                 ) : (
                   lane.items.map((deal) => (
                     <article
@@ -488,6 +533,14 @@ export function CrmPipelinePage() {
                       {/* Top: Deal title + probability + actions */}
                       <div className="flex items-start justify-between gap-2">
                         <div className="min-w-0 flex-1">
+                          {deal.source?.toLowerCase().includes("apollo") ? (
+                            <div className="mb-1">
+                              <span className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-medium bg-sky-500/10 text-sky-400 border border-sky-500/20">
+                                <SparklesIcon className="size-2.5" />
+                                Apollo Prospect
+                              </span>
+                            </div>
+                          ) : null}
                           <h3 className="font-sora text-sm font-semibold text-foreground leading-snug line-clamp-2">
                             {deal.name}
                           </h3>
@@ -567,7 +620,12 @@ export function CrmPipelinePage() {
                           <Button
                             size="sm"
                             variant="outline"
-                            className="h-7 flex-1 gap-1 text-[11px] border-primary/30 text-primary hover:bg-primary/10 rounded-lg"
+                            className={cn(
+                              "h-7 flex-1 gap-1 text-[11px] rounded-lg",
+                              deal.source?.toLowerCase().includes("apollo")
+                                ? "border-sky-500/40 text-sky-400 hover:bg-sky-500/15"
+                                : "border-primary/30 text-primary hover:bg-primary/10"
+                            )}
                             onClick={() => {
                               setAiTargetDeal(deal)
                               setAiModalMode("proposal")
@@ -575,7 +633,7 @@ export function CrmPipelinePage() {
                             }}
                           >
                             <SparklesIcon className="size-3" />
-                            Proposal
+                            {deal.source?.toLowerCase().includes("apollo") ? "AI Pitch" : "Proposal"}
                           </Button>
                           <Button
                             size="sm"
@@ -700,6 +758,7 @@ export function CrmPipelinePage() {
       <LeadExtractionModal
         open={leadExtractionModalOpen}
         onOpenChange={setLeadExtractionModalOpen}
+        onSuccess={() => void reload().catch(() => undefined)}
       />
     </div>
   )

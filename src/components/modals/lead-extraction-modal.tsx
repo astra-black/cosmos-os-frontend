@@ -24,12 +24,14 @@ type Step = "search" | "results" | "syncing" | "complete"
 type LeadExtractionModalProps = {
   open: boolean
   onOpenChange: (open: boolean) => void
+  onSuccess?: (result: SyncResult) => void
 }
 
-export function LeadExtractionModal({ open, onOpenChange }: LeadExtractionModalProps) {
+export function LeadExtractionModal({ open, onOpenChange, onSuccess }: LeadExtractionModalProps) {
   const [step, setStep] = useState<Step>("search")
   const [searching, setSearching] = useState(false)
   const [syncing, setSyncing] = useState(false)
+  const [addToPipeline, setAddToPipeline] = useState(true)
   const [searchParams, setSearchParams] = useState<ApolloSearchParams>({
     perPage: 50,
   })
@@ -112,10 +114,15 @@ export function LeadExtractionModal({ open, onOpenChange }: LeadExtractionModalP
     setSyncing(true)
     setStep("syncing")
     try {
-      const res = await syncContactsToAirtable(contactsToSync, "Leads")
+      const res = await syncContactsToAirtable(contactsToSync, "contacts", addToPipeline)
       setSyncResult(res.data)
       setStep("complete")
-      toast.success(`Synced ${res.data.synced} contacts to Airtable`)
+      onSuccess?.(res.data)
+      toast.success(
+        res.data.opportunitiesCreated
+          ? `Synced ${res.data.synced} contacts & added ${res.data.opportunitiesCreated} leads to CRM Pipeline`
+          : `Synced ${res.data.synced} contacts`
+      )
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : "Failed to sync contacts")
       setStep("results")
@@ -322,6 +329,23 @@ export function LeadExtractionModal({ open, onOpenChange }: LeadExtractionModalP
                 )}
               </div>
 
+              {/* Option to create CRM Pipeline Leads */}
+              <div className="flex items-start gap-2.5 p-3 rounded-xl border border-sky-500/20 bg-sky-500/5">
+                <CustomCheckbox
+                  id="add-to-pipeline"
+                  checked={addToPipeline}
+                  onCheckedChange={setAddToPipeline}
+                />
+                <div className="flex flex-col gap-0.5 min-w-0">
+                  <Label htmlFor="add-to-pipeline" className="text-xs font-semibold cursor-pointer text-foreground">
+                    Add directly to CRM Pipeline (as new Leads)
+                  </Label>
+                  <p className="text-[11px] text-muted-foreground leading-relaxed">
+                    Creates active deals in the "Lead" stage on your CRM Kanban board so your sales team can qualify and outreach immediately.
+                  </p>
+                </div>
+              </div>
+
               <div className="flex gap-2">
                 <Button type="button" variant="outline" onClick={() => setStep("search")} className="flex-1">
                   Back to Search
@@ -330,10 +354,10 @@ export function LeadExtractionModal({ open, onOpenChange }: LeadExtractionModalP
                   type="button"
                   onClick={() => void handleSync()}
                   disabled={selectedContacts.size === 0}
-                  className="flex-1 bg-sky-600 hover:bg-sky-500 text-white gap-2"
+                  className="flex-1 bg-sky-600 hover:bg-sky-500 text-white gap-2 font-medium"
                 >
                   <SendIcon className="size-4" />
-                  Sync {selectedContacts.size} to Outreach Hub
+                  Sync {selectedContacts.size} {addToPipeline ? "to Pipeline" : "to Contacts"}
                 </Button>
               </div>
             </div>
@@ -343,9 +367,9 @@ export function LeadExtractionModal({ open, onOpenChange }: LeadExtractionModalP
             <div className="flex flex-col items-center justify-center gap-4 py-12">
               <Loader2Icon className="size-12 text-sky-400 animate-spin" />
               <div className="text-center">
-                <p className="font-medium">Syncing contacts to Outreach Hub</p>
+                <p className="font-medium">Syncing contacts to CRM</p>
                 <p className="text-sm text-muted-foreground mt-1">
-                  Please wait while we sync {selectedContacts.size} contacts...
+                  Please wait while we sync {selectedContacts.size} contacts and create pipeline leads...
                 </p>
               </div>
             </div>
@@ -360,16 +384,23 @@ export function LeadExtractionModal({ open, onOpenChange }: LeadExtractionModalP
                 <div className="text-center">
                   <p className="font-medium text-lg">Sync Complete</p>
                   <p className="text-sm text-muted-foreground mt-1">
-                    Successfully synced {syncResult.synced} contacts to Outreach Hub
+                    Successfully synced {syncResult.synced} contacts
+                    {syncResult.opportunitiesCreated ? ` and created ${syncResult.opportunitiesCreated} CRM pipeline leads` : ''}
                   </p>
                 </div>
               </div>
 
               <div className="grid gap-2 p-4 rounded-lg bg-surface-alt/50">
                 <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Synced</span>
+                  <span className="text-muted-foreground">Contacts Synced</span>
                   <span className="font-medium text-success">{syncResult.synced}</span>
                 </div>
+                {typeof syncResult.opportunitiesCreated === "number" && (
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">Pipeline Leads Created</span>
+                    <span className="font-medium text-sky-400 font-semibold">{syncResult.opportunitiesCreated}</span>
+                  </div>
+                )}
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Skipped</span>
                   <span className="font-medium">{syncResult.skipped}</span>

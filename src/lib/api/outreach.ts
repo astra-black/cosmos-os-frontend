@@ -110,6 +110,7 @@ export interface ApolloSearchResponse {
 
 export interface SyncResult {
   synced: number
+  opportunitiesCreated?: number
   skipped: number
   errors: Array<{
     email: string
@@ -194,10 +195,11 @@ export async function enrichContact(email: string) {
 export async function syncContactsToAirtable(
   contacts: ApolloContact[],
   tableName?: string,
+  createOpportunities: boolean = true,
 ) {
   return apiRequest<ApiEnvelope<SyncResult>>("/api/v1/outreach/sync/contacts", {
     method: "POST",
-    body: JSON.stringify({ contacts, tableName }),
+    body: JSON.stringify({ contacts, tableName, createOpportunities }),
   })
 }
 
