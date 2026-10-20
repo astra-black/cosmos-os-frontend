@@ -457,6 +457,10 @@ export type Opportunity = {
   name: string
   clientId?: string | null
   clientName?: string
+  clientIndustry?: string | null
+  clientNotes?: string | null
+  clientPhone?: string | null
+  clientEmail?: string | null
   contactId?: string | null
   contactName?: string | null
   contactTitle?: string | null

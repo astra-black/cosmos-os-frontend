@@ -21,7 +21,7 @@ import { toast } from "sonner"
 import { EmptyState } from "@/components/shared/empty-state"
 import { ConfirmationDialog } from "@/components/shared/confirmation-dialog"
 import { EntityFormDialog } from "@/components/shared/entity-form-dialog"
-import { AiOutreachModal, LeadExtractionModal } from "@/components/modals"
+import { AiOutreachModal, DealDetailsSheet, LeadExtractionModal } from "@/components/modals"
 import { PageHeader } from "@/components/shared/page-header"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -224,6 +224,7 @@ export function CrmPipelinePage() {
   const [aiModalMode, setAiModalMode] = useState<"proposal" | "followup">("proposal")
   const [aiTargetDeal, setAiTargetDeal] = useState<Opportunity | null>(null)
   const [leadExtractionModalOpen, setLeadExtractionModalOpen] = useState(false)
+  const [selectedDetailDeal, setSelectedDetailDeal] = useState<Opportunity | null>(null)
 
   const reload = useCallback(async () => {
     setError(null)
@@ -572,8 +573,12 @@ export function CrmPipelinePage() {
                       >
                         {/* Top: Company Name + Actions */}
                         <div className="flex items-start justify-between gap-2">
-                          <div className="min-w-0 flex-1">
-                            <h3 className="font-sora text-sm font-bold text-foreground leading-snug truncate" title={companyName}>
+                          <div
+                            className="min-w-0 flex-1 cursor-pointer group/title"
+                            onClick={() => setSelectedDetailDeal(deal)}
+                            title="Click to view full prospect intelligence & details"
+                          >
+                            <h3 className="font-sora text-sm font-bold text-foreground leading-snug truncate group-hover/title:text-primary transition-colors">
                               {companyName}
                             </h3>
                             {opportunitySubject && opportunitySubject !== contact.name ? (
@@ -608,14 +613,20 @@ export function CrmPipelinePage() {
                           ) : null}
                         </div>
 
-                        {/* Contact Details Block */}
+                        {/* Contact Details Block (Click to view full profile) */}
                         {(contact.name || contact.email || contact.phone) && (
-                          <div className="rounded-lg bg-surface-alt/70 border border-border/60 p-2 text-xs flex flex-col gap-1">
+                          <div
+                            className="rounded-lg bg-surface-alt/70 border border-border/60 p-2 text-xs flex flex-col gap-1 cursor-pointer hover:bg-surface-alt hover:border-primary/40 transition-all group/contact shadow-2xs"
+                            onClick={() => setSelectedDetailDeal(deal)}
+                            title="Click to view full contact details & intelligence"
+                          >
                             {contact.name && (
                               <div className="flex items-center justify-between gap-1">
                                 <div className="flex items-center gap-1.5 min-w-0">
-                                  <UserIcon className="size-3 text-primary/70 shrink-0" />
-                                  <span className="font-semibold text-foreground truncate">{contact.name}</span>
+                                  <UserIcon className="size-3 text-primary/70 shrink-0 group-hover/contact:text-primary transition-colors" />
+                                  <span className="font-semibold text-foreground truncate group-hover/contact:text-primary transition-colors">
+                                    {contact.name}
+                                  </span>
                                 </div>
                                 {contact.title && (
                                   <span className="text-[10px] text-muted-foreground font-medium truncate max-w-[110px]" title={contact.title}>
@@ -629,6 +640,7 @@ export function CrmPipelinePage() {
                               <div className="flex items-center justify-between gap-1 pt-0.5">
                                 <a
                                   href={`mailto:${contact.email}`}
+                                  onClick={(e) => e.stopPropagation()}
                                   className="text-sky-400 hover:text-sky-300 hover:underline flex items-center gap-1 truncate font-mono text-[11px]"
                                   title={`Send email to ${contact.email}`}
                                 >
@@ -637,7 +649,8 @@ export function CrmPipelinePage() {
                                 </a>
                                 <button
                                   type="button"
-                                  onClick={() => {
+                                  onClick={(e) => {
+                                    e.stopPropagation()
                                     navigator.clipboard.writeText(contact.email!)
                                     toast.success("Email copied to clipboard")
                                   }}
@@ -863,6 +876,25 @@ export function CrmPipelinePage() {
         open={leadExtractionModalOpen}
         onOpenChange={setLeadExtractionModalOpen}
         onSuccess={() => void reload().catch(() => undefined)}
+      />
+      <DealDetailsSheet
+        open={Boolean(selectedDetailDeal)}
+        onOpenChange={(open) => {
+          if (!open) setSelectedDetailDeal(null)
+        }}
+        deal={selectedDetailDeal}
+        nextStage={
+          selectedDetailDeal
+            ? STAGES.find((s) => s.id === selectedDetailDeal.stage)?.next
+            : null
+        }
+        onMoveStage={(deal, next) => void moveDeal(deal, next)}
+        onSendEmail={(deal) => {
+          setAiTargetDeal(deal)
+          setAiModalMode(deal.stage === "lead" ? "proposal" : "followup")
+          setAiModalOpen(true)
+        }}
+        onEdit={(deal) => openEdit(deal)}
       />
     </div>
   )
