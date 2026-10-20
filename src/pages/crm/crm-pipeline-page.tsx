@@ -10,13 +10,14 @@ import {
   SparklesIcon,
   Trash2Icon,
   TrendingUpIcon,
+  SearchIcon,
 } from "lucide-react"
 import { toast } from "sonner"
 
 import { EmptyState } from "@/components/shared/empty-state"
 import { ConfirmationDialog } from "@/components/shared/confirmation-dialog"
 import { EntityFormDialog } from "@/components/shared/entity-form-dialog"
-import { AiOutreachModal } from "@/components/modals"
+import { AiOutreachModal, LeadExtractionModal } from "@/components/modals"
 import { PageHeader } from "@/components/shared/page-header"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -182,6 +183,7 @@ export function CrmPipelinePage() {
   const [aiModalOpen, setAiModalOpen] = useState(false)
   const [aiModalMode, setAiModalMode] = useState<"proposal" | "followup">("proposal")
   const [aiTargetDeal, setAiTargetDeal] = useState<Opportunity | null>(null)
+  const [leadExtractionModalOpen, setLeadExtractionModalOpen] = useState(false)
 
   const reload = useCallback(async () => {
     setError(null)
@@ -361,14 +363,25 @@ export function CrmPipelinePage() {
           </p>
         </div>
         {canWriteCrm ? (
-          <Button
-            size="sm"
-            onClick={openCreate}
-            className="bg-[#270045] text-white hover:bg-[#3a006b] rounded-full px-4 h-9 shadow-xs"
-          >
-            <PlusIcon className="size-3.5 mr-1" />
-            New deal
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setLeadExtractionModalOpen(true)}
+              className="rounded-full px-4 h-9 gap-2"
+            >
+              <SearchIcon className="size-3.5" />
+              Extract Leads
+            </Button>
+            <Button
+              size="sm"
+              onClick={openCreate}
+              className="bg-[#270045] text-white hover:bg-[#3a006b] rounded-full px-4 h-9 shadow-xs"
+            >
+              <PlusIcon className="size-3.5 mr-1" />
+              New deal
+            </Button>
+          </div>
         ) : null}
       </div>
 
@@ -684,6 +697,10 @@ export function CrmPipelinePage() {
           targetName={aiTargetDeal.name}
         />
       )}
+      <LeadExtractionModal
+        open={leadExtractionModalOpen}
+        onOpenChange={setLeadExtractionModalOpen}
+      />
     </div>
   )
 }
