@@ -4,7 +4,7 @@
  */
 
 import { apiRequest } from "@/lib/api/client"
-import type { ApiEnvelope } from "@/types/agency"
+import type { ApiEnvelope, Opportunity } from "@/types/agency"
 
 // Types for Apollo integration
 export interface ApolloContact {
@@ -255,3 +255,13 @@ export async function verifyEmail(email: string) {
     body: JSON.stringify({ email }),
   })
 }
+
+/**
+ * Reveal and enrich contact information (email, phone, LinkedIn) for an opportunity
+ */
+export async function enrichOpportunity(opportunityId: string) {
+  return apiRequest<ApiEnvelope<Opportunity>>(`/api/v1/outreach/opportunities/${opportunityId}/enrich`, {
+    method: "POST",
+  })
+}
+

@@ -8,6 +8,7 @@ import {
   CopyIcon,
   ExternalLinkIcon,
   GlobeIcon,
+  Loader2Icon,
   MailIcon,
   MapPinIcon,
   PencilIcon,
@@ -152,6 +153,8 @@ type DealDetailsSheetProps = {
   onMoveStage?: (deal: Opportunity, nextStage: string) => void
   onSendEmail?: (deal: Opportunity) => void
   onEdit?: (deal: Opportunity) => void
+  onEnrich?: (deal: Opportunity) => Promise<void>
+  enriching?: boolean
 }
 
 export function DealDetailsSheet({
@@ -162,6 +165,8 @@ export function DealDetailsSheet({
   onMoveStage,
   onSendEmail,
   onEdit,
+  onEnrich,
+  enriching,
 }: DealDetailsSheetProps) {
   const [copiedField, setCopiedField] = useState<string | null>(null)
 
@@ -238,8 +243,8 @@ export function DealDetailsSheet({
         {/* Content Body */}
         <div className="flex-1 overflow-y-auto p-6 space-y-6">
           {/* Quick Contact Actions Banner */}
-          <div className="flex items-center gap-2">
-            {profile.contactEmail && onSendEmail && (
+          <div className="flex items-center gap-2 flex-wrap">
+            {profile.contactEmail && onSendEmail ? (
               <Button
                 size="sm"
                 className="flex-1 h-9 bg-sky-600 hover:bg-sky-500 text-white font-medium gap-2 text-xs rounded-xl shadow-xs"
@@ -251,7 +256,17 @@ export function DealDetailsSheet({
                 <MailIcon className="size-3.5" />
                 Send Outreach Email
               </Button>
-            )}
+            ) : onEnrich ? (
+              <Button
+                size="sm"
+                disabled={enriching}
+                className="flex-1 h-9 bg-sky-600 hover:bg-sky-500 text-white font-medium gap-2 text-xs rounded-xl shadow-xs"
+                onClick={() => void onEnrich(deal)}
+              >
+                {enriching ? <Loader2Icon className="size-3.5 animate-spin" /> : <SparklesIcon className="size-3.5" />}
+                Reveal Email & Phone
+              </Button>
+            ) : null}
 
             {profile.linkedinUrl && (
               <a
@@ -310,7 +325,20 @@ export function DealDetailsSheet({
                         {profile.contactEmail}
                       </a>
                     ) : (
-                      <p className="text-muted-foreground italic">No email on file</p>
+                      <div className="flex items-center gap-2 mt-0.5">
+                        <span className="text-muted-foreground italic text-xs">No email revealed</span>
+                        {onEnrich && (
+                          <button
+                            type="button"
+                            disabled={enriching}
+                            onClick={() => void onEnrich(deal)}
+                            className="text-[11px] font-semibold text-sky-400 hover:text-sky-300 hover:underline inline-flex items-center gap-1"
+                          >
+                            {enriching ? <Loader2Icon className="size-3 animate-spin" /> : <SparklesIcon className="size-3" />}
+                            Reveal from database
+                          </button>
+                        )}
+                      </div>
                     )}
                   </div>
                 </div>
@@ -345,7 +373,20 @@ export function DealDetailsSheet({
                         {profile.contactPhone}
                       </a>
                     ) : (
-                      <p className="text-muted-foreground italic">No phone on file</p>
+                      <div className="flex items-center gap-2 mt-0.5">
+                        <span className="text-muted-foreground italic text-xs">No phone revealed</span>
+                        {onEnrich && (
+                          <button
+                            type="button"
+                            disabled={enriching}
+                            onClick={() => void onEnrich(deal)}
+                            className="text-[11px] font-semibold text-sky-400 hover:text-sky-300 hover:underline inline-flex items-center gap-1"
+                          >
+                            {enriching ? <Loader2Icon className="size-3 animate-spin" /> : <SparklesIcon className="size-3" />}
+                            Reveal
+                          </button>
+                        )}
+                      </div>
                     )}
                   </div>
                 </div>

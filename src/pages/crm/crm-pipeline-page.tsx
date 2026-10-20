@@ -40,6 +40,7 @@ import {
   updateOpportunity,
   deleteOpportunity,
 } from "@/lib/api/agency"
+import { enrichOpportunity } from "@/lib/api/outreach"
 import { ApiError } from "@/lib/api/client"
 import { useAuth } from "@/lib/auth"
 import { canPerform } from "@/lib/rbac"
@@ -225,6 +226,7 @@ export function CrmPipelinePage() {
   const [aiTargetDeal, setAiTargetDeal] = useState<Opportunity | null>(null)
   const [leadExtractionModalOpen, setLeadExtractionModalOpen] = useState(false)
   const [selectedDetailDeal, setSelectedDetailDeal] = useState<Opportunity | null>(null)
+  const [enrichingId, setEnrichingId] = useState<string | null>(null)
 
   const reload = useCallback(async () => {
     setError(null)
@@ -279,6 +281,29 @@ export function CrmPipelinePage() {
       toast.error(err instanceof ApiError ? err.message : "Move failed")
     } finally {
       setBusyId(null)
+    }
+  }
+
+  async function handleEnrichOpportunity(deal: Opportunity) {
+    setEnrichingId(deal.opportunityId)
+    try {
+      const res = await enrichOpportunity(deal.opportunityId)
+      if (res.data?.opportunityId) {
+        const updated = res.data
+        setDeals((prev) =>
+          prev.map((d) => (d.opportunityId === updated.opportunityId ? { ...d, ...updated } : d))
+        )
+        if (selectedDetailDeal?.opportunityId === updated.opportunityId) {
+          setSelectedDetailDeal((prev) => (prev ? { ...prev, ...updated } : updated))
+        }
+      } else {
+        await reload()
+      }
+      toast.success("Contact details revealed & enriched successfully")
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to reveal contact details")
+    } finally {
+      setEnrichingId(null)
     }
   }
 
@@ -487,18 +512,18 @@ export function CrmPipelinePage() {
       </div>
 
       {loading ? (
-        <div className="flex gap-4 overflow-x-auto pb-2 md:grid md:grid-cols-3 xl:grid-cols-6">
+        <div className="flex gap-4 overflow-x-auto pb-6 items-start scrollbar-thin">
           {STAGES.map((s) => (
-            <Skeleton key={s.id} className="h-80 w-[min(85vw,17rem)] shrink-0 rounded-2xl md:w-auto" />
+            <Skeleton key={s.id} className="h-[580px] w-[320px] min-w-[320px] shrink-0 rounded-2xl" />
           ))}
         </div>
       ) : (
-        <div className="-mx-1 flex gap-4 overflow-x-auto px-1 pb-4 snap-x snap-mandatory md:mx-0 md:grid md:grid-cols-2 md:overflow-visible md:px-0 md:pb-0 md:snap-none xl:grid-cols-3 2xl:grid-cols-6">
+        <div className="flex gap-4 overflow-x-auto pb-6 items-start scrollbar-thin">
           {lanes.map((lane) => (
             <section
               key={lane.id}
               className={cn(
-                "bg-surface-alt/40 flex min-h-[420px] w-[min(85vw,17rem)] shrink-0 snap-start flex-col rounded-2xl border border-border/70 p-3 md:w-auto md:min-w-0",
+                "bg-surface-alt/40 flex min-h-[520px] w-[320px] min-w-[320px] shrink-0 flex-col rounded-2xl border border-border/70 p-3.5",
                 lane.id === "won" && "border-success/30 bg-success/5",
                 lane.id === "lost" && "opacity-75"
               )}
@@ -636,7 +661,7 @@ export function CrmPipelinePage() {
                               </div>
                             )}
 
-                            {contact.email && (
+                            {contact.email ? (
                               <div className="flex items-center justify-between gap-1 pt-0.5">
                                 <a
                                   href={`mailto:${contact.email}`}
@@ -658,6 +683,24 @@ export function CrmPipelinePage() {
                                   title="Copy email"
                                 >
                                   <CopyIcon className="size-3" />
+                                </button>
+                              </div>
+                            ) : (
+                              <div className="flex items-center justify-between gap-1 pt-0.5">
+                                <span className="text-[11px] text-amber-400/90 font-medium flex items-center gap-1">
+                                  <MailIcon className="size-3 opacity-60" />
+                                  Email not revealed
+                                </span>
+                                <button
+                                  type="button"
+                                  disabled={enrichingId === deal.opportunityId}
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    void handleEnrichOpportunity(deal)
+                                  }}
+                                  className="text-[11px] text-amber-400 hover:text-amber-300 font-semibold underline underline-offset-2 flex items-center gap-0.5"
+                                >
+                                  {enrichingId === deal.opportunityId ? "Revealing..." : "Reveal"}
                                 </button>
                               </div>
                             )}
@@ -733,11 +776,27 @@ export function CrmPipelinePage() {
                                   <MailIcon className="size-3" />
                                   Send Email
                                 </Button>
-                              ) : null}
+                              ) : (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  disabled={enrichingId === deal.opportunityId}
+                                  className="h-7 flex-1 text-xs border-amber-500/40 text-amber-400 bg-amber-500/10 hover:bg-amber-500/20 gap-1 rounded-lg font-medium shadow-2xs"
+                                  onClick={() => void handleEnrichOpportunity(deal)}
+                                  title="Reveal direct email and verified phone number"
+                                >
+                                  {enrichingId === deal.opportunityId ? (
+                                    <Loader2Icon className="size-3 animate-spin" />
+                                  ) : (
+                                    <SparklesIcon className="size-3 text-amber-400" />
+                                  )}
+                                  Reveal Contact
+                                </Button>
+                              )}
                               <Button
                                 size="sm"
                                 variant="outline"
-                                className="h-7 flex-1 gap-1 text-[11px] border-border text-foreground hover:bg-surface-alt rounded-lg"
+                                className="h-7 px-2.5 gap-1 text-[11px] border-border text-foreground hover:bg-surface-alt rounded-lg"
                                 onClick={() => {
                                   setAiTargetDeal(deal)
                                   setAiModalMode("proposal")
@@ -745,7 +804,7 @@ export function CrmPipelinePage() {
                                 }}
                               >
                                 <SparklesIcon className="size-3 text-sky-400" />
-                                {lane.id === "lead" ? "AI Pitch" : "Proposal"}
+                                Pitch
                               </Button>
                               <Button
                                 size="sm"
@@ -895,6 +954,8 @@ export function CrmPipelinePage() {
           setAiModalOpen(true)
         }}
         onEdit={(deal) => openEdit(deal)}
+        onEnrich={handleEnrichOpportunity}
+        enriching={enrichingId === selectedDetailDeal?.opportunityId}
       />
     </div>
   )
