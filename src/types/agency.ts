@@ -492,6 +492,16 @@ export type Opportunity = {
   notes?: string
   createdAt?: string
   updatedAt?: string
+  enrichment?: {
+    email: boolean
+    phone: boolean
+    linkedin: boolean
+    emailStatus?: string | null
+    matchConfidence?: string | null
+    requestId?: string | number | null
+    phonePending?: boolean
+    message: string
+  }
 }
 
 export type CrmActivity = {

@@ -299,7 +299,19 @@ export function CrmPipelinePage() {
       } else {
         await reload()
       }
-      toast.success("Contact details revealed & enriched successfully")
+      const revealed = res.data?.enrichment
+      if (revealed && !revealed.email && !revealed.phone && !revealed.linkedin) {
+        toast.warning(revealed.message)
+      } else {
+        toast.success(
+          revealed?.message || "Contact details revealed & enriched successfully",
+        )
+      }
+      if (revealed?.phonePending) {
+        window.setTimeout(() => {
+          void reload().catch(() => undefined)
+        }, 7000)
+      }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to reveal contact details")
     } finally {
