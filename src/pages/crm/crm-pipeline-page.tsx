@@ -4,6 +4,8 @@ import {
   ArrowRightIcon,
   CalendarIcon,
   CopyIcon,
+  LayoutGridIcon,
+  ListIcon,
   Loader2Icon,
   MailIcon,
   PencilIcon,
@@ -274,6 +276,7 @@ export function CrmPipelinePage() {
   const [leadExtractionModalOpen, setLeadExtractionModalOpen] = useState(false)
   const [selectedDetailDeal, setSelectedDetailDeal] = useState<Opportunity | null>(null)
   const [enrichingId, setEnrichingId] = useState<string | null>(null)
+  const [viewMode, setViewMode] = useState<"kanban" | "list">("kanban")
 
   const reload = useCallback(async () => {
     setError(null)
@@ -576,7 +579,38 @@ export function CrmPipelinePage() {
         </div>
       </div>
 
-      {loading ? (
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <p className="text-sm font-semibold text-foreground">Opportunities</p>
+          <p className="text-xs text-muted-foreground">{deals.length} total opportunities</p>
+        </div>
+        <div className="inline-flex items-center rounded-lg border border-border bg-card p-1 shadow-2xs" role="group" aria-label="Choose CRM view">
+          <Button
+            type="button"
+            size="sm"
+            variant={viewMode === "kanban" ? "secondary" : "ghost"}
+            onClick={() => setViewMode("kanban")}
+            className="h-8 gap-1.5 px-2.5 text-xs"
+            aria-pressed={viewMode === "kanban"}
+          >
+            <LayoutGridIcon className="size-3.5" />
+            Kanban
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant={viewMode === "list" ? "secondary" : "ghost"}
+            onClick={() => setViewMode("list")}
+            className="h-8 gap-1.5 px-2.5 text-xs"
+            aria-pressed={viewMode === "list"}
+          >
+            <ListIcon className="size-3.5" />
+            List
+          </Button>
+        </div>
+      </div>
+
+      {viewMode === "kanban" ? (loading ? (
         <div className="flex gap-4 overflow-x-auto pb-6 items-start scrollbar-thin">
           {STAGES.map((s) => (
             <Skeleton key={s.id} className="h-[580px] w-[320px] min-w-[320px] shrink-0 rounded-2xl" />
@@ -951,6 +985,90 @@ export function CrmPipelinePage() {
               </div>
             </section>
           ))}
+        </div>
+      )) : (
+        <div className="overflow-hidden rounded-2xl border border-border bg-card shadow-[0_1px_3px_0_rgba(39,0,69,0.08)]">
+          {loading ? (
+            <div className="space-y-3 p-4">
+              {Array.from({ length: 6 }).map((_, index) => (
+                <Skeleton key={index} className="h-14 w-full rounded-lg" />
+              ))}
+            </div>
+          ) : deals.length === 0 ? (
+            <div className="flex min-h-56 flex-col items-center justify-center px-6 text-center">
+              <div className="mb-3 flex size-10 items-center justify-center rounded-full bg-surface-alt text-muted-foreground">
+                <ListIcon className="size-5" />
+              </div>
+              <p className="text-sm font-semibold text-foreground">No opportunities yet</p>
+              <p className="mt-1 max-w-sm text-xs text-muted-foreground">Create a deal or extract leads to start building your pipeline.</p>
+            </div>
+          ) : (
+            <>
+              <div className="hidden grid-cols-[minmax(220px,1.5fr)_minmax(150px,1fr)_120px_120px_110px_44px] items-center gap-4 border-b border-border bg-surface-alt/50 px-4 py-3 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground md:grid">
+                <span>Opportunity</span>
+                <span>Contact</span>
+                <span>Stage</span>
+                <span>Value</span>
+                <span>Close date</span>
+                <span />
+              </div>
+              <div className="divide-y divide-border/70">
+                {deals.map((deal) => {
+                  const contact = getDealContact(deal)
+                  const stage = STAGES.find((item) => item.id === deal.stage)
+                  return (
+                    <div
+                      key={deal.opportunityId}
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => setSelectedDetailDeal(deal)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter" || event.key === " ") setSelectedDetailDeal(deal)
+                      }}
+                      className="grid cursor-pointer gap-3 px-4 py-3.5 transition-colors hover:bg-surface-alt/45 md:grid-cols-[minmax(220px,1.5fr)_minmax(150px,1fr)_120px_120px_110px_44px] md:items-center md:gap-4"
+                    >
+                      <div className="min-w-0">
+                        <div className="flex items-center justify-between gap-3 md:block">
+                          <p className="truncate text-sm font-semibold text-foreground">{deal.name}</p>
+                          <span className="shrink-0 text-sm font-bold tabular-nums text-foreground md:hidden">{deal.value > 0 ? money(deal.value) : "TBD"}</span>
+                        </div>
+                        <p className="mt-1 truncate text-xs text-muted-foreground">{deal.owner || "Unassigned"}{deal.source ? ` · ${deal.source}` : ""}</p>
+                      </div>
+                      <div className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
+                        <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+                          <UserIcon className="size-3.5" />
+                        </span>
+                        <div className="min-w-0">
+                          <p className="truncate font-medium text-foreground">{contact.name || "No contact"}</p>
+                          <p className="truncate">{contact.email || contact.phone || "Details not revealed"}</p>
+                        </div>
+                      </div>
+                      <Badge variant="outline" className="w-fit gap-1.5 rounded-full text-[10px] font-semibold">
+                        <span className={cn("size-1.5 rounded-full", deal.stage === "won" ? "bg-success" : deal.stage === "lost" ? "bg-destructive" : "bg-primary")} />
+                        {stage?.label || deal.stage}
+                      </Badge>
+                      <div className="hidden text-sm font-bold tabular-nums text-foreground md:block">{deal.value > 0 ? money(deal.value) : "TBD"}</div>
+                      <div className="hidden text-xs text-muted-foreground md:block">
+                        {deal.expectedClose ? new Date(deal.expectedClose).toLocaleDateString() : "—"}
+                      </div>
+                      <div className="flex items-center justify-end gap-1" onClick={(event) => event.stopPropagation()}>
+                        {canWriteCrm ? (
+                          <>
+                            <Button size="icon" variant="ghost" className="size-8 text-muted-foreground hover:text-foreground" onClick={() => openEdit(deal)} aria-label={`Edit ${deal.name}`}>
+                              <PencilIcon className="size-3.5" />
+                            </Button>
+                            <Button size="icon" variant="ghost" className="size-8 text-muted-foreground hover:text-destructive" disabled={deletingId === deal.opportunityId} onClick={() => handleDelete(deal)} aria-label={`Delete ${deal.name}`}>
+                              <Trash2Icon className="size-3.5" />
+                            </Button>
+                          </>
+                        ) : null}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </>
+          )}
         </div>
       )}
       <EntityFormDialog
