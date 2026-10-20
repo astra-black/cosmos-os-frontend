@@ -156,7 +156,7 @@ export function LeadExtractionModal({ open, onOpenChange, onSuccess }: LeadExtra
             Lead Extraction
           </SheetTitle>
           <SheetDescription className="text-xs text-muted-foreground mt-1">
-            Search for contacts using advanced filters, verify email status, and sync to your Outreach Hub.
+            Search for contacts using Apollo intelligence, verify email status, and sync directly into your CRM database.
           </SheetDescription>
           {usage && (
             <div className="mt-3 flex items-center gap-2 text-xs">
