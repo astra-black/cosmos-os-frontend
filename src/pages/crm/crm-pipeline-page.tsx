@@ -594,16 +594,16 @@ export function CrmPipelinePage() {
                     return (
                       <article
                         key={deal.opportunityId}
-                        className="rounded-xl border border-border/80 bg-card p-3.5 shadow-2xs hover:shadow-md hover:border-primary/40 transition-all flex flex-col gap-2.5"
+                        onClick={() => setSelectedDetailDeal(deal)}
+                        className="rounded-xl border border-border/80 bg-card p-3.5 shadow-2xs hover:shadow-md hover:border-primary/40 transition-all flex flex-col gap-2.5 cursor-pointer group"
                       >
                         {/* Top: Company Name + Actions */}
                         <div className="flex items-start justify-between gap-2">
                           <div
-                            className="min-w-0 flex-1 cursor-pointer group/title"
-                            onClick={() => setSelectedDetailDeal(deal)}
+                            className="min-w-0 flex-1 group/title"
                             title="Click to view full prospect intelligence & details"
                           >
-                            <h3 className="font-sora text-sm font-bold text-foreground leading-snug truncate group-hover/title:text-primary transition-colors">
+                            <h3 className="font-sora text-sm font-bold text-foreground leading-snug truncate group-hover:text-primary transition-colors">
                               {companyName}
                             </h3>
                             {opportunitySubject && opportunitySubject !== contact.name ? (
@@ -614,7 +614,7 @@ export function CrmPipelinePage() {
                           </div>
 
                           {canWriteCrm ? (
-                            <div className="flex items-center gap-0.5 shrink-0">
+                            <div className="flex items-center gap-0.5 shrink-0" onClick={(e) => e.stopPropagation()}>
                               <Button
                                 size="icon"
                                 variant="ghost"
@@ -761,7 +761,7 @@ export function CrmPipelinePage() {
 
                         {/* Action buttons */}
                         {canWriteCrm ? (
-                          <div className="flex flex-col gap-1.5 pt-1">
+                          <div className="flex flex-col gap-1.5 pt-1" onClick={(e) => e.stopPropagation()}>
                             <div className="flex items-center gap-1.5">
                               {contact.email ? (
                                 <Button
