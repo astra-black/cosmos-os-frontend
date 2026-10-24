@@ -457,7 +457,31 @@ export type Opportunity = {
   name: string
   clientId?: string | null
   clientName?: string
+  clientIndustry?: string | null
+  clientNotes?: string | null
+  clientPhone?: string | null
+  clientEmail?: string | null
   contactId?: string | null
+  contactName?: string | null
+  contactTitle?: string | null
+  contactEmail?: string | null
+  contactPhone?: string | null
+  primaryContact?: {
+    id: string
+    name: string
+    title?: string
+    email?: string
+    phone?: string
+    emailStatus?: string
+    linkedinUrl?: string
+    twitterUrl?: string
+    department?: string
+    seniority?: string
+    country?: string
+    state?: string
+    city?: string
+    apolloId?: string
+  } | null
   stage: OpportunityStage | string
   value: number
   probability: number
@@ -468,6 +492,16 @@ export type Opportunity = {
   notes?: string
   createdAt?: string
   updatedAt?: string
+  enrichment?: {
+    email: boolean
+    phone: boolean
+    linkedin: boolean
+    emailStatus?: string | null
+    matchConfidence?: string | null
+    requestId?: string | number | null
+    phonePending?: boolean
+    message: string
+  }
 }
 
 export type CrmActivity = {

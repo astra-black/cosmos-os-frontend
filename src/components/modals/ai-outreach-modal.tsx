@@ -1,9 +1,9 @@
-import { useState } from "react"
-import { BotIcon, Loader2Icon, SendIcon, SparklesIcon } from "lucide-react"
+import { useEffect, useState } from "react"
+import { BotIcon, ExternalLinkIcon, Loader2Icon, MailIcon, PenLineIcon, SendIcon, SparklesIcon } from "lucide-react"
 import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
@@ -26,6 +26,8 @@ type AiOutreachModalProps = {
   targetId: string
   targetName: string
   projectName?: string
+  recipientEmail?: string
+  recipientName?: string
 }
 
 export function AiOutreachModal({
@@ -35,6 +37,8 @@ export function AiOutreachModal({
   targetId,
   targetName,
   projectName,
+  recipientEmail,
+  recipientName,
 }: AiOutreachModalProps) {
   const [drafting, setDrafting] = useState(false)
   const [sending, setSending] = useState(false)
@@ -42,6 +46,19 @@ export function AiOutreachModal({
   const [subject, setSubject] = useState("")
   const [body, setBody] = useState("")
   const [hasDrafted, setHasDrafted] = useState(false)
+
+  useEffect(() => {
+    if (open) {
+      if (recipientEmail) {
+        setTo(recipientEmail)
+      }
+    } else {
+      setHasDrafted(false)
+      setTo("")
+      setSubject("")
+      setBody("")
+    }
+  }, [open, recipientEmail])
 
   async function handleGenerateDraft() {
     if (!targetId) return
@@ -57,7 +74,7 @@ export function AiOutreachModal({
       }
 
       const d = res.data
-      setTo(d.to || "")
+      setTo(d.to || recipientEmail || "")
       setSubject(d.subject || "")
       setBody(d.body || "")
       setHasDrafted(true)
@@ -101,47 +118,67 @@ export function AiOutreachModal({
 
   const title =
     mode === "proposal"
-      ? `AI Proposal Generator — ${targetName}`
+      ? `Proposal — ${targetName}`
       : mode === "followup"
-        ? `AI CRM Follow-up — ${targetName}`
-        : `AI Vendor Outreach — ${targetName}`
+        ? `Follow-up — ${targetName}`
+        : `Vendor Outreach — ${targetName}`
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-xl">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetContent
+        side="right"
+        className="w-full sm:max-w-xl p-0 flex flex-col h-full bg-card border-l border-border shadow-2xl"
+      >
+        <SheetHeader className="p-6 border-b border-border bg-card pr-12 shrink-0">
+          <SheetTitle className="flex items-center gap-2 font-sora text-xl font-bold text-foreground">
             <SparklesIcon className="size-5 text-sky-400" />
             {title}
-          </DialogTitle>
-          <DialogDescription>
-            Generate tailored copy using AI, review or customize the text, and dispatch directly.
-          </DialogDescription>
-        </DialogHeader>
+          </SheetTitle>
+          <SheetDescription className="text-xs text-muted-foreground mt-1">
+            Generate tailored copy using AI or draft directly, review, and dispatch.
+          </SheetDescription>
+        </SheetHeader>
 
-        <div className="grid gap-4 py-2">
+        <div className="flex-1 overflow-y-auto p-6 space-y-4">
           {!hasDrafted ? (
-            <div className="flex flex-col items-center justify-center gap-3 rounded-xl border border-dashed p-8 text-center">
+            <div className="flex flex-col items-center justify-center gap-3 rounded-xl border border-dashed p-8 text-center bg-surface/30">
               <BotIcon className="size-10 text-sky-400/80" />
               <div>
-                <p className="text-sm font-medium">Ready to draft for {targetName}</p>
-                <p className="text-muted-foreground mt-1 text-xs">
+                <p className="text-sm font-semibold text-foreground">
+                  {recipientEmail ? `Draft email to ${recipientEmail}` : `Ready to draft for ${targetName}`}
+                </p>
+                <p className="text-muted-foreground mt-1 text-xs max-w-sm">
                   {mode === "proposal"
-                    ? "Reads deal value, stage, and client contact info to compose a structured proposal."
+                    ? "Reads deal value, next steps, and client contact info to compose a structured proposal."
                     : mode === "followup"
-                      ? "Drafts a concise check-in email to move the deal to the next stage."
+                      ? "Drafts a concise check-in email to move the deal forward."
                       : "Drafts a professional availability and quote request email."}
                 </p>
               </div>
-              <Button
-                type="button"
-                onClick={() => void handleGenerateDraft()}
-                disabled={drafting}
-                className="bg-sky-600 hover:bg-sky-500 text-white gap-2"
-              >
-                {drafting ? <Loader2Icon className="size-4 animate-spin" /> : <SparklesIcon className="size-4" />}
-                Generate AI Draft
-              </Button>
+              <div className="flex items-center gap-2 mt-2">
+                <Button
+                  type="button"
+                  onClick={() => void handleGenerateDraft()}
+                  disabled={drafting}
+                  className="bg-sky-600 hover:bg-sky-500 text-white gap-2 font-medium"
+                >
+                  {drafting ? <Loader2Icon className="size-4 animate-spin" /> : <SparklesIcon className="size-4" />}
+                  Generate AI Draft
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    setTo(recipientEmail || "")
+                    setSubject(mode === "proposal" ? `Proposal — ${targetName}` : `Next steps — ${targetName}`)
+                    setHasDrafted(true)
+                  }}
+                  className="gap-1.5"
+                >
+                  <PenLineIcon className="size-3.5" />
+                  Write Manually
+                </Button>
+              </div>
             </div>
           ) : (
             <>
@@ -178,14 +215,15 @@ export function AiOutreachModal({
                     onClick={() => void handleGenerateDraft()}
                   >
                     {drafting ? <Loader2Icon className="size-3 animate-spin mr-1" /> : <SparklesIcon className="size-3 mr-1" />}
-                    Regenerate
+                    Regenerate AI
                   </Button>
                 </div>
                 <Textarea
                   id="ai-outreach-body"
-                  rows={8}
+                  rows={9}
                   value={body}
                   onChange={(e) => setBody(e.target.value)}
+                  placeholder="Compose your email here..."
                   className="font-mono text-xs leading-relaxed"
                 />
               </div>
@@ -193,28 +231,47 @@ export function AiOutreachModal({
           )}
         </div>
 
-        <DialogFooter className="gap-2 sm:gap-0">
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => onOpenChange(false)}
-            disabled={sending}
-          >
-            Cancel
-          </Button>
-          {hasDrafted && (
+        <SheetFooter className="p-4 border-t border-border bg-surface-alt/40 flex flex-row items-center justify-between gap-2 shrink-0">
+          <div>
+            {hasDrafted && to ? (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="text-xs text-muted-foreground hover:text-foreground gap-1.5 h-8 px-2"
+                onClick={() => {
+                  const mailto = `mailto:${encodeURIComponent(to)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`
+                  window.open(mailto, "_blank")
+                }}
+              >
+                <ExternalLinkIcon className="size-3.5" />
+                Open in Mail App
+              </Button>
+            ) : null}
+          </div>
+          <div className="flex items-center gap-2">
             <Button
               type="button"
-              onClick={() => void handleSend()}
-              disabled={sending || !to}
-              className="bg-primary hover:bg-primary/90 text-primary-foreground font-semibold px-4 tracking-wide uppercase text-xs gap-2"
+              variant="outline"
+              onClick={() => onOpenChange(false)}
+              disabled={sending}
             >
-              {sending ? <Loader2Icon className="size-4 animate-spin" /> : <SendIcon className="size-4" />}
-              SEND EMAIL
+              Cancel
             </Button>
-          )}
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+            {hasDrafted && (
+              <Button
+                type="button"
+                onClick={() => void handleSend()}
+                disabled={sending || !to}
+                className="bg-primary hover:bg-primary/90 text-primary-foreground font-semibold px-4 tracking-wide uppercase text-xs gap-2"
+              >
+                {sending ? <Loader2Icon className="size-4 animate-spin" /> : <SendIcon className="size-4" />}
+                SEND EMAIL
+              </Button>
+            )}
+          </div>
+        </SheetFooter>
+      </SheetContent>
+    </Sheet>
   )
 }
