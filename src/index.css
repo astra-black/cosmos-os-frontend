@@ -1,3 +1,4 @@
+@import url('https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700;800&display=swap');
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "@fontsource-variable/geist";
@@ -37,6 +38,10 @@
   --sidebar-accent-foreground: oklch(0.205 0 0);
   --sidebar-border: oklch(0.922 0 0);
   --sidebar-ring: oklch(0.708 0 0);
+  --surface: oklch(1 0 0);
+  --surface-alt: oklch(0.97 0 0);
+  --success: oklch(0.55 0.15 160);
+  --warning: oklch(0.70 0.16 75);
 }
 
 .dark {
@@ -71,6 +76,20 @@
   --sidebar-accent-foreground: #EDE9F7;
   --sidebar-border: #241a42;
   --sidebar-ring: #6E28FF;
+  --surface: #0d0620;
+  --surface-alt: #140b2a;
+  --success: oklch(0.76 0.16 160);
+  --warning: oklch(0.82 0.14 80);
+}
+
+/* Tailwind v4 custom theme tokens */
+@theme inline {
+  --color-surface: var(--surface);
+  --color-surface-alt: var(--surface-alt);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-orange: var(--orange, #FF7416);
+  --font-sora: 'Sora', sans-serif;
 }
 
 /* Premium dashboard card & widget styling overrides */
