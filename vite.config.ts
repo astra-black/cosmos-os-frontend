@@ -27,3 +27,4 @@ export default defineConfig({
     chunkSizeWarningLimit: 2000,
   },
 })
+// trigger deploy 1792875719
