@@ -27,6 +27,8 @@ type CreateTaskModalProps = {
   campaigns?: Campaign[]
   teamMembers?: TeamMember[]
   defaultProjectId?: string
+  /** Preferred initial status when opening from a board column. */
+  defaultStatus?: string
   onSuccess: (task: Task) => void
 }
 
@@ -37,6 +39,7 @@ export function CreateTaskModal({
   campaigns = [],
   teamMembers = [],
   defaultProjectId,
+  defaultStatus = "todo",
   onSuccess,
 }: CreateTaskModalProps) {
   const [title, setTitle] = useState("")
@@ -44,7 +47,7 @@ export function CreateTaskModal({
   const [campaignId, setCampaignId] = useState("")
   const [assigneeMemberId, setAssigneeMemberId] = useState("")
   const [priority, setPriority] = useState<string>("medium")
-  const [status, setStatus] = useState<string>("todo")
+  const [status, setStatus] = useState<string>(defaultStatus)
   const [dueDate, setDueDate] = useState("")
   const [estimateHours, setEstimateHours] = useState("")
   const [tags, setTags] = useState("")
@@ -65,6 +68,10 @@ export function CreateTaskModal({
       setProjectId(defaultProjectId)
     }
   }, [open, defaultProjectId, projectId])
+
+  useEffect(() => {
+    if (open && defaultStatus) setStatus(defaultStatus)
+  }, [open, defaultStatus])
 
   // Auto-populate task due date from linked project if dueDate is empty
   useEffect(() => {

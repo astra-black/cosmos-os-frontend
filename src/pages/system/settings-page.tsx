@@ -32,11 +32,29 @@ import { getHealth } from "@/lib/api/agency"
 import { cn } from "@/lib/utils"
 
 type TabType = "account" | "agency" | "security" | "appearance" | "system"
+type DisplayPreferences = { reduceMotion: boolean; increaseContrast: boolean; largeText: boolean }
+
+const defaultDisplayPreferences: DisplayPreferences = { reduceMotion: false, increaseContrast: false, largeText: false }
+
+function readDisplayPreferences(): DisplayPreferences {
+  try {
+    const saved = localStorage.getItem("cosmos.display-preferences")
+    const parsed = saved ? JSON.parse(saved) as Partial<DisplayPreferences> : {}
+    return {
+      reduceMotion: parsed.reduceMotion === true,
+      increaseContrast: parsed.increaseContrast === true,
+      largeText: parsed.largeText === true,
+    }
+  } catch {
+    return defaultDisplayPreferences
+  }
+}
 
 export function SettingsPage() {
   const { user, updateUser } = useAuth()
   const { theme, setTheme } = useTheme()
   const [activeTab, setActiveTab] = useState<TabType>("account")
+  const [displayPreferences, setDisplayPreferences] = useState<DisplayPreferences>(readDisplayPreferences)
 
   // Health state
   const [health, setHealth] = useState<{
@@ -55,6 +73,13 @@ export function SettingsPage() {
   const [photoPreview, setPhotoPreview] = useState<string | null>(null)
   const photoRef = useRef<HTMLInputElement>(null)
 
+  useEffect(() => {
+    localStorage.setItem("cosmos.display-preferences", JSON.stringify(displayPreferences))
+    document.documentElement.dataset.cosmosReduceMotion = String(displayPreferences.reduceMotion)
+    document.documentElement.dataset.cosmosHighContrast = String(displayPreferences.increaseContrast)
+    document.documentElement.dataset.cosmosLargeText = String(displayPreferences.largeText)
+  }, [displayPreferences])
+
   // Password state
   const [currentPassword, setCurrentPassword] = useState("")
   const [newPassword, setNewPassword] = useState("")
@@ -68,10 +93,11 @@ export function SettingsPage() {
   const [agencyName, setAgencyName] = useState("")
   const [agencySlug, setAgencySlug] = useState("")
   const [domain, setDomain] = useState("")
-  const [subscriptionPlan, setSubscriptionPlan] = useState("trial")
-  const [maxUsers, setMaxUsers] = useState(5)
+  const [subscriptionPlan, setSubscriptionPlan] = useState("")
+  const [maxUsers, setMaxUsers] = useState<number | null>(null)
   const [billingContactEmail, setBillingContactEmail] = useState("")
   const [agencyState, setAgencyState] = useState<"idle" | "saving" | "saved" | "error">("idle")
+  const [agencyEditing, setAgencyEditing] = useState(false)
   const [agencyError, setAgencyError] = useState("")
   const [agencyLogoState, setAgencyLogoState] = useState<"idle" | "uploading" | "uploaded" | "error">("idle")
   const [agencyLogoError, setAgencyLogoError] = useState("")
@@ -101,8 +127,8 @@ export function SettingsPage() {
           setAgencyName(res.data.name || "")
           setAgencySlug(res.data.slug || "")
           setDomain(res.data.domain || "")
-          setSubscriptionPlan(res.data.subscriptionPlan || "pro")
-          setMaxUsers(res.data.seats || res.data.maxUsers || 5)
+          setSubscriptionPlan(res.data.subscriptionPlan || "")
+          setMaxUsers(res.data.seats ?? res.data.maxUsers ?? null)
           setBillingContactEmail(res.data.billingContactEmail || res.data.billingEmail || "")
           if (res.data.logoUrl || res.data.avatarUrl) {
             setAgencyLogoPreview(res.data.logoUrl || res.data.avatarUrl)
@@ -153,7 +179,7 @@ export function SettingsPage() {
     setProfileState("saving")
     setProfileError("")
     try {
-      const response = await updateProfile(trimmedName)
+      const response = await updateProfile({ name: trimmedName })
       updateUser(response.data ?? { name: trimmedName })
       setName(response.data?.name ?? trimmedName)
       setProfileState("saved")
@@ -235,8 +261,6 @@ export function SettingsPage() {
       const form = new FormData()
       form.append("name", trimmedName)
       form.append("domain", domain.trim())
-      form.append("subscriptionPlan", subscriptionPlan)
-      form.append("maxUsers", String(maxUsers))
       form.append("billingContactEmail", billingContactEmail.trim())
 
       const response = await apiRequest<{
@@ -249,6 +273,7 @@ export function SettingsPage() {
       })
       if (response.data) {
         setAgencyData(response.data)
+        setAgencyEditing(false)
       }
       setAgencyState("saved")
       toast.success("Agency settings updated")
@@ -279,8 +304,6 @@ export function SettingsPage() {
       form.append("agencyLogo", file)
       form.append("name", agencyName)
       form.append("domain", domain)
-      form.append("subscriptionPlan", subscriptionPlan)
-      form.append("maxUsers", String(maxUsers))
       form.append("billingContactEmail", billingContactEmail)
       const response = await apiRequest<{
         success: boolean
@@ -309,22 +332,28 @@ export function SettingsPage() {
   const apiBase = (import.meta.env.VITE_API_BASE_URL as string | undefined)?.replace(/\/$/, "") || "Connected through workspace proxy"
 
   const navItems: { id: TabType; label: string; icon: typeof UserIcon }[] = [
-    { id: "account", label: "Account Profile", icon: UserIcon },
-    { id: "agency", label: "Agency & Workspace", icon: Building2Icon },
-    { id: "security", label: "Security & Passwords", icon: KeyIcon },
-    { id: "appearance", label: "Theme & Display", icon: PaletteIcon },
-    { id: "system", label: "System & Health", icon: ServerIcon },
+    { id: "account", label: "Profile", icon: UserIcon },
+    { id: "agency", label: "Organization Profile", icon: Building2Icon },
+    { id: "security", label: "Sign-In & Security", icon: KeyIcon },
+    { id: "appearance", label: "Preferences", icon: PaletteIcon },
+    { id: "system", label: "System Status", icon: ServerIcon },
   ]
+  const tabDescriptions: Record<TabType, string> = {
+    account: "Manage your personal Cosmos profile.",
+    agency: "Manage your organization details and workspace settings.",
+    security: "Manage the password used to sign in to Cosmos.",
+    appearance: "Adjust how Cosmos looks and moves on this device.",
+    system: "View workspace connectivity and service health.",
+  }
 
   return (
-    <div className="mx-auto flex w-full max-w-4xl flex-col gap-6">
+    <div className="cosmos-settings-page">
       {/* Header */}
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+      <div className="cosmos-settings-heading flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-xl font-semibold tracking-tight sm:text-2xl">Settings & Workspace</h1>
-          <p className="text-muted-foreground text-sm">
-            Manage your personal profile, agency configuration, security, and preferences.
-          </p>
+          <span className="cosmos-settings-eyebrow">{activeTab === "agency" ? "ORGANIZATION" : "PERSONAL ACCOUNT"}</span>
+          <h1 className="text-xl font-semibold tracking-tight sm:text-2xl">{activeTab === "account" ? "Profile" : navItems.find((item) => item.id === activeTab)?.label}</h1>
+          <p className="text-muted-foreground text-sm">{tabDescriptions[activeTab]}</p>
         </div>
         <div className="flex items-center gap-2">
           {agencyData ? (
@@ -337,7 +366,7 @@ export function SettingsPage() {
       </div>
 
       {/* Tabs Bar */}
-      <div className="flex gap-1 overflow-x-auto border-b pb-2">
+      <div className="cosmos-settings-nav flex gap-1 overflow-x-auto border-b pb-2" aria-label="Personal account settings">
         {navItems.map((item) => {
           const Icon = item.icon
           const isActive = activeTab === item.id
@@ -347,7 +376,7 @@ export function SettingsPage() {
               type="button"
               onClick={() => setActiveTab(item.id)}
               className={cn(
-                "flex shrink-0 items-center gap-2 rounded-lg px-3.5 py-2 text-xs font-medium transition-colors",
+                "cosmos-settings-nav-item flex shrink-0 items-center gap-2 rounded-lg px-3.5 py-2 text-xs font-medium transition-colors",
                 isActive
                   ? "bg-primary text-primary-foreground shadow-xs"
                   : "text-muted-foreground hover:bg-muted hover:text-foreground",
@@ -362,18 +391,12 @@ export function SettingsPage() {
 
       {/* Tab 1: Account Profile */}
       {activeTab === "account" && (
-        <Card className="flex flex-col gap-5 p-6">
-          <div className="flex items-center gap-2.5">
-            <UserIcon className="size-5 text-primary" />
-            <div>
-              <h2 className="font-semibold text-base">Personal Profile</h2>
-              <p className="text-muted-foreground text-xs">Your identity across team workspaces and notifications.</p>
-            </div>
-          </div>
-
+        <Card className="cosmos-account-profile-card flex flex-col gap-5 p-6">
+          <div className="cosmos-account-profile-main">
+          <div className="cosmos-account-profile-form">
+          <div className="cosmos-account-section-heading"><div><h2>Profile</h2><p>Your name and photo appear across Cosmos.</p></div></div>
           <Separator />
-
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
+          <div className="cosmos-account-profile-photo flex flex-col gap-4 sm:flex-row sm:items-center">
             <Avatar className="size-16 ring-2 ring-primary/20">
               {photoUrl ? <AvatarImage src={photoUrl} alt="Profile photo" /> : null}
               <AvatarFallback className="text-lg font-semibold">{initials}</AvatarFallback>
@@ -388,7 +411,7 @@ export function SettingsPage() {
                   onClick={() => photoRef.current?.click()}
                 >
                   <UploadIcon className="size-3.5" />
-                  {photoState === "uploading" ? "Uploading…" : "Upload Avatar"}
+                  {photoState === "uploading" ? "Uploading…" : "Upload Photo"}
                 </Button>
                 <input
                   ref={photoRef}
@@ -398,14 +421,14 @@ export function SettingsPage() {
                   onChange={(e) => void onPhotoSelected(e.target.files?.[0])}
                 />
               </div>
-              <p className="text-muted-foreground mt-1 text-xs">PNG, JPG, or WebP up to 5 MB.</p>
+              <p className="text-muted-foreground mt-1 text-xs">JPG or PNG, at least 400 × 400. Your initials appear when there’s no photo.</p>
               {photoState === "error" ? <p className="text-destructive mt-1 text-xs">{photoError}</p> : null}
             </div>
           </div>
 
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="grid gap-1.5 sm:col-span-2">
-              <Label htmlFor="account-name">Display Name *</Label>
+          <div className="cosmos-account-fields grid gap-4 sm:grid-cols-2">
+            <div className="grid gap-1.5">
+              <Label htmlFor="account-name">Full Name *</Label>
               <Input
                 id="account-name"
                 value={name}
@@ -430,7 +453,6 @@ export function SettingsPage() {
               </div>
             </div>
           </div>
-
           <div className="flex items-center justify-between pt-2">
             <Button
               type="button"
@@ -438,15 +460,31 @@ export function SettingsPage() {
               onClick={() => void saveProfile()}
             >
               {profileState === "saving" ? <LoaderCircleIcon className="size-4 animate-spin" /> : null}
-              Save Profile Changes
+              Save Changes
             </Button>
             {profileError ? <p className="text-destructive text-xs">{profileError}</p> : null}
+          </div>
+          </div>
+          <aside className="cosmos-account-preview">
+            <span className="cosmos-account-preview-label">PROFILE PREVIEW</span>
+            <div className="cosmos-account-preview-cover" />
+            <div className="cosmos-account-preview-content">
+              <Avatar className="cosmos-account-preview-avatar">
+                {photoUrl ? <AvatarImage src={photoUrl} alt="Profile photo preview" /> : null}
+                <AvatarFallback>{initials}</AvatarFallback>
+              </Avatar>
+              <strong>{name.trim() || "Your Name"}</strong>
+              <span>{user?.agencyName || "Your workspace"}</span>
+              <small>{user?.email || "Email not available"}</small>
+              <div className="cosmos-account-preview-role"><ShieldIcon /> {user?.role || "Member"}</div>
+            </div>
+          </aside>
           </div>
         </Card>
       )}
 
       {/* Tab 2: Agency & Workspace */}
-      {activeTab === "agency" && (
+      {activeTab === "agency" && (agencyEditing ? (
         <Card className="flex flex-col gap-5 p-6">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2.5">
@@ -554,14 +592,14 @@ export function SettingsPage() {
                 <span className="text-xs font-semibold">Seat Utilization</span>
               </div>
               <span className="font-mono text-xs font-medium">
-                {agencyData?.seatsUsed ?? 1} / {maxUsers} seats used
+                {agencyData?.seatsUsed ?? "—"} / {agencyData?.seats ?? agencyData?.maxUsers ?? maxUsers ?? "—"} seats used
               </span>
             </div>
             <div className="mt-2.5 h-2 w-full overflow-hidden rounded-full bg-muted">
               <div
                 className="h-full bg-primary transition-all duration-300"
                 style={{
-                  width: `${Math.min(100, Math.round(((agencyData?.seatsUsed ?? 1) / Math.max(1, maxUsers)) * 100))}%`,
+                  width: `${agencyData?.seats && agencyData?.seatsUsed != null ? Math.min(100, Math.round((agencyData.seatsUsed / agencyData.seats) * 100)) : 0}%`,
                 }}
               />
             </div>
@@ -569,6 +607,13 @@ export function SettingsPage() {
 
           {isAdmin ? (
             <div className="flex items-center justify-between pt-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setAgencyEditing(false)}
+              >
+                Cancel
+              </Button>
               <Button
                 type="button"
                 disabled={agencyState === "saving" || !agencyName.trim()}
@@ -585,22 +630,48 @@ export function SettingsPage() {
             </p>
           )}
         </Card>
-      )}
+      ) : (
+        <div className="cosmos-organization-profile">
+          <Card className="cosmos-organization-profile-header">
+            <div className="cosmos-organization-profile-brand">
+              {agencyLogoPreview ? <img src={agencyLogoPreview} alt={`${agencyName || "Organization"} logo`} /> : <span>{(agencyName || user?.agencyName || "O").slice(0, 1).toUpperCase()}</span>}
+            </div>
+            <div className="cosmos-organization-profile-title">
+              <span className="cosmos-account-preview-label">ORGANIZATION PROFILE</span>
+              <h2>{agencyLoading ? "Loading organization…" : agencyName || user?.agencyName || "Organization"}</h2>
+              <div><span>{agencySlug ? `/${agencySlug}` : "Workspace profile"}</span>{domain ? <span>{domain}</span> : null}</div>
+            </div>
+            {isAdmin ? <Button type="button" onClick={() => setAgencyEditing(true)}><PaletteIcon />Edit Profile</Button> : null}
+          </Card>
+          <div className="cosmos-organization-profile-grid">
+            <Card className="cosmos-organization-detail-card">
+              <span className="cosmos-account-preview-label">PLAN & SEATS</span>
+              <strong>{subscriptionPlan || "—"}</strong>
+              <p>{agencyData?.seatsUsed ?? "—"} of {agencyData?.seats ?? agencyData?.maxUsers ?? maxUsers ?? "—"} seats assigned</p>
+              <div className="cosmos-org-seat-meter"><span style={{ width: `${agencyData?.seats ? Math.min(100, Math.round(((agencyData.seatsUsed ?? 0) / agencyData.seats) * 100)) : 0}%` }} /></div>
+            </Card>
+            <Card className="cosmos-organization-detail-card">
+              <span className="cosmos-account-preview-label">WORKSPACE</span>
+              <strong>{agencySlug || "—"}</strong>
+              <p>Organization identifier</p>
+            </Card>
+            <Card className="cosmos-organization-detail-card">
+              <span className="cosmos-account-preview-label">BILLING CONTACT</span>
+              <strong className="cosmos-org-break">{billingContactEmail || "Not configured"}</strong>
+              <p>Used for workspace billing communication</p>
+            </Card>
+          </div>
+        </div>
+      ))}
 
       {/* Tab 3: Security & Passwords */}
       {activeTab === "security" && (
-        <Card className="flex flex-col gap-5 p-6">
-          <div className="flex items-center gap-2.5">
-            <KeyIcon className="size-5 text-primary" />
-            <div>
-              <h2 className="font-semibold text-base">Security & Authentication</h2>
-              <p className="text-muted-foreground text-xs">Update your account password and security credentials.</p>
-            </div>
-          </div>
-
+        <Card className="cosmos-account-security-card flex flex-col gap-5 p-6">
+          <div className="cosmos-account-section-heading"><div><h2>Sign-In & Security</h2><p>Keep your account access secure.</p></div></div>
           <Separator />
-
-          <div className="grid max-w-md gap-3.5">
+          <div className="cosmos-account-security-main">
+          <div className="cosmos-account-security-form grid gap-3.5">
+            <div className="cosmos-account-security-title"><KeyIcon /><div><strong>Password</strong><small>Choose a unique password and update it when needed.</small></div></div>
             <div className="grid gap-1.5">
               <Label htmlFor="current-pass">Current Password</Label>
               <Input
@@ -613,7 +684,7 @@ export function SettingsPage() {
             </div>
 
             <div className="grid gap-1.5">
-              <Label htmlFor="new-pass">New Password (8+ characters)</Label>
+              <Label htmlFor="new-pass">New Password · at least 8 characters</Label>
               <Input
                 id="new-pass"
                 type="password"
@@ -633,7 +704,6 @@ export function SettingsPage() {
                 disabled={passwordState === "saving"}
               />
             </div>
-          </div>
 
           <div className="flex items-center justify-between pt-2">
             <Button
@@ -646,74 +716,57 @@ export function SettingsPage() {
             </Button>
             {passwordError ? <p className="text-destructive text-xs">{passwordError}</p> : null}
           </div>
+          </div>
+          <aside className="cosmos-account-security-summary">
+            <span>ACCOUNT</span>
+            <strong>{user?.name || "Account"}</strong>
+            <small>{user?.email || "Email unavailable"}</small>
+            <p>Your current password is required before a new password can be saved.</p>
+          </aside>
+          </div>
         </Card>
       )}
 
       {/* Tab 4: Theme & Display */}
       {activeTab === "appearance" && (
-        <Card className="flex flex-col gap-5 p-6">
-          <div className="flex items-center gap-2.5">
-            <PaletteIcon className="size-5 text-primary" />
-            <div>
-              <h2 className="font-semibold text-base">Interface Appearance</h2>
-              <p className="text-muted-foreground text-xs">Customize the color scheme and visual theme of Cosmos OS.</p>
-            </div>
-          </div>
-
+        <Card className="cosmos-account-preferences-card flex flex-col gap-5 p-6">
+          <div className="cosmos-account-section-heading"><div><h2>Preferences</h2><p>Adjust how Cosmos looks and moves on this device.</p></div></div>
           <Separator />
-
-          <div className="grid grid-cols-3 gap-3">
+          <section className="cosmos-preference-section">
+            <div><h3>Appearance</h3><p>Choose a theme for the Cosmos interface.</p></div>
+            <div className="cosmos-theme-segment" role="group" aria-label="Appearance theme">
             <button
               type="button"
-              onClick={() => setTheme("dark")}
-              className={cn(
-                "flex flex-col items-center gap-2.5 rounded-xl border p-4 text-center transition-all",
-                theme === "dark"
-                  ? "border-primary bg-primary/10 text-primary shadow-xs ring-2 ring-primary/20"
-                  : "border-border hover:bg-muted",
-              )}
-            >
-              <MoonIcon className="size-6" />
-              <div>
-                <div className="text-xs font-semibold">Dark Mode</div>
-                <div className="text-muted-foreground text-[10px]">High contrast studio palette</div>
-              </div>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setTheme("light")}
-              className={cn(
-                "flex flex-col items-center gap-2.5 rounded-xl border p-4 text-center transition-all",
-                theme === "light"
-                  ? "border-primary bg-primary/10 text-primary shadow-xs ring-2 ring-primary/20"
-                  : "border-border hover:bg-muted",
-              )}
-            >
-              <SunIcon className="size-6" />
-              <div>
-                <div className="text-xs font-semibold">Light Mode</div>
-                <div className="text-muted-foreground text-[10px]">Clean daylight clarity</div>
-              </div>
-            </button>
-
-            <button
-              type="button"
+              aria-pressed={theme === "system"}
               onClick={() => setTheme("system")}
-              className={cn(
-                "flex flex-col items-center gap-2.5 rounded-xl border p-4 text-center transition-all",
-                theme === "system"
-                  ? "border-primary bg-primary/10 text-primary shadow-xs ring-2 ring-primary/20"
-                  : "border-border hover:bg-muted",
-              )}
+              className={cn("cosmos-theme-option", theme === "system" && "is-selected")}
             >
-              <LayersIcon className="size-6" />
-              <div>
-                <div className="text-xs font-semibold">System Sync</div>
-                <div className="text-muted-foreground text-[10px]">Follows OS configuration</div>
-              </div>
+              <LayersIcon />System
+            </button>
+            <button
+              type="button"
+              aria-pressed={theme === "light"}
+              onClick={() => setTheme("light")}
+              className={cn("cosmos-theme-option", theme === "light" && "is-selected")}
+            >
+              <SunIcon />Light
+            </button>
+            <button
+              type="button"
+              aria-pressed={theme === "dark"}
+              onClick={() => setTheme("dark")}
+              className={cn("cosmos-theme-option", theme === "dark" && "is-selected")}
+            >
+              <MoonIcon />Dark
             </button>
           </div>
+          </section>
+          <section className="cosmos-preference-section cosmos-preference-accessibility">
+            <div><h3>Accessibility & Display</h3><p>These display preferences are saved in this browser.</p></div>
+            <PreferenceToggle label="Reduce motion" description="Use shorter transitions and animations." checked={displayPreferences.reduceMotion} onChange={(reduceMotion) => setDisplayPreferences((current) => ({ ...current, reduceMotion }))} />
+            <PreferenceToggle label="Increase contrast" description="Strengthen borders and secondary text." checked={displayPreferences.increaseContrast} onChange={(increaseContrast) => setDisplayPreferences((current) => ({ ...current, increaseContrast }))} />
+            <PreferenceToggle label="Large text" description="Increase the interface text size." checked={displayPreferences.largeText} onChange={(largeText) => setDisplayPreferences((current) => ({ ...current, largeText }))} />
+          </section>
         </Card>
       )}
 
@@ -765,4 +818,8 @@ export function SettingsPage() {
       )}
     </div>
   )
+}
+
+function PreferenceToggle({ label, description, checked, onChange }: { label: string; description: string; checked: boolean; onChange: (checked: boolean) => void }) {
+  return <div className="cosmos-preference-toggle-row"><div><strong>{label}</strong><small>{description}</small></div><button type="button" role="switch" aria-checked={checked} aria-label={label} className={cn("cosmos-preference-switch", checked && "is-on")} onClick={() => onChange(!checked)}><span /></button></div>
 }

@@ -1,36 +1,27 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
-import { MailIcon, PencilIcon, PhoneIcon, PlusIcon, Trash2Icon, UserRoundIcon } from "lucide-react"
+import { useNavigate, useParams } from "react-router-dom"
+import { ArrowLeftIcon, Building2Icon, LockKeyholeIcon, MailIcon, MapPinIcon, PencilIcon, PhoneIcon, PlusIcon, Share2Icon, Trash2Icon, UserRoundIcon } from "lucide-react"
 import { toast } from "sonner"
 
 import { EmptyState } from "@/components/shared/empty-state"
 import { ConfirmationDialog } from "@/components/shared/confirmation-dialog"
 import { EntityFormDialog } from "@/components/shared/entity-form-dialog"
 import { PageHeader } from "@/components/shared/page-header"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Skeleton } from "@/components/ui/skeleton"
-import { createCrmContact, deleteCrmContact, listClients, listCrmContacts, updateCrmContact } from "@/lib/api/agency"
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Select } from "@/components/ui/select"
+import { useProjects } from "@/hooks/use-agency-data"
+import { assignCrmContactToProject, createCrmContact, deleteCrmContact, getCrmContact, listClients, listCrmContacts, updateCrmContact, updateCrmContactPortalAccess } from "@/lib/api/agency"
 import { ApiError } from "@/lib/api/client"
 import { useAuth } from "@/lib/auth"
 import { canPerform } from "@/lib/rbac"
 import type { AgencyClient, CrmContact } from "@/types/agency"
-
-const SAMPLE_AVATARS = [
-  "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=120&h=120&q=80",
-  "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=120&h=120&q=80",
-  "https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=120&h=120&q=80",
-  "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=120&h=120&q=80",
-  "https://images.unsplash.com/photo-1438761681033-6461ffad8d80?auto=format&fit=crop&w=120&h=120&q=80",
-  "https://images.unsplash.com/photo-1522075469751-3a6694fb2f61?auto=format&fit=crop&w=120&h=120&q=80",
-  "https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=120&h=120&q=80",
-  "https://images.unsplash.com/photo-1552058544-f2b08422138a?auto=format&fit=crop&w=120&h=120&q=80",
-  "https://images.unsplash.com/photo-1580489944761-15a19d654956?auto=format&fit=crop&w=120&h=120&q=80",
-  "https://images.unsplash.com/photo-1607746882042-944635dfe10e?auto=format&fit=crop&w=120&h=120&q=80",
-]
 
 type ContactForm = {
   name: string
@@ -53,10 +44,13 @@ const emptyContactForm = (): ContactForm => ({
 })
 
 export function CrmContactsPage() {
+  const navigate = useNavigate()
+  const { contactId } = useParams()
   const { user } = useAuth()
   const canWrite = canPerform(user?.role, "write_crm")
   const [contacts, setContacts] = useState<CrmContact[]>([])
   const [clients, setClients] = useState<AgencyClient[]>([])
+  const [privatePhoneAccess, setPrivatePhoneAccess] = useState(false)
   const [search, setSearch] = useState("")
   const [clientFilter, setClientFilter] = useState("all")
   const [loading, setLoading] = useState(true)
@@ -72,6 +66,7 @@ export function CrmContactsPage() {
     const [cRes, clRes] = await Promise.all([listCrmContacts(), listClients()])
     setContacts(cRes.data ?? [])
     setClients(clRes.data ?? [])
+    setPrivatePhoneAccess(Boolean(cRes.privatePhoneAccess))
   }, [])
 
   useEffect(() => {
@@ -80,7 +75,7 @@ export function CrmContactsPage() {
       try {
         await reload()
       } catch (err) {
-        if (!cancelled) setError(err instanceof ApiError ? err.message : "Failed to load contacts")
+        if (!cancelled) setError("Contact records couldn’t be loaded. Check the data service connection and retry.")
       } finally {
         if (!cancelled) setLoading(false)
       }
@@ -201,6 +196,8 @@ export function CrmContactsPage() {
     }
   }
 
+  if (contactId) return <ContactProfilePage contactId={contactId} canWrite={canWrite} onBack={() => navigate("/contacts")} />
+
   return (
     <div className="flex flex-col gap-5">
       <PageHeader
@@ -250,6 +247,8 @@ export function CrmContactsPage() {
           <Skeleton className="h-32 rounded-xl" />
           <Skeleton className="h-32 rounded-xl" />
         </div>
+      ) : error ? (
+        <EmptyState icon={<UserRoundIcon className="size-8 opacity-40" />} title="Contact data unavailable" description="The contact service could not be reached. Retry after the connection is restored." />
       ) : filtered.length === 0 ? (
         <EmptyState
           icon={<UserRoundIcon className="size-8 opacity-40" />}
@@ -265,10 +264,6 @@ export function CrmContactsPage() {
               .join("")
               .slice(0, 2)
               .toUpperCase()
-            const avatarIndex = Math.abs(
-              contact.name.split("").reduce((acc, char) => acc + char.charCodeAt(0), 0)
-            ) % SAMPLE_AVATARS.length
-            const avatarUrl = SAMPLE_AVATARS[avatarIndex]
             return (
               <Card
                 key={contact.contactId}
@@ -281,7 +276,6 @@ export function CrmContactsPage() {
                   <div className="flex items-start justify-between gap-3">
                   <div className="flex items-start gap-3">
                     <Avatar className="size-11 border border-border shadow-sm">
-                      <AvatarImage src={avatarUrl} alt={contact.name} />
                       <AvatarFallback className="bg-muted text-xs font-semibold leading-none">{initials}</AvatarFallback>
                     </Avatar>
                     <div className="min-w-0">
@@ -299,10 +293,11 @@ export function CrmContactsPage() {
                     </div>
                   </div>
 
-                  {canWrite ? <div className="flex gap-1">
-                    <Button size="icon" variant="ghost" className="size-7" disabled={Boolean(pendingId)} onClick={() => startEdit(contact)} aria-label={`Edit ${contact.name}`}><PencilIcon className="size-3.5" /></Button>
-                    <Button size="icon" variant="ghost" className="size-7 text-destructive" disabled={Boolean(pendingId)} onClick={() => setDeleteTarget(contact)} aria-label={`Delete ${contact.name}`}><Trash2Icon className="size-3.5" /></Button>
-                  </div> : null}
+                  <div className="flex gap-1">
+                    <Button size="sm" variant="outline" className="h-7 text-[11px]" onClick={() => navigate(`/contacts/${contact.contactId}`)}>View profile</Button>
+                    {canWrite ? <Button size="icon" variant="ghost" className="size-7" disabled={Boolean(pendingId)} onClick={() => startEdit(contact)} aria-label={`Edit ${contact.name}`}><PencilIcon className="size-3.5" /></Button> : null}
+                    {canWrite ? <Button size="icon" variant="ghost" className="size-7 text-destructive" disabled={Boolean(pendingId)} onClick={() => setDeleteTarget(contact)} aria-label={`Delete ${contact.name}`}><Trash2Icon className="size-3.5" /></Button> : null}
+                  </div>
                   {/* Smartcard Chip Accent */}
                   <div className="opacity-40 shrink-0 select-none">
                     <svg className="size-6 text-muted-foreground" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
@@ -409,10 +404,10 @@ export function CrmContactsPage() {
             <Label htmlFor="contact-form-email">Email</Label>
             <Input id="contact-form-email" type="email" value={form.email} onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))} placeholder="contact@example.com" />
           </div>
-          <div className="grid gap-1.5">
+          {privatePhoneAccess ? <div className="grid gap-1.5">
             <Label htmlFor="contact-form-phone">Phone</Label>
             <Input id="contact-form-phone" type="tel" value={form.phone} onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))} placeholder="Phone number" />
-          </div>
+          </div> : null}
           <div className="grid gap-1.5">
             <Label htmlFor="contact-form-role">Role</Label>
             <Input id="contact-form-role" value={form.role} onChange={(e) => setForm((f) => ({ ...f, role: e.target.value }))} placeholder="e.g. decision maker" />
@@ -442,4 +437,104 @@ export function CrmContactsPage() {
       />
     </div>
   )
+}
+
+const PORTAL_CONTACT_FIELDS = [
+  ["name", "Name"],
+  ["title", "Title"],
+  ["role", "Relationship role"],
+  ["email", "Email address"],
+] as const
+
+function ContactProfilePage({ contactId, canWrite, onBack }: { contactId: string; canWrite: boolean; onBack: () => void }) {
+  const { data: projects } = useProjects()
+  const [contact, setContact] = useState<CrmContact | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(false)
+  const [accessOpen, setAccessOpen] = useState(false)
+  const [shareFields, setShareFields] = useState<string[]>([])
+  const [projectOpen, setProjectOpen] = useState(false)
+  const [projectId, setProjectId] = useState("")
+  const [projectRole, setProjectRole] = useState("")
+  const [saving, setSaving] = useState(false)
+
+  const reload = useCallback(async () => {
+    const result = await getCrmContact(contactId)
+    setContact(result.data)
+    setShareFields(result.data.portalSharedFields ?? [])
+  }, [contactId])
+
+  useEffect(() => {
+    let active = true
+    setLoading(true)
+    setError(false)
+    void getCrmContact(contactId).then((result) => {
+      if (active) {
+        setContact(result.data)
+        setShareFields(result.data.portalSharedFields ?? [])
+      }
+    }).catch(() => { if (active) setError(true) }).finally(() => { if (active) setLoading(false) })
+    return () => { active = false }
+  }, [contactId])
+
+  async function saveAccess() {
+    setSaving(true)
+    try {
+      const result = await updateCrmContactPortalAccess(contactId, shareFields)
+      setContact((current) => current ? { ...current, portalSharedFields: result.data.portalSharedFields ?? [] } : current)
+      setAccessOpen(false)
+      toast.success("Portal access updated")
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Portal access could not be updated")
+    } finally { setSaving(false) }
+  }
+
+  async function linkProject() {
+    if (!projectId) return
+    setSaving(true)
+    try {
+      await assignCrmContactToProject(contactId, { projectId, role: projectRole })
+      await reload()
+      setProjectOpen(false)
+      setProjectId("")
+      setProjectRole("")
+      toast.success("Contact linked to project")
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Project link could not be saved")
+    } finally { setSaving(false) }
+  }
+
+  if (loading) return <div className="grid gap-5 xl:grid-cols-2"><Skeleton className="h-52 rounded-xl" /><Skeleton className="h-52 rounded-xl" /></div>
+  if (error || !contact) return <div className="flex flex-col gap-5"><PageHeader title="External Contact" description="Contact record details for this organization." actions={<Button size="sm" variant="outline" onClick={onBack}><ArrowLeftIcon className="size-3.5" />Back to contacts</Button>} /><EmptyState icon={<UserRoundIcon className="size-8 opacity-40" />} title={error ? "Contact data unavailable" : "Contact not found"} description={error ? "The contact service could not be reached. Retry after the connection is restored." : "This contact may have been removed or is outside your organization."} /></div>
+
+  const initials = contact.name.split(/\s+/).map((part) => part[0]).join("").slice(0, 2).toUpperCase()
+  const location = [contact.contactDetails?.city, contact.contactDetails?.state, contact.contactDetails?.country].filter(Boolean).join(", ")
+
+  return <div className="flex flex-col gap-5">
+    <PageHeader title={contact.name} description="External Contact · Shared record" actions={<div className="flex gap-2"><Button size="sm" variant="outline" onClick={onBack}><ArrowLeftIcon className="size-3.5" />Back to contacts</Button>{contact.email ? <Button size="sm" onClick={() => { window.location.href = `mailto:${contact.email}` }}><MailIcon className="size-3.5" />Message</Button> : null}</div>} />
+    <Card className="flex flex-wrap items-center gap-5 p-5 sm:p-7">
+      <Avatar className="size-[72px] border border-border"><AvatarFallback className="bg-gradient-to-br from-[#8d52f4] to-[#eb6adf] font-display text-xl font-semibold text-white">{initials}</AvatarFallback></Avatar>
+      <div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><h2 className="font-display text-xl font-semibold tracking-tight">{contact.name}</h2><Badge variant="outline">External contact</Badge></div><p className="mt-1 text-sm text-muted-foreground">{contact.title || "Contact"}{contact.clientName ? ` · ${contact.clientName}` : ""}</p><div className="mt-3 flex flex-wrap gap-x-4 gap-y-2 text-xs text-muted-foreground">{contact.clientName ? <span className="inline-flex items-center gap-1.5"><Building2Icon className="size-3.5" />{contact.clientName}</span> : null}{location ? <span className="inline-flex items-center gap-1.5"><MapPinIcon className="size-3.5" />{location}</span> : null}</div></div>
+    </Card>
+    <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(300px,.85fr)]">
+      <Card className="p-5 sm:p-6"><div className="mb-5 flex items-center justify-between"><h3 className="font-display text-base font-semibold">Contact Details</h3><span className="text-[10px] uppercase tracking-wider text-muted-foreground">Shared record</span></div><dl className="grid gap-x-8 gap-y-5 sm:grid-cols-2">
+        {contact.clientName ? <div><dt className="text-xs text-muted-foreground">Client account</dt><dd className="mt-1 text-sm">{contact.clientName}</dd></div> : null}
+        {contact.title ? <div><dt className="text-xs text-muted-foreground">Title</dt><dd className="mt-1 text-sm">{contact.title}</dd></div> : null}
+        {contact.role ? <div><dt className="text-xs text-muted-foreground">Relationship role</dt><dd className="mt-1 text-sm capitalize">{contact.role.replaceAll("_", " ")}</dd></div> : null}
+        {contact.email ? <div><dt className="text-xs text-muted-foreground">Email</dt><dd className="mt-1 break-all text-sm"><a className="text-primary hover:underline" href={`mailto:${contact.email}`}>{contact.email}</a></dd></div> : null}
+        {contact.phone ? <div><dt className="text-xs text-muted-foreground">Personal phone</dt><dd className="mt-1 text-sm"><a className="inline-flex items-center gap-1.5 hover:text-primary" href={`tel:${contact.phone}`}><PhoneIcon className="size-3.5" />{contact.phone}</a></dd></div> : contact.privatePhoneAccess === false ? <div><dt className="text-xs text-muted-foreground">Personal phone</dt><dd className="mt-1 inline-flex items-center gap-1.5 text-sm text-muted-foreground"><LockKeyholeIcon className="size-3.5" />Restricted · talent team only</dd></div> : null}
+        {contact.contactDetails?.department ? <div><dt className="text-xs text-muted-foreground">Department</dt><dd className="mt-1 text-sm">{contact.contactDetails.department}</dd></div> : null}
+      </dl></Card>
+      <Card className="p-5 sm:p-6"><div className="mb-4 flex items-center justify-between gap-3"><h3 className="font-display text-base font-semibold">Who Can See This Record</h3>{canWrite ? <Button size="sm" variant="ghost" onClick={() => setAccessOpen(true)}>Change</Button> : null}</div><div className="space-y-4">
+        <div className="flex items-start gap-3"><div className="grid size-8 shrink-0 place-items-center rounded-lg bg-muted"><Building2Icon className="size-4 text-muted-foreground" /></div><div className="min-w-0 flex-1"><p className="text-sm font-medium">Organization members</p><p className="mt-0.5 text-xs text-muted-foreground">View access follows the signed-in member’s organization permissions.</p></div><Badge variant="outline">View</Badge></div>
+        <div className="flex items-start gap-3 border-t pt-4"><div className="grid size-8 shrink-0 place-items-center rounded-lg bg-muted"><Share2Icon className="size-4 text-muted-foreground" /></div><div className="min-w-0 flex-1"><p className="text-sm font-medium">{contact.clientName ? `${contact.clientName} portal` : "Client portal"}</p><p className="mt-0.5 text-xs text-muted-foreground">{contact.portalSharedFields?.length ? `Shared fields: ${contact.portalSharedFields.map((field) => PORTAL_CONTACT_FIELDS.find(([key]) => key === field)?.[1] ?? field).join(", ")}` : "No contact fields are shared with the client portal."}</p></div><Badge variant="outline">{contact.portalSharedFields?.length ? "Shared" : "Private"}</Badge></div>
+        <div className="rounded-xl border bg-muted/30 p-3 text-xs leading-relaxed text-muted-foreground">Portal responses include only the selected contact fields and are scoped to this linked client account.</div>
+      </div></Card>
+    </div>
+    <Card className="p-5 sm:p-6"><div className="flex flex-wrap items-center justify-between gap-3"><div><h3 className="font-display text-base font-semibold">Projects &amp; Relationship</h3><p className="mt-1 text-xs text-muted-foreground">Project links recorded for this contact.</p></div>{canWrite ? <Button size="sm" variant="outline" onClick={() => setProjectOpen(true)}><PlusIcon className="size-3.5" />Add to project</Button> : null}</div>
+      {contact.projects?.length ? <div className="mt-4 divide-y">{contact.projects.map((project) => <div key={project.projectId} className="flex flex-wrap items-center justify-between gap-4 py-3"><div><p className="text-sm font-medium">{project.clientName ? `${project.clientName} · ` : ""}{project.projectName}</p><p className="mt-1 text-xs capitalize text-muted-foreground">{project.role || "Contact"}{project.projectStatus ? ` · ${project.projectStatus}` : ""}</p>{project.notes ? <p className="mt-1 text-xs text-muted-foreground">{project.notes}</p> : null}</div></div>)}</div> : <p className="mt-4 text-sm text-muted-foreground">No project relationships have been added.</p>}
+    </Card>
+    <Dialog open={accessOpen} onOpenChange={setAccessOpen}><DialogContent className="max-w-md"><DialogHeader><DialogTitle>Client portal access</DialogTitle><DialogDescription>Select which contact fields appear in the portal for {contact.clientName || "the linked client"}.</DialogDescription></DialogHeader><div className="grid gap-3 py-2">{PORTAL_CONTACT_FIELDS.map(([key, label]) => <label key={key} className="flex items-center gap-3 rounded-lg border p-3 text-sm"><input type="checkbox" checked={shareFields.includes(key)} onChange={(event) => setShareFields((current) => event.target.checked ? [...current, key] : current.filter((field) => field !== key))} />{label}</label>)}</div><DialogFooter><Button variant="outline" onClick={() => setAccessOpen(false)} disabled={saving}>Cancel</Button><Button onClick={() => void saveAccess()} disabled={saving}>{saving ? "Saving…" : "Save access"}</Button></DialogFooter></DialogContent></Dialog>
+    <Dialog open={projectOpen} onOpenChange={setProjectOpen}><DialogContent className="max-w-md"><DialogHeader><DialogTitle>Add contact to project</DialogTitle><DialogDescription>Link this contact to a project belonging to the same organization.</DialogDescription></DialogHeader><div className="grid gap-4 py-2"><div className="grid gap-1.5"><Label htmlFor="contact-project">Project</Label><Select id="contact-project" value={projectId} onChange={(event) => setProjectId(event.target.value)}><option value="">Choose a project</option>{projects.map((project) => <option key={project.projectId} value={project.projectId}>{project.projectName}</option>)}</Select></div><div className="grid gap-1.5"><Label htmlFor="contact-project-role">Relationship to project</Label><Input id="contact-project-role" value={projectRole} onChange={(event) => setProjectRole(event.target.value)} placeholder="e.g. Lead contact" /></div></div><DialogFooter><Button variant="outline" onClick={() => setProjectOpen(false)} disabled={saving}>Cancel</Button><Button onClick={() => void linkProject()} disabled={!projectId || saving}>{saving ? "Saving…" : "Add to project"}</Button></DialogFooter></DialogContent></Dialog>
+  </div>
 }

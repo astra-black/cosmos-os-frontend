@@ -1,7 +1,5 @@
 import { useEffect, useState } from "react"
 import { useNavigate } from "react-router-dom"
-import { SearchIcon } from "lucide-react"
-
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { globalSearch } from "@/lib/api/platform"
@@ -31,7 +29,12 @@ export function GlobalSearch() {
       if (e.key === "Escape") setOpen(false)
     }
     window.addEventListener("keydown", onKey)
-    return () => window.removeEventListener("keydown", onKey)
+    const onSearchRequest = () => setOpen(true)
+    window.addEventListener("cosmos-open-search", onSearchRequest)
+    return () => {
+      window.removeEventListener("keydown", onKey)
+      window.removeEventListener("cosmos-open-search", onSearchRequest)
+    }
   }, [])
 
   useEffect(() => {
@@ -71,7 +74,7 @@ export function GlobalSearch() {
         className="text-muted-foreground hidden h-8 gap-2 md:inline-flex"
         onClick={() => setOpen(true)}
       >
-        <SearchIcon className="size-3.5" />
+        <img src="/figma-search.svg" alt="" />
         <span className="text-xs">Search</span>
         <kbd className="bg-muted rounded px-1 font-mono text-[10px]">⌘K</kbd>
       </Button>
@@ -82,7 +85,7 @@ export function GlobalSearch() {
         onClick={() => setOpen(true)}
         aria-label="Search"
       >
-        <SearchIcon className="size-4" />
+        <img src="/figma-search.svg" alt="" />
       </Button>
 
       {open ? (
@@ -95,7 +98,7 @@ export function GlobalSearch() {
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center gap-2 border-b px-3 py-2">
-              <SearchIcon className="text-muted-foreground size-4" />
+              <img src="/figma-search.svg" alt="" />
               <Input
                 autoFocus
                 value={q}

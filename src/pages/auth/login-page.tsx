@@ -30,7 +30,7 @@ export function LoginPage() {
   const { login, isAuthenticated } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
-  const from = (location.state as { from?: { pathname?: string } })?.from?.pathname || "/dashboard"
+  const from = (location.state as { from?: { pathname?: string } })?.from?.pathname || "/hub"
   const [error, setError] = useState<string | null>(null)
   const [successMessage, setSuccessMessage] = useState<string | null>(null)
   const [pending, setPending] = useState(false)

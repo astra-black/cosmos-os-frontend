@@ -260,10 +260,8 @@ export function ClientsPage() {
       setSelectedId(routeClientId)
       return
     }
-    if (!selectedId && clients[0]) {
-      selectClient(clients[0].clientId, true)
-    }
-  }, [clients, routeClientId, selectedId, selectClient])
+    setSelectedId("")
+  }, [routeClientId])
 
   useEffect(() => {
     if (!selectedId) return
@@ -301,7 +299,7 @@ export function ClientsPage() {
       if (stageFilter !== "all" && c.stage !== stageFilter) return false
       if (search) {
         const q = search.toLowerCase()
-        if (!`${c.name} ${c.industry} ${c.accountLead}`.toLowerCase().includes(q)) return false
+        if (!`${c.name} ${c.industry} ${c.accountLead} ${c.primaryContact} ${c.email} ${(c.tags ?? []).join(" ")}`.toLowerCase().includes(q)) return false
       }
       return true
     })
@@ -568,13 +566,13 @@ export function ClientsPage() {
   return (
     <div className="flex flex-col gap-5">
       <PageHeader
-        title="Accounts"
-        description="CRM accounts — stage, health, contacts, deals, and activity log."
+        title="Clients"
+        description="Client records and relationship details for this organization."
         actions={
           canWriteCrm ? (
             <Button size="sm" onClick={openCreateClient}>
               <PlusIcon className="size-3.5" />
-              Add account
+              Add Client
             </Button>
           ) : undefined
         }
@@ -593,7 +591,7 @@ export function ClientsPage() {
         <Input
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search accounts…"
+          placeholder="Search organizations, owners and industries…"
           className="w-full sm:max-w-xs"
         />
         <div className="-mx-1 flex gap-1 overflow-x-auto px-1 pb-0.5 sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0">
@@ -616,6 +614,31 @@ export function ClientsPage() {
           <Skeleton className="h-96 lg:col-span-1" />
           <Skeleton className="h-96 lg:col-span-2" />
         </div>
+      ) : !selectedId ? (
+        filtered.length === 0 ? (
+          <EmptyState title="No clients found" description="Adjust the stage filters or add a client record." />
+        ) : (
+          <div className="cosmos-client-record-grid">
+            {filtered.map((client) => (
+              <button key={client.clientId} type="button" className="cosmos-client-record-button" onClick={() => { selectClient(client.clientId); setTab("overview") }}>
+                <Card className="cosmos-client-record-card">
+                  <div className="cosmos-client-record-cover" />
+                  <div className="cosmos-client-record-content">
+                    <div className="cosmos-client-record-top"><span className="cosmos-client-record-mark">{client.name.trim().slice(0, 1).toUpperCase()}</span><Badge variant="secondary" className="capitalize">{client.stage}</Badge></div>
+                    <div className="cosmos-client-record-title"><strong>{client.name}</strong><span>{client.industry || "Industry not set"}</span></div>
+                    <div className="cosmos-client-record-meta">
+                      {client.email ? <span><MailIcon />{client.email}</span> : null}
+                      {client.primaryContact ? <span><UserIcon />Contact · {client.primaryContact}</span> : null}
+                      <span><UserIcon />Owner · {client.accountLead || "Unassigned"}</span>
+                    </div>
+                    {client.tags?.length ? <div className="cosmos-client-record-tags">{client.tags.slice(0, 3).map((tag) => <Badge key={tag} variant="outline">{tag}</Badge>)}</div> : <div className="cosmos-client-record-tags text-muted-foreground">No tags</div>}
+                    <div className="cosmos-client-record-footer"><span>HEALTH · <b className="capitalize">{client.health || "Not set"}</b></span><span>ARR · {money(client.arr)}</span></div>
+                  </div>
+                </Card>
+              </button>
+            ))}
+          </div>
+        )
       ) : (
         <div className="flex flex-col gap-4 lg:flex-row">
           <aside
@@ -940,6 +963,8 @@ export function ClientsPage() {
               </div>
             )}
        </div>
+       </div>
+      )}
        <CreateClientModal
          open={createClientOpen}
          onOpenChange={setCreateClientOpen}
@@ -1170,8 +1195,6 @@ export function ClientsPage() {
           client={selected}
           contacts={contacts}
         />
-      )}
-    </div>
       )}
     </div>
   )

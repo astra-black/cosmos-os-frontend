@@ -1,25 +1,38 @@
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
+import { PlusIcon } from "lucide-react"
 import { toast } from "sonner"
 
 import { CreateCrewModal } from "@/components/modals"
-import { CrewBoard } from "@/components/ops/crew-board"
-import { EventScopeBar } from "@/components/ops/event-scope-bar"
 import { EmptyState } from "@/components/shared/empty-state"
 import { ConfirmationDialog } from "@/components/shared/confirmation-dialog"
 import { EntityFormDialog } from "@/components/shared/entity-form-dialog"
 import { withMutationFeedback } from "@/components/shared/mutation-feedback"
+import { VendorsCrewTabs } from "@/components/vendors/vendors-crew-tabs"
 import { Button } from "@/components/ui/button"
-import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select } from "@/components/ui/select"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Textarea } from "@/components/ui/textarea"
+import { useVendors } from "@/hooks/use-agency-data"
 import { useEventScope } from "@/hooks/use-event-scope"
-import { createDepartment, deleteCrew, deleteDepartment, getEvent, listCrew, listDepartments, prefillCrewFromProject, updateCrew, updateCrewStatus, updateDepartment } from "@/lib/api/agency"
+import {
+  checkInCrew,
+  createDepartment,
+  deleteCrew,
+  deleteDepartment,
+  getEvent,
+  listCrew,
+  listDepartments,
+  prefillCrewFromProject,
+  updateCrew,
+  updateCrewStatus,
+  updateDepartment,
+} from "@/lib/api/agency"
 import { ApiError } from "@/lib/api/client"
 import { useAuth } from "@/lib/auth"
-import { canPerform } from "@/lib/rbac"
+import { canAccessRoute, canPerform } from "@/lib/rbac"
+import { cn } from "@/lib/utils"
 import type { CrewMember, Department } from "@/types/agency"
 
 type DepartmentFormData = {
@@ -60,17 +73,53 @@ const emptyCrewForm: CrewFormData = {
   status: "assigned",
 }
 
-const CREW_STATUSES = ["assigned", "confirmed", "on_site", "complete"] as const
+const CREW_STATUSES = ["assigned", "invited", "confirmed", "on_site", "complete", "no_show", "cancelled"] as const
 const DEPARTMENT_STATUSES = ["active", "inactive"] as const
 
 function isOptionalEmail(value: string) {
   return !value.trim() || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim())
 }
 
+function initials(name: string) {
+  return name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((p) => p[0]?.toUpperCase() || "")
+    .join("")
+}
+
+function normalizeStatus(status: string) {
+  return (status || "").toLowerCase().replace(/\s+/g, "_")
+}
+
+/** Map API CrewStatus to Figma roster labels without inventing attendance. */
+function rosterStatus(member: CrewMember): { label: string; tone: "success" | "warning" | "info" | "neutral" | "critical" } {
+  const s = normalizeStatus(member.status)
+  if (s === "on_site") return { label: "Checked In", tone: "success" }
+  if (s === "complete") return { label: "Complete", tone: "success" }
+  if (s === "confirmed") return { label: "Confirmed", tone: "info" }
+  if (s === "no_show") return { label: "No Show", tone: "critical" }
+  if (s === "cancelled") return { label: "Cancelled", tone: "neutral" }
+  if (s === "assigned" || s === "invited") return { label: "Not Called", tone: "neutral" }
+  return { label: member.status?.replaceAll("_", " ") || "Unknown", tone: "neutral" }
+}
+
+function formatClock(iso?: string | null) {
+  if (!iso) return null
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return null
+  return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false })
+}
+
 export function CrewPage() {
   const { user } = useAuth()
+  const canView = canAccessRoute(user?.role, "/crew")
   const canWrite = canPerform(user?.role, "write_ops")
-  const { events, eventId, setEventId, selectedEvent, loadingEvents } = useEventScope()
+  const agencyLabel = user?.agencyName?.trim() || "Workspace"
+  const { data: vendors } = useVendors()
+  const { events, eventId, setEventId, selectedEvent, loadingEvents, eventsError } = useEventScope()
+
   const [crew, setCrew] = useState<CrewMember[]>([])
   const [departments, setDepartments] = useState<Department[]>([])
   const [loading, setLoading] = useState(true)
@@ -93,7 +142,7 @@ export function CrewPage() {
     const [crewRes, deptRes] = await Promise.all([
       listCrew(eventId),
       listDepartments(eventId).catch((err) => {
-        console.warn('[CrewPage] Failed to load departments:', err)
+        console.warn("[CrewPage] Failed to load departments:", err)
         return null
       }),
     ])
@@ -104,9 +153,7 @@ export function CrewPage() {
   function patchLocal(updated: CrewMember | null | undefined) {
     if (!updated?.crewId) return
     setCrew((prev) =>
-      prev.map((c) =>
-        c.crewId === updated.crewId || c.id === updated.id ? { ...c, ...updated } : c,
-      ),
+      prev.map((c) => (c.crewId === updated.crewId || c.id === updated.id ? { ...c, ...updated } : c)),
     )
   }
 
@@ -123,7 +170,7 @@ export function CrewPage() {
         setLinkedProjectId(typeof pid === "string" ? pid : null)
       })
       .catch((err) => {
-        console.warn('[CrewPage] Failed to load linked project:', err)
+        console.warn("[CrewPage] Failed to load linked project:", err)
         if (!cancelled) setLinkedProjectId(null)
       })
     return () => {
@@ -131,33 +178,10 @@ export function CrewPage() {
     }
   }, [eventId])
 
-  async function handlePrefillFromVendors() {
-    if (!eventId || !canWrite) return
-    setPrefillBusy(true)
-    try {
-      const res = await withMutationFeedback(
-        prefillCrewFromProject(eventId, linkedProjectId ? { projectId: linkedProjectId } : {}),
-        {
-          loading: "Importing vendors into crew roster...",
-          success: "Crew roster updated from project vendors",
-          error: (err) =>
-            err instanceof ApiError ? err.message : "Could not prefill crew from vendors",
-        },
-      )
-      await reload()
-      const data = (res as any)?.data
-      if ((data?.createdCount ?? 0) === 0) {
-        toast.info(data?.message || "No new crew members added")
-      }
-    } catch {
-      // withMutationFeedback already toasted
-    } finally {
-      setPrefillBusy(false)
-    }
-  }
-
   useEffect(() => {
     if (!eventId) {
+      setCrew([])
+      setDepartments([])
       setLoading(false)
       return
     }
@@ -181,16 +205,83 @@ export function CrewPage() {
     }
   }, [eventId, reload])
 
+  const kpis = useMemo(() => {
+    /** Called = roster statuses past “Not Called” (invited/assigned). */
+    const called = crew.filter((m) => {
+      const s = normalizeStatus(m.status)
+      return s === "confirmed" || s === "on_site" || s === "complete" || s === "no_show" || s === "cancelled"
+    }).length
+    const checkedIn = crew.filter((m) => {
+      const s = normalizeStatus(m.status)
+      return s === "on_site" || s === "complete"
+    })
+    const unconfirmed = crew.filter((m) => {
+      const s = normalizeStatus(m.status)
+      return s === "invited" || s === "assigned" || s === ""
+    })
+    const latestCheckIn = checkedIn
+      .map((m) => m.onSiteAt)
+      .filter(Boolean)
+      .map((iso) => new Date(iso as string).getTime())
+      .filter((t) => !Number.isNaN(t))
+      .sort((a, b) => b - a)[0]
+    const checkInClock = latestCheckIn ? formatClock(new Date(latestCheckIn).toISOString()) : null
+
+    return {
+      called,
+      checkedIn: checkedIn.length,
+      checkedInSource: checkInClock
+        ? `Source: crew check-in · ${checkInClock}`
+        : checkedIn.length
+          ? "Source: crew check-in API"
+          : "No check-ins recorded",
+      unconfirmed: unconfirmed.length,
+      orgHint:
+        departments.length > 0
+          ? `Across ${departments.length} department${departments.length === 1 ? "" : "s"}`
+          : "Event roster",
+    }
+  }, [crew, departments.length])
+
+  async function handlePrefillFromVendors() {
+    if (!eventId || !canWrite) return
+    setPrefillBusy(true)
+    try {
+      const res = await withMutationFeedback(
+        prefillCrewFromProject(eventId, linkedProjectId ? { projectId: linkedProjectId } : {}),
+        {
+          loading: "Importing vendors into crew roster...",
+          success: "Crew roster updated from project vendors",
+          error: (err) =>
+            err instanceof ApiError ? err.message : "Could not prefill crew from vendors",
+        },
+      )
+      await reload()
+      const data = (res as { data?: { createdCount?: number; message?: string } })?.data
+      if ((data?.createdCount ?? 0) === 0) {
+        toast.info(data?.message || "No new crew members added")
+      }
+    } catch {
+      // toasted
+    } finally {
+      setPrefillBusy(false)
+    }
+  }
+
   async function handleStatusChange(member: CrewMember, nextStatus: string) {
     if (!eventId || !canWrite) return
     setBusyCrewId(member.crewId)
-    // Optimistic: move card immediately
     patchLocal({ ...member, status: nextStatus })
     try {
-      const res = await updateCrewStatus(member.crewId, nextStatus, eventId)
-      patchLocal(res.data)
+      if (normalizeStatus(nextStatus) === "on_site") {
+        const res = await checkInCrew(eventId, member.crewId)
+        patchLocal(res.data)
+      } else {
+        const res = await updateCrewStatus(member.crewId, nextStatus, eventId)
+        patchLocal(res.data)
+      }
       await reload()
-      toast.success(`${member.name || member.crewId} → ${nextStatus.replace("_", " ")}`)
+      toast.success(`${member.name || member.crewId} → ${nextStatus.replaceAll("_", " ")}`)
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : "Could not update crew status")
       await reload().catch(() => undefined)
@@ -256,7 +347,7 @@ export function CrewPage() {
         {
           loading: departmentId ? "Updating department..." : "Creating department...",
           success: departmentId ? "Department updated" : "Department created",
-          error: (err) => err instanceof ApiError ? err.message : "Could not save department",
+          error: (err) => (err instanceof ApiError ? err.message : "Could not save department"),
         },
       )
       setDepartmentForm(emptyDepartmentForm)
@@ -278,7 +369,7 @@ export function CrewPage() {
       departmentId: member.departmentId ?? "",
       email: member.email ?? "",
       phone: member.phone ?? "",
-      status: member.status,
+      status: normalizeStatus(member.status) || "assigned",
     })
     setCrewFormMode("edit")
   }
@@ -306,7 +397,7 @@ export function CrewPage() {
       await withMutationFeedback(updateCrew(crewId, payload), {
         loading: "Updating crew member...",
         success: "Crew member updated",
-        error: (err) => err instanceof ApiError ? err.message : "Could not save crew member",
+        error: (err) => (err instanceof ApiError ? err.message : "Could not save crew member"),
       })
       setCrewForm(emptyCrewForm)
       setEditingCrew(null)
@@ -318,6 +409,7 @@ export function CrewPage() {
       setPendingId(null)
     }
   }
+
   async function handleDeleteTarget() {
     if (!deleteTarget) return
     const targetId = deleteTarget.id
@@ -327,7 +419,7 @@ export function CrewPage() {
       await withMutationFeedback(mutation, {
         loading: `Deleting ${deleteTarget.type}...`,
         success: `${deleteTarget.type === "crew" ? "Crew member" : "Department"} deleted`,
-        error: "Could not delete item"
+        error: "Could not delete item",
       })
       await reload()
     } catch (err) {
@@ -338,128 +430,533 @@ export function CrewPage() {
     }
   }
 
-  return (
-    <div className="flex flex-col gap-5">
-      <EventScopeBar
-        title="Crew & Departments"
-        events={events}
-        eventId={eventId}
-        onEventChange={setEventId}
-        loading={loadingEvents}
-        selectedEvent={selectedEvent}
-        compact
-         trailing={canWrite ? <div className="flex gap-2"><Button size="sm" variant="outline" onClick={openCreateDepartment}>New department</Button><Button size="sm" variant="outline" disabled={prefillBusy} onClick={handlePrefillFromVendors}>{prefillBusy ? "Importing…" : "Import project vendors"}</Button><Button size="sm" onClick={openCreateCrew}>Add crew</Button></div> : undefined}
-      />
+  if (!canView) {
+    return (
+      <div className="cosmos-vc-page">
+        <EmptyState
+          title="Crew is unavailable"
+          description="Your role cannot open the show-day crew roster."
+        />
+      </div>
+    )
+  }
 
-      {!canWrite ? (
-        <p className="text-muted-foreground text-xs">
-          View only — status changes need ops / producer / pm / admin.
-        </p>
+  const eventTitle = selectedEvent?.name?.trim() || "Show Day Crew"
+  const eyebrow = selectedEvent
+    ? `${agencyLabel} · ${selectedEvent.name}`
+    : `${agencyLabel} · Workspace`
+
+  return (
+    <div className="cosmos-vc-page">
+      <div className="cosmos-vc-page__head">
+        <p className="cosmos-vc-page__eyebrow">{eyebrow}</p>
+        <div className="cosmos-vc-page__title-row">
+          <h1>Vendors &amp; Crew</h1>
+          <div className="cosmos-vc-page__actions">
+            <Button
+              size="sm"
+              variant="outline"
+              disabled
+              title="Request Replacement is not in the Agency OS API yet"
+            >
+              Request Replacement · Unavailable
+            </Button>
+          </div>
+        </div>
+      </div>
+
+      <VendorsCrewTabs active="crew" vendorCount={vendors.length} crewCount={crew.length || "—"} />
+
+      <div className="cosmos-vc-scope">
+        <label className="cosmos-vc-scope__label" htmlFor="crew-event-scope">
+          Event
+        </label>
+        {loadingEvents ? (
+          <Skeleton className="h-9 w-56" />
+        ) : (
+          <Select
+            id="crew-event-scope"
+            value={eventId}
+            onChange={(e) => setEventId(e.target.value)}
+            aria-label="Operating event"
+            className="cosmos-vc-scope__select"
+          >
+            {events.length === 0 ? <option value="">No events</option> : null}
+            {events.map((event) => (
+              <option key={event.eventId} value={event.eventId}>
+                {event.name}
+              </option>
+            ))}
+          </Select>
+        )}
+        {selectedEvent ? (
+          <span className="cosmos-vc-scope__meta capitalize">{selectedEvent.status}</span>
+        ) : null}
+      </div>
+
+      {eventsError ? (
+        <div className="cosmos-vc-page__error" role="alert">
+          <span>{eventsError}</span>
+        </div>
       ) : null}
 
       {error ? (
-        <Card className="border-destructive/40 text-destructive px-4 py-3 text-sm">{error}</Card>
+        <div className="cosmos-vc-page__error" role="alert">
+          <span>{error}</span>
+          <Button size="sm" variant="outline" onClick={() => void reload()}>
+            Retry
+          </Button>
+        </div>
       ) : null}
 
-      {loading ? (
-        <div className="flex flex-col gap-4">
-          <Skeleton className="h-12 w-full rounded-xl" />
-          <div className="grid gap-3 md:grid-cols-4">
-            <Skeleton className="h-72 rounded-xl" />
-            <Skeleton className="h-72 rounded-xl" />
-            <Skeleton className="h-72 rounded-xl" />
-            <Skeleton className="h-72 rounded-xl" />
+      {!eventId && !loadingEvents ? (
+        <EmptyState
+          title="No event selected"
+          description="Create or select an event to load the show-day crew roster."
+        />
+      ) : loading ? (
+        <div className="space-y-3">
+          <div className="cosmos-vc-kpis">
+            <Skeleton className="h-24 rounded-2xl" />
+            <Skeleton className="h-24 rounded-2xl" />
+            <Skeleton className="h-24 rounded-2xl" />
+            <Skeleton className="h-24 rounded-2xl" />
+          </div>
+          <Skeleton className="h-64 w-full rounded-2xl" />
+        </div>
+      ) : (
+        <>
+          <div className="cosmos-vc-kpis">
+            <article className="cosmos-vc-kpi">
+              <p className="cosmos-vc-kpi__label">Called</p>
+              <p className="cosmos-vc-kpi__value">{kpis.called}</p>
+              <p className="cosmos-vc-kpi__sub">{kpis.orgHint}</p>
+            </article>
+            <article className="cosmos-vc-kpi">
+              <p className="cosmos-vc-kpi__label">Checked In</p>
+              <p className="cosmos-vc-kpi__value">{kpis.checkedIn}</p>
+              <p className="cosmos-vc-kpi__sub">{kpis.checkedInSource}</p>
+            </article>
+            <article className="cosmos-vc-kpi">
+              <p className="cosmos-vc-kpi__label">Running Late</p>
+              <p className="cosmos-vc-kpi__value">—</p>
+              <p className="cosmos-vc-kpi__sub">Not tracked by crew API</p>
+            </article>
+            <article className="cosmos-vc-kpi">
+              <p className="cosmos-vc-kpi__label">Unconfirmed</p>
+              <p className="cosmos-vc-kpi__value">{kpis.unconfirmed}</p>
+              <p className="cosmos-vc-kpi__sub">Invited or assigned only</p>
+            </article>
+          </div>
+
+          <section className="cosmos-vc-roster">
+            <header className="cosmos-vc-roster__head">
+              <h2>{eventTitle} · Show Day Crew</h2>
+              {canWrite ? (
+                <div className="cosmos-vc-roster__actions">
+                  <Button size="sm" variant="outline" onClick={openCreateDepartment}>
+                    Department
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={prefillBusy}
+                    onClick={() => void handlePrefillFromVendors()}
+                  >
+                    {prefillBusy ? "Importing…" : "Import vendors"}
+                  </Button>
+                  <Button size="sm" onClick={openCreateCrew}>
+                    <PlusIcon className="size-3.5" />
+                    Add To Call
+                  </Button>
+                </div>
+              ) : null}
+            </header>
+
+            {departments.length === 0 ? (
+              <EmptyState
+                title="No departments yet"
+                description="Create a department before assigning crew for this event."
+                action={
+                  canWrite ? (
+                    <Button size="sm" onClick={openCreateDepartment}>
+                      New department
+                    </Button>
+                  ) : undefined
+                }
+              />
+            ) : crew.length === 0 ? (
+              <EmptyState
+                title="No crew on this call"
+                description={
+                  canWrite
+                    ? "Add crew to the call or import project vendors."
+                    : "No crew members are assigned to this event."
+                }
+                action={
+                  canWrite ? (
+                    <Button size="sm" onClick={openCreateCrew}>
+                      Add To Call
+                    </Button>
+                  ) : undefined
+                }
+              />
+            ) : (
+              <div className="cosmos-vc-table-wrap">
+                <table className="cosmos-vc-table">
+                  <thead>
+                    <tr>
+                      <th>Person</th>
+                      <th>Organization</th>
+                      <th>Call</th>
+                      <th>Status</th>
+                      <th aria-label="Actions" />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {crew.map((member) => {
+                      const status = rosterStatus(member)
+                      const org =
+                        member.departmentName?.trim() ||
+                        departments.find((d) => d.departmentId === member.departmentId)?.name ||
+                        agencyLabel
+                      const busy = busyCrewId === member.crewId
+                      return (
+                        <tr key={member.crewId} className={cn(busy && "is-busy")}>
+                          <td>
+                            <button
+                              type="button"
+                              className="cosmos-vc-vendor-cell cosmos-vc-person-btn"
+                              onClick={() => openEditCrew(member)}
+                              disabled={!canWrite || Boolean(pendingId)}
+                            >
+                              <span className="cosmos-vc-mark" aria-hidden>
+                                {initials(member.name || "?") || "?"}
+                              </span>
+                              <span>
+                                <span className="cosmos-vc-vendor-name">
+                                  {member.name || "Unnamed"}
+                                </span>
+                                <span className="cosmos-vc-vendor-sub">
+                                  {member.role?.trim() || "Crew"}
+                                </span>
+                              </span>
+                            </button>
+                          </td>
+                          <td>{org}</td>
+                          <td>
+                            <span
+                              className="cosmos-vc-mono cosmos-vc-muted"
+                              title="Call-sheet times are not stored on Crew records"
+                            >
+                              —
+                            </span>
+                          </td>
+                          <td>
+                            <div className="cosmos-vc-status-cell">
+                              <span className={cn("cosmos-vc-status", `is-${status.tone}`)}>
+                                {status.label}
+                              </span>
+                              {canWrite ? (
+                                <Select
+                                  value={normalizeStatus(member.status) || "assigned"}
+                                  disabled={busy || Boolean(pendingId)}
+                                  aria-label={`Status for ${member.name || member.crewId}`}
+                                  className="cosmos-vc-status-select"
+                                  onChange={(e) => void handleStatusChange(member, e.target.value)}
+                                >
+                                  {CREW_STATUSES.map((s) => (
+                                    <option key={s} value={s}>
+                                      {s.replaceAll("_", " ")}
+                                    </option>
+                                  ))}
+                                </Select>
+                              ) : null}
+                            </div>
+                          </td>
+                          <td>
+                            <div className="cosmos-vc-row-actions">
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                disabled
+                                title="In-roster messaging is not connected"
+                              >
+                                Message
+                              </Button>
+                              {canWrite ? (
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  className="text-destructive"
+                                  disabled={Boolean(pendingId)}
+                                  onClick={() =>
+                                    setDeleteTarget({
+                                      type: "crew",
+                                      id: member.crewId,
+                                      name: member.name || member.crewId,
+                                    })
+                                  }
+                                >
+                                  Remove
+                                </Button>
+                              ) : null}
+                            </div>
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+                <p className="cosmos-vc-footnote">
+                  Called counts confirmed / on-site / complete / no-show / cancelled only. Checked-in
+                  uses crew check-in / status APIs. Running late and call-sheet times are not on the
+                  Crew model (Call column stays —). Message and Request Replacement are not available
+                  yet.
+                </p>
+              </div>
+            )}
+
+            {departments.length > 0 && canWrite ? (
+              <div className="cosmos-vc-dept-chips">
+                {departments.map((dept) => (
+                  <div key={dept.departmentId} className="cosmos-vc-dept-chip">
+                    <span>{dept.name}</span>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-7 px-2"
+                      onClick={() => openEditDepartment(dept)}
+                    >
+                      Edit
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-7 px-2"
+                      onClick={() =>
+                        setDeleteTarget({
+                          type: "department",
+                          id: dept.departmentId,
+                          name: dept.name,
+                        })
+                      }
+                    >
+                      ×
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            ) : null}
+          </section>
+        </>
+      )}
+
+      <EntityFormDialog
+        open={departmentFormMode !== null}
+        onOpenChange={(open) => {
+          if (!open && !pendingId) {
+            setDepartmentFormMode(null)
+            setEditingDepartment(null)
+          }
+        }}
+        title={departmentFormMode === "edit" ? "Edit department" : "New department"}
+        description="Define department ownership, contact details, and availability."
+        onSubmit={handleSaveDepartment}
+        submitLabel={departmentFormMode === "edit" ? "Save changes" : "Create department"}
+        pending={Boolean(pendingId)}
+        submitDisabled={!departmentForm.name.trim() || !isOptionalEmail(departmentForm.contactEmail)}
+        maxWidth="max-w-2xl"
+      >
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid gap-1.5">
+            <Label htmlFor="department-name">Name</Label>
+            <Input
+              id="department-name"
+              value={departmentForm.name}
+              onChange={(e) => setDepartmentForm((f) => ({ ...f, name: e.target.value }))}
+              required
+            />
+          </div>
+          <div className="grid gap-1.5">
+            <Label htmlFor="department-status">Status</Label>
+            <Select
+              id="department-status"
+              value={departmentForm.status}
+              onChange={(e) => setDepartmentForm((f) => ({ ...f, status: e.target.value }))}
+            >
+              {DEPARTMENT_STATUSES.map((status) => (
+                <option key={status} value={status}>
+                  {status}
+                </option>
+              ))}
+            </Select>
+          </div>
+          <div className="grid gap-1.5">
+            <Label htmlFor="department-color">Color</Label>
+            <Input
+              id="department-color"
+              type="color"
+              value={departmentForm.color}
+              onChange={(e) => setDepartmentForm((f) => ({ ...f, color: e.target.value }))}
+              className="h-9 p-1"
+            />
+          </div>
+          <div className="grid gap-1.5">
+            <Label htmlFor="department-head">Head of department</Label>
+            <Input
+              id="department-head"
+              value={departmentForm.headOfDepartment}
+              onChange={(e) => setDepartmentForm((f) => ({ ...f, headOfDepartment: e.target.value }))}
+            />
+          </div>
+          <div className="grid gap-1.5">
+            <Label htmlFor="department-email">Contact email</Label>
+            <Input
+              id="department-email"
+              type="email"
+              value={departmentForm.contactEmail}
+              onChange={(e) => setDepartmentForm((f) => ({ ...f, contactEmail: e.target.value }))}
+            />
+          </div>
+          <div className="grid gap-1.5">
+            <Label htmlFor="department-phone">Contact phone</Label>
+            <Input
+              id="department-phone"
+              type="tel"
+              value={departmentForm.contactPhone}
+              onChange={(e) => setDepartmentForm((f) => ({ ...f, contactPhone: e.target.value }))}
+            />
           </div>
         </div>
-      ) : departments.length === 0 ? (
-        <EmptyState
-          title="No departments yet"
-          description="Create a department before assigning crew for this event."
-          action={
-            canWrite ? (
-              <Button size="sm" onClick={openCreateDepartment}>
-                New department
-              </Button>
-            ) : undefined
-          }
-        />
-      ) : (
-        <CrewBoard
-          crew={crew}
+        <div className="grid gap-1.5">
+          <Label htmlFor="department-description">Description</Label>
+          <Textarea
+            id="department-description"
+            value={departmentForm.description}
+            onChange={(e) => setDepartmentForm((f) => ({ ...f, description: e.target.value }))}
+          />
+        </div>
+      </EntityFormDialog>
+
+      {eventId ? (
+        <CreateCrewModal
+          open={createCrewOpen}
+          onOpenChange={setCreateCrewOpen}
+          eventId={eventId}
           departments={departments}
-          busyCrewId={busyCrewId}
-          canWrite={canWrite}
-          onStatusChange={handleStatusChange}
-           onEdit={pendingId ? undefined : openEditCrew}
-          onDelete={pendingId ? undefined : (member) => setDeleteTarget({ type: "crew", id: member.crewId, name: member.name || member.crewId })}
+          onNeedDepartment={openCreateDepartment}
+          onSuccess={async () => {
+            await reload()
+          }}
         />
-      )}
-      <div className="sr-only">Department management is available from the department cards.</div>
-       {departments.length > 0 && canWrite ? <div className="flex flex-wrap gap-2">{departments.map((dept) => <div key={dept.departmentId} className="flex items-center gap-1 rounded-md border px-2 py-1 text-xs"><span>{dept.name}</span><Button size="icon" variant="ghost" className="size-6" onClick={() => openEditDepartment(dept)}>Edit</Button><Button size="icon" variant="ghost" className="size-6" onClick={() => setDeleteTarget({ type: "department", id: dept.departmentId, name: dept.name })}>×</Button></div>)}</div> : null}
-       <EntityFormDialog
-         open={departmentFormMode !== null}
-         onOpenChange={(open) => {
-           if (!open && !pendingId) {
-             setDepartmentFormMode(null)
-             setEditingDepartment(null)
-           }
-         }}
-         title={departmentFormMode === "edit" ? "Edit department" : "New department"}
-         description="Define department ownership, contact details, and availability."
-         onSubmit={handleSaveDepartment}
-         submitLabel={departmentFormMode === "edit" ? "Save changes" : "Create department"}
-         pending={Boolean(pendingId)}
-         submitDisabled={!departmentForm.name.trim() || !isOptionalEmail(departmentForm.contactEmail)}
-         maxWidth="max-w-2xl"
-       >
-         <div className="grid gap-4 sm:grid-cols-2">
-           <div className="grid gap-1.5"><Label htmlFor="department-name">Name</Label><Input id="department-name" value={departmentForm.name} onChange={(e) => setDepartmentForm((f) => ({ ...f, name: e.target.value }))} placeholder="Department name" required /></div>
-           <div className="grid gap-1.5"><Label htmlFor="department-status">Status</Label><Select id="department-status" value={departmentForm.status} onChange={(e) => setDepartmentForm((f) => ({ ...f, status: e.target.value }))}>{DEPARTMENT_STATUSES.map((status) => <option key={status} value={status}>{status}</option>)}</Select></div>
-           <div className="grid gap-1.5"><Label htmlFor="department-color">Color</Label><Input id="department-color" type="color" value={departmentForm.color} onChange={(e) => setDepartmentForm((f) => ({ ...f, color: e.target.value }))} className="h-9 p-1" /></div>
-           <div className="grid gap-1.5"><Label htmlFor="department-head">Head of department</Label><Input id="department-head" value={departmentForm.headOfDepartment} onChange={(e) => setDepartmentForm((f) => ({ ...f, headOfDepartment: e.target.value }))} placeholder="Name" /></div>
-           <div className="grid gap-1.5"><Label htmlFor="department-email">Contact email</Label><Input id="department-email" type="email" value={departmentForm.contactEmail} onChange={(e) => setDepartmentForm((f) => ({ ...f, contactEmail: e.target.value }))} placeholder="contact@example.com" /></div>
-           <div className="grid gap-1.5"><Label htmlFor="department-phone">Contact phone</Label><Input id="department-phone" type="tel" value={departmentForm.contactPhone} onChange={(e) => setDepartmentForm((f) => ({ ...f, contactPhone: e.target.value }))} placeholder="Phone number" /></div>
-         </div>
-         <div className="grid gap-1.5"><Label htmlFor="department-description">Description</Label><Textarea id="department-description" value={departmentForm.description} onChange={(e) => setDepartmentForm((f) => ({ ...f, description: e.target.value }))} placeholder="Department responsibilities" /></div>
-       </EntityFormDialog>
-       {eventId ? (
-         <CreateCrewModal
-           open={createCrewOpen}
-           onOpenChange={setCreateCrewOpen}
-           eventId={eventId}
-           departments={departments}
-           onNeedDepartment={openCreateDepartment}
-           onSuccess={async () => {
-             await reload()
-           }}
-         />
-       ) : null}
-       <EntityFormDialog
-         open={crewFormMode === "edit"}
-         onOpenChange={(open) => {
-           if (!open && !pendingId) {
-             setCrewFormMode(null)
-             setEditingCrew(null)
-           }
-         }}
-         title="Edit crew member"
-         description="Assign a crew member to a department and track their show status."
-         onSubmit={handleSaveCrew}
-         submitLabel="Save changes"
-         pending={Boolean(pendingId)}
-         submitDisabled={!crewForm.name.trim() || !crewForm.role.trim() || !crewForm.departmentId || !isOptionalEmail(crewForm.email)}
-         maxWidth="max-w-2xl"
-       >
-         <div className="grid gap-4 sm:grid-cols-2">
-           <div className="grid gap-1.5"><Label htmlFor="crew-name">Name</Label><Input id="crew-name" value={crewForm.name} onChange={(e) => setCrewForm((f) => ({ ...f, name: e.target.value }))} placeholder="Crew member name" required /></div>
-           <div className="grid gap-1.5"><Label htmlFor="crew-role">Role</Label><Input id="crew-role" value={crewForm.role} onChange={(e) => setCrewForm((f) => ({ ...f, role: e.target.value }))} placeholder="Role" required /></div>
-           <div className="grid gap-1.5"><Label htmlFor="crew-department">Department</Label><Select id="crew-department" value={crewForm.departmentId} onChange={(e) => setCrewForm((f) => ({ ...f, departmentId: e.target.value }))} required><option value="">Select department</option>{departments.map((dept) => <option key={dept.departmentId} value={dept.departmentId}>{dept.name}</option>)}</Select></div>
-           <div className="grid gap-1.5"><Label htmlFor="crew-status">Status</Label><Select id="crew-status" value={crewForm.status} onChange={(e) => setCrewForm((f) => ({ ...f, status: e.target.value }))}>{CREW_STATUSES.map((status) => <option key={status} value={status}>{status.replace("_", " ")}</option>)}</Select></div>
-           <div className="grid gap-1.5"><Label htmlFor="crew-email">Email</Label><Input id="crew-email" type="email" value={crewForm.email} onChange={(e) => setCrewForm((f) => ({ ...f, email: e.target.value }))} placeholder="crew@example.com" /></div>
-           <div className="grid gap-1.5"><Label htmlFor="crew-phone">Phone</Label><Input id="crew-phone" type="tel" value={crewForm.phone} onChange={(e) => setCrewForm((f) => ({ ...f, phone: e.target.value }))} placeholder="Phone number" /></div>
-         </div>
-       </EntityFormDialog>
-       <ConfirmationDialog open={Boolean(deleteTarget)} onOpenChange={(open) => { if (!open && !pendingId) setDeleteTarget(null) }} title={`Delete ${deleteTarget?.type ?? "item"}?`} description={deleteTarget ? `This will permanently delete “${deleteTarget.name}”.` : undefined} confirmLabel="Delete" destructive pending={Boolean(pendingId)} onConfirm={handleDeleteTarget} />
+      ) : null}
+
+      <EntityFormDialog
+        open={crewFormMode === "edit"}
+        onOpenChange={(open) => {
+          if (!open && !pendingId) {
+            setCrewFormMode(null)
+            setEditingCrew(null)
+          }
+        }}
+        title="Edit crew member"
+        description="Assign a crew member to a department and track their show status."
+        onSubmit={handleSaveCrew}
+        submitLabel="Save changes"
+        pending={Boolean(pendingId)}
+        submitDisabled={
+          !crewForm.name.trim() ||
+          !crewForm.role.trim() ||
+          !crewForm.departmentId ||
+          !isOptionalEmail(crewForm.email)
+        }
+        maxWidth="max-w-2xl"
+      >
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid gap-1.5">
+            <Label htmlFor="crew-name">Name</Label>
+            <Input
+              id="crew-name"
+              value={crewForm.name}
+              onChange={(e) => setCrewForm((f) => ({ ...f, name: e.target.value }))}
+              required
+            />
+          </div>
+          <div className="grid gap-1.5">
+            <Label htmlFor="crew-role">Role</Label>
+            <Input
+              id="crew-role"
+              value={crewForm.role}
+              onChange={(e) => setCrewForm((f) => ({ ...f, role: e.target.value }))}
+              required
+            />
+          </div>
+          <div className="grid gap-1.5">
+            <Label htmlFor="crew-department">Department</Label>
+            <Select
+              id="crew-department"
+              value={crewForm.departmentId}
+              onChange={(e) => setCrewForm((f) => ({ ...f, departmentId: e.target.value }))}
+              required
+            >
+              <option value="">Select department</option>
+              {departments.map((dept) => (
+                <option key={dept.departmentId} value={dept.departmentId}>
+                  {dept.name}
+                </option>
+              ))}
+            </Select>
+          </div>
+          <div className="grid gap-1.5">
+            <Label htmlFor="crew-status">Status</Label>
+            <Select
+              id="crew-status"
+              value={crewForm.status}
+              onChange={(e) => setCrewForm((f) => ({ ...f, status: e.target.value }))}
+            >
+              {CREW_STATUSES.map((status) => (
+                <option key={status} value={status}>
+                  {status.replaceAll("_", " ")}
+                </option>
+              ))}
+            </Select>
+          </div>
+          <div className="grid gap-1.5">
+            <Label htmlFor="crew-email">Email</Label>
+            <Input
+              id="crew-email"
+              type="email"
+              value={crewForm.email}
+              onChange={(e) => setCrewForm((f) => ({ ...f, email: e.target.value }))}
+            />
+          </div>
+          <div className="grid gap-1.5">
+            <Label htmlFor="crew-phone">Phone</Label>
+            <Input
+              id="crew-phone"
+              type="tel"
+              value={crewForm.phone}
+              onChange={(e) => setCrewForm((f) => ({ ...f, phone: e.target.value }))}
+            />
+          </div>
+        </div>
+      </EntityFormDialog>
+
+      <ConfirmationDialog
+        open={Boolean(deleteTarget)}
+        onOpenChange={(open) => {
+          if (!open && !pendingId) setDeleteTarget(null)
+        }}
+        title={`Delete ${deleteTarget?.type ?? "item"}?`}
+        description={
+          deleteTarget ? `This will permanently delete “${deleteTarget.name}”.` : undefined
+        }
+        confirmLabel="Delete"
+        destructive
+        pending={Boolean(pendingId)}
+        onConfirm={handleDeleteTarget}
+      />
     </div>
   )
 }

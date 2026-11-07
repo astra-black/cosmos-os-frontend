@@ -1,25 +1,18 @@
 import { useEffect, useMemo, useState } from "react"
 import {
-  AlertCircleIcon,
   AlertTriangleIcon,
-  CheckCircle2Icon,
-  PencilIcon,
+  DownloadIcon,
+  LockIcon,
   PlusIcon,
   RefreshCwIcon,
-  ShieldAlertIcon,
-  Trash2Icon,
-  TrendingDownIcon,
+  ShieldIcon,
 } from "lucide-react"
 import { toast } from "sonner"
-import { Link } from "react-router-dom"
 
-import { EmptyState } from "@/components/shared/empty-state"
 import { ConfirmationDialog } from "@/components/shared/confirmation-dialog"
 import { EntityFormDialog } from "@/components/shared/entity-form-dialog"
-import { PageHeader } from "@/components/shared/page-header"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Card } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Progress } from "@/components/ui/progress"
@@ -27,8 +20,8 @@ import { Select } from "@/components/ui/select"
 import { Skeleton } from "@/components/ui/skeleton"
 import { listProjects, normalizeProjects } from "@/lib/api/agency"
 import {
-  createTimeEntry,
   createBudget,
+  createTimeEntry,
   deleteBudget,
   deleteTimeEntry,
   getFinanceSummary,
@@ -47,11 +40,21 @@ import { canPerform } from "@/lib/rbac"
 import { cn } from "@/lib/utils"
 import type { Project } from "@/types/agency"
 
-function money(n: number) {
-  if (n >= 1_000_000) return `$${(n / 1_000_000).toFixed(1)}M`
-  if (n >= 1000) return `$${Math.round(n / 1000)}k`
+function money(n: number | null | undefined) {
+  if (n == null || !Number.isFinite(n)) return "—"
+  if (Math.abs(n) >= 1_000_000) return `$${(n / 1_000_000).toFixed(1)}M`
+  if (Math.abs(n) >= 1000) {
+    return `$${Math.round(n).toLocaleString("en-US")}`
+  }
   return `$${Math.round(n)}`
 }
+
+function moneyExact(n: number | null | undefined) {
+  if (n == null || !Number.isFinite(n)) return "—"
+  return `$${Number(n).toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`
+}
+
+type ApiMeta = { financeAccess?: boolean }
 
 export function FinancePage() {
   const { user } = useAuth()
@@ -67,7 +70,9 @@ export function FinancePage() {
   const [budgets, setBudgets] = useState<BudgetRow[]>([])
   const [entries, setEntries] = useState<TimeEntry[]>([])
   const [profitability, setProfitability] = useState<ProjectProfitability[]>([])
+  const [financeAccess, setFinanceAccess] = useState(false)
   const [projects, setProjects] = useState<Project[]>([])
+  const [filterProjectId, setFilterProjectId] = useState<string>("all")
   const [projectId, setProjectId] = useState("")
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -83,6 +88,10 @@ export function FinancePage() {
   const [budgetPlanned, setBudgetPlanned] = useState("")
   const [budgetContractedMinimum, setBudgetContractedMinimum] = useState("")
   const [budgetCurrency, setBudgetCurrency] = useState("USD")
+  const [showTimeForm, setShowTimeForm] = useState(false)
+  const [showInvoiceDrawer, setShowInvoiceDrawer] = useState(false)
+  const [deleteTarget, setDeleteTarget] = useState<{ type: "budget" | "time"; id: string; label: string } | null>(null)
+  const [pendingItem, setPendingItem] = useState<string | null>(null)
   const [editingBudgetId, setEditingBudgetId] = useState<string | null>(null)
   const [editingPlanned, setEditingPlanned] = useState("")
   const [editingContractedMinimum, setEditingContractedMinimum] = useState("")
@@ -93,40 +102,52 @@ export function FinancePage() {
   const [editingRate, setEditingRate] = useState("")
   const [editingNote, setEditingNote] = useState("")
   const [editingBillable, setEditingBillable] = useState(false)
-  const [showTimeForm, setShowTimeForm] = useState(false)
-  const [pendingItem, setPendingItem] = useState<string | null>(null)
-  const [deleteTarget, setDeleteTarget] = useState<{ type: "budget" | "time"; id: string; label: string } | null>(null)
 
-  const contractMinimumBudgets = useMemo(
-    () => budgets.filter((b) => Number(b.contractedMinimum || 0) > 0),
-    [budgets],
-  )
-  const totalContractCommitments = useMemo(
-    () => contractMinimumBudgets.reduce((sum, b) => sum + Number(b.contractedMinimum || 0), 0),
-    [contractMinimumBudgets],
-  )
-  const totalContractSpent = useMemo(
-    () =>
-      contractMinimumBudgets.reduce(
-        (sum, b) => sum + Math.min(Number(b.spent || 0), Number(b.contractedMinimum || 0)),
-        0,
-      ),
-    [contractMinimumBudgets],
-  )
-  const totalShortfallExposure = useMemo(
-    () => contractMinimumBudgets.reduce((sum, b) => sum + Number(b.minimumShortfall || 0), 0),
-    [contractMinimumBudgets],
-  )
-  const highRiskContractsCount = useMemo(
-    () =>
-      contractMinimumBudgets.filter(
-        (b) =>
-          b.penaltyRisk &&
-          Number(b.contractedMinimum || 0) > 0 &&
-          Number(b.spent || 0) / Number(b.contractedMinimum || 0) < 0.65,
-      ).length,
-    [contractMinimumBudgets],
-  )
+  const filteredBudgets = useMemo(() => {
+    if (filterProjectId === "all") return budgets
+    return budgets.filter((b) => b.projectId === filterProjectId)
+  }, [budgets, filterProjectId])
+
+  const filteredProfit = useMemo(() => {
+    if (filterProjectId === "all") return profitability
+    return profitability.filter((p) => p.projectId === filterProjectId)
+  }, [profitability, filterProjectId])
+
+  const rollup = useMemo(() => {
+    const planned = filteredBudgets.reduce((s, b) => s + Number(b.planned || 0), 0)
+    const spent = filteredBudgets.reduce((s, b) => s + Number(b.spent || 0), 0)
+    const remaining = planned - spent
+    const usedPct = planned > 0 ? Math.round((spent / planned) * 100) : 0
+    let marginPercent: number | null = null
+    if (financeAccess && filteredProfit.length > 0) {
+      const withMargin = filteredProfit.filter((p) => p.marginPercent != null)
+      if (withMargin.length === 1) marginPercent = withMargin[0].marginPercent
+      else if (withMargin.length > 1) {
+        const plannedSum = withMargin.reduce((s, p) => s + Number(p.planned || 0), 0)
+        const marginSum = withMargin.reduce((s, p) => s + Number(p.margin || 0), 0)
+        marginPercent = plannedSum > 0 ? (marginSum / plannedSum) * 100 : null
+      }
+    }
+    return { planned, spent, remaining, usedPct, marginPercent }
+  }, [filteredBudgets, filteredProfit, financeAccess])
+
+  const attentionBudget = useMemo(() => {
+    const near = filteredBudgets
+      .filter((b) => Number(b.planned || 0) > 0)
+      .map((b) => ({
+        budget: b,
+        remaining: Number(b.remaining ?? Number(b.planned) - Number(b.spent)),
+        util: Number(b.utilization || 0),
+      }))
+      .filter((row) => row.remaining < 2000 || row.util >= 90 || row.budget.penaltyRisk)
+      .sort((a, b) => a.remaining - b.remaining)[0]
+    return near ?? null
+  }, [filteredBudgets])
+
+  const selectedProjectLabel = useMemo(() => {
+    if (filterProjectId === "all") return "All projects"
+    return projects.find((p) => p.projectId === filterProjectId)?.projectName || "Project"
+  }, [filterProjectId, projects])
 
   async function reload() {
     setError(null)
@@ -136,10 +157,17 @@ export function FinancePage() {
       listTimeEntries(),
       listProjects(),
       getProjectProfitability().catch((err) => {
-        console.warn('[FinancePage] Failed to load profitability:', err)
-        return { data: [] as ProjectProfitability[] }
+        console.warn("[FinancePage] Failed to load profitability:", err)
+        return { data: [] as ProjectProfitability[], financeAccess: false } as {
+          data: ProjectProfitability[]
+        } & ApiMeta
       }),
     ])
+    const metaAccess =
+      (s as ApiMeta).financeAccess === true ||
+      (b as ApiMeta).financeAccess === true ||
+      (profitabilityResponse as ApiMeta).financeAccess === true
+    setFinanceAccess(metaAccess)
     setSummary(s.data ?? null)
     setBudgets(b.data ?? [])
     setEntries(t.data ?? [])
@@ -147,9 +175,7 @@ export function FinancePage() {
     const nextProjects = normalizeProjects(p)
     setProjects(nextProjects)
     setProjectId((current) => {
-      if (current && nextProjects.some((proj) => proj.projectId === current)) {
-        return current
-      }
+      if (current && nextProjects.some((proj) => proj.projectId === current)) return current
       return nextProjects[0]?.projectId ?? ""
     })
     setBudgetProjectId((current) => current || nextProjects[0]?.projectId || "")
@@ -171,6 +197,17 @@ export function FinancePage() {
       cancelled = true
     }
   }, [])
+
+  async function retry() {
+    setRefreshing(true)
+    try {
+      await reload()
+    } catch {
+      setError("We couldn't load the finance data. Try again.")
+    } finally {
+      setRefreshing(false)
+    }
+  }
 
   async function logTime() {
     if (!canWrite) return
@@ -197,14 +234,14 @@ export function FinancePage() {
         user: user?.name || "You",
         hours: parsedHours,
         note: note.trim(),
-         billable,
-         rate: parsedRate,
-         date: entryDate,
+        date: entryDate,
+        billable,
+        rate: parsedRate,
       })
-       setNote("")
-       setShowTimeForm(false)
-       await reload()
-      toast.success("Time logged")
+      setShowTimeForm(false)
+      setNote("")
+      await reload()
+      toast.success("Time entry logged")
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : "Failed to log time")
     } finally {
@@ -212,21 +249,31 @@ export function FinancePage() {
     }
   }
 
-  async function saveBudget() {
+  async function submitBudget() {
     if (!canWrite) return
-    const project = projects.find((item) => item.projectId === budgetProjectId)
+    const selected = projects.find((p) => p.projectId === budgetProjectId)
     const planned = Number(budgetPlanned)
-    const contractedMinimum = budgetContractedMinimum.trim() ? Number(budgetContractedMinimum) : 0
-    if (!project || !Number.isFinite(planned) || planned < 0 || !Number.isFinite(contractedMinimum) || contractedMinimum < 0) {
-      toast.error("Select a project and enter valid budget amounts")
+    const contractedMinimum = budgetContractedMinimum === "" ? 0 : Number(budgetContractedMinimum)
+    if (!selected || !Number.isFinite(planned) || planned < 0) {
+      toast.error("Select a project and enter a non-negative planned amount")
+      return
+    }
+    if (!Number.isFinite(contractedMinimum) || contractedMinimum < 0) {
+      toast.error("Contracted minimum must be a non-negative number")
       return
     }
     setSaving(true)
     try {
-      await createBudget({ projectId: project.projectId, projectName: project.projectName, planned, contractedMinimum, currency: budgetCurrency })
+      await createBudget({
+        projectId: selected.projectId,
+        projectName: selected.projectName,
+        planned,
+        contractedMinimum,
+        currency: budgetCurrency || "USD",
+      })
+      setShowBudgetForm(false)
       setBudgetPlanned("")
       setBudgetContractedMinimum("")
-      setShowBudgetForm(false)
       await reload()
       toast.success("Budget created")
     } catch (err) {
@@ -237,16 +284,21 @@ export function FinancePage() {
   }
 
   async function saveBudgetEdit() {
-    if (!editingBudgetId || !canWrite) return
+    if (!canWrite || !editingBudgetId) return
     const planned = Number(editingPlanned)
-    const contractedMinimum = editingContractedMinimum.trim() ? Number(editingContractedMinimum) : 0
-    if (!Number.isFinite(planned) || planned < 0 || !Number.isFinite(contractedMinimum) || contractedMinimum < 0 || editingCurrency.trim().length !== 3) {
-      toast.error("Enter valid amounts and a 3-letter currency")
+    const contractedMinimum =
+      editingContractedMinimum === "" ? 0 : Number(editingContractedMinimum)
+    if (!Number.isFinite(planned) || planned < 0) {
+      toast.error("Enter a non-negative planned amount")
       return
     }
-    setPendingItem(`budget-edit:${editingBudgetId}`)
+    setPendingItem(`budget:${editingBudgetId}`)
     try {
-      await updateBudget(editingBudgetId, { planned, contractedMinimum, currency: editingCurrency.toUpperCase() })
+      await updateBudget(editingBudgetId, {
+        planned,
+        contractedMinimum: Number.isFinite(contractedMinimum) ? contractedMinimum : 0,
+        currency: editingCurrency || "USD",
+      })
       setEditingBudgetId(null)
       await reload()
       toast.success("Budget updated")
@@ -257,35 +309,21 @@ export function FinancePage() {
     }
   }
 
-  function startEntryEdit(entry: TimeEntry) {
-    setEditingEntryId(entry.entryId)
-    setEditingHours(String(entry.hours))
-    setEditingDate(entry.date)
-    setEditingRate(String(entry.rate))
-    setEditingNote(entry.note ?? "")
-    setEditingBillable(entry.billable)
-  }
-
   async function saveEntryEdit() {
-    if (!editingEntryId || !canWrite) return
+    if (!canWrite || !editingEntryId) return
     const parsedHours = Number(editingHours)
     const parsedRate = Number(editingRate)
-    if (!Number.isFinite(parsedHours) || parsedHours < 0 || !/^\d{4}-\d{2}-\d{2}$/.test(editingDate)) {
-      toast.error("Enter a valid date and non-negative number of hours")
+    if (!Number.isFinite(parsedHours) || parsedHours <= 0 || !editingDate) {
+      toast.error("Enter a valid date and hours greater than zero")
       return
     }
-    if (!Number.isFinite(parsedRate) || parsedRate < 0) {
-      toast.error("Enter a valid hourly rate")
-      return
-    }
-    const entryId = editingEntryId
-    setPendingItem(`time-edit:${entryId}`)
+    setPendingItem(`time:${editingEntryId}`)
     try {
-      await updateTimeEntry(entryId, {
+      await updateTimeEntry(editingEntryId, {
         hours: parsedHours,
         date: editingDate,
-        rate: parsedRate,
-        note: editingNote.trim(),
+        rate: Number.isFinite(parsedRate) ? parsedRate : 0,
+        note: editingNote,
         billable: editingBillable,
       })
       setEditingEntryId(null)
@@ -315,577 +353,644 @@ export function FinancePage() {
     }
   }
 
-  async function retry() {
-    setRefreshing(true)
-    try {
-      await reload()
-    } catch {
-      setError("We couldn't load the finance data. Try again.")
-    } finally {
-      setRefreshing(false)
-    }
-  }
-
   if (loading) {
     return (
-      <div className="flex flex-col gap-4">
-        <Skeleton className="h-10 w-48" />
-        <Skeleton className="h-32 w-full" />
+      <div className="cosmos-finance-page flex flex-col gap-4">
+        <Skeleton className="h-10 w-56" />
+        <Skeleton className="h-28 w-full" />
+        <Skeleton className="h-64 w-full" />
       </div>
     )
   }
 
   return (
-    <div className="flex flex-col gap-5">
-      <PageHeader
-        title="Finance"
-        description="Light finance — budgets, utilization, and time entries."
-      />
-
-      {error ? (
-        <Card className="border-destructive/40 flex flex-wrap items-center justify-between gap-3 px-4 py-3 text-sm">
-          <div className="text-destructive flex items-center gap-2">
-            <AlertTriangleIcon className="size-4" />
-            <span>{error}</span>
-          </div>
-          <Button size="sm" variant="outline" onClick={() => void retry()} disabled={refreshing}>
+    <div className="cosmos-finance-page">
+      <div className="cosmos-finance-page__title-row">
+        <div>
+          <p className="cosmos-finance-page__eyebrow">
+            Agency OS · {selectedProjectLabel}
+          </p>
+          <h1>Project Finance</h1>
+        </div>
+        <div className="cosmos-finance-page__actions">
+          <Select
+            value={filterProjectId}
+            onChange={(e) => setFilterProjectId(e.target.value)}
+            aria-label="Filter by project"
+            className="cosmos-finance-filter"
+          >
+            <option value="all">All projects</option>
+            {projects.map((p) => (
+              <option key={p.projectId} value={p.projectId}>
+                {p.projectName}
+              </option>
+            ))}
+          </Select>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => void retry()}
+            disabled={refreshing}
+          >
             <RefreshCwIcon className={refreshing ? "size-3.5 animate-spin" : "size-3.5"} />
-            Retry
+            Refresh
           </Button>
-        </Card>
-      ) : null}
-
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <Card className="p-4">
-          <div className="text-muted-foreground text-xs">Planned</div>
-          <div className="text-2xl font-semibold tabular-nums">
-            {money(summary?.planned ?? 0)}
-          </div>
-        </Card>
-        <Card className="p-4">
-          <div className="text-muted-foreground text-xs">Spent</div>
-          <div className="text-2xl font-semibold tabular-nums">
-            {money(summary?.spent ?? 0)}
-          </div>
-        </Card>
-        <Card className="p-4">
-          <div className="text-muted-foreground text-xs">Billable hours</div>
-          <div className="text-2xl font-semibold tabular-nums">
-            {summary?.billableHours ?? 0}h
-          </div>
-        </Card>
-        <Card className="p-4">
-          <div className="text-muted-foreground text-xs">Time revenue</div>
-          <div className="text-2xl font-semibold tabular-nums">
-            {money(summary?.revenue ?? 0)}
-          </div>
-        </Card>
+          {canWrite ? (
+            <Button size="sm" variant="outline" onClick={() => setShowBudgetForm(true)}>
+              <PlusIcon className="size-3.5" />
+              Add Budget
+            </Button>
+          ) : null}
+          <Button
+            size="sm"
+            className="cosmos-finance-primary"
+            onClick={() => setShowInvoiceDrawer(true)}
+            disabled={!financeAccess}
+            title={
+              financeAccess
+                ? "Create client invoice"
+                : "Invoices are limited to Finance and organization admins"
+            }
+          >
+            <PlusIcon className="size-3.5" />
+            Create Invoice
+          </Button>
+        </div>
       </div>
 
-      {/* Contract Minimums & Attrition Monitor */}
-      <Card className="flex min-w-0 flex-col gap-4 p-4 sm:p-5 border-amber-500/30 bg-gradient-to-br from-card via-card to-amber-500/[0.02] shadow-sm">
-        <div className="flex flex-wrap items-center justify-between gap-3">
+      {error ? (
+        <div className="cosmos-finance-page__error" role="alert">
+          <span className="flex items-center gap-2">
+            <AlertTriangleIcon className="size-4" />
+            {error}
+          </span>
+          <Button size="sm" variant="outline" onClick={() => void retry()} disabled={refreshing}>
+            Retry
+          </Button>
+        </div>
+      ) : null}
+
+      <div className="cosmos-finance-kpis">
+        <div className="cosmos-finance-kpi">
+          <span className="cosmos-finance-kpi__label">Approved Budget</span>
+          <strong className="cosmos-finance-kpi__value">{moneyExact(rollup.planned)}</strong>
+          <span className="cosmos-finance-kpi__hint">
+            {filterProjectId === "all"
+              ? `${filteredBudgets.length} budget line${filteredBudgets.length === 1 ? "" : "s"}`
+              : "From agency budget records"}
+          </span>
+        </div>
+        <div className="cosmos-finance-kpi">
+          <span className="cosmos-finance-kpi__label">Committed</span>
+          <strong className="cosmos-finance-kpi__value cosmos-finance-kpi__value--muted">—</strong>
+          <span className="cosmos-finance-kpi__hint">POs and contracts unavailable</span>
+        </div>
+        <div className="cosmos-finance-kpi">
+          <span className="cosmos-finance-kpi__label">Actual</span>
+          <strong className="cosmos-finance-kpi__value">{moneyExact(rollup.spent)}</strong>
+          <span className="cosmos-finance-kpi__hint">
+            {rollup.planned > 0 ? `${rollup.usedPct}% of budget` : "No planned budget"}
+          </span>
+        </div>
+        <div className="cosmos-finance-kpi">
+          <span className="cosmos-finance-kpi__label">Projected Margin</span>
+          {financeAccess && rollup.marginPercent != null ? (
+            <>
+              <strong className="cosmos-finance-kpi__value">
+                {Math.round(rollup.marginPercent)}%
+              </strong>
+              <span className="cosmos-finance-kpi__hint">Internal only · from time cost</span>
+            </>
+          ) : financeAccess ? (
+            <>
+              <strong className="cosmos-finance-kpi__value cosmos-finance-kpi__value--muted">—</strong>
+              <span className="cosmos-finance-kpi__hint">No time-cost margin yet</span>
+            </>
+          ) : (
+            <>
+              <strong className="cosmos-finance-kpi__value cosmos-finance-kpi__value--muted">
+                <LockIcon className="inline size-4" /> Restricted
+              </strong>
+              <span className="cosmos-finance-kpi__hint">Finance access required</span>
+            </>
+          )}
+        </div>
+      </div>
+
+      {attentionBudget ? (
+        <div className="cosmos-finance-banner" role="status">
           <div>
-            <div className="flex items-center gap-2">
-              <h2 className="text-base sm:text-lg font-semibold tracking-tight">Contract Minimums & Attrition Monitor</h2>
-              {highRiskContractsCount > 0 ? (
-                <Badge variant="destructive" className="gap-1 font-semibold text-xs">
-                  <ShieldAlertIcon className="size-3" />
-                  {highRiskContractsCount} Attrition Risk
-                </Badge>
-              ) : contractMinimumBudgets.length > 0 ? (
-                <Badge variant="secondary" className="gap-1 border-emerald-500/30 text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 text-xs">
-                  <CheckCircle2Icon className="size-3" />
-                  Commitments Tracked
-                </Badge>
+            <strong>
+              {attentionBudget.budget.projectName} is near its limit
+            </strong>
+            <p>
+              {moneyExact(attentionBudget.budget.spent)} spent of{" "}
+              {moneyExact(attentionBudget.budget.planned)}. Remaining{" "}
+              {moneyExact(attentionBudget.remaining)}.
+              {attentionBudget.budget.penaltyRisk
+                ? " Contracted minimum shortfall is open."
+                : " Review before adding more spend."}
+            </p>
+          </div>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => setFilterProjectId(attentionBudget.budget.projectId)}
+          >
+            Review
+          </Button>
+        </div>
+      ) : null}
+
+      <div className="cosmos-finance-main">
+        <section className="cosmos-finance-card cosmos-finance-lines">
+          <div className="cosmos-finance-card__head">
+            <div>
+              <h2>Budget Lines</h2>
+            </div>
+            <div className="cosmos-finance-card__tools">
+              <Badge variant="secondary">By Project</Badge>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled
+                title="Export is not available yet"
+              >
+                <DownloadIcon className="size-3.5" />
+                Export
+              </Button>
+            </div>
+          </div>
+
+          {filteredBudgets.length === 0 ? (
+            <div className="cosmos-finance-empty">
+              <p>No budget lines for this view</p>
+              <span>
+                Budgets come from agency-scoped finance records. Add a budget when you have write
+                access — category / PO lines are not modeled yet.
+              </span>
+              {canWrite ? (
+                <Button size="sm" onClick={() => setShowBudgetForm(true)}>
+                  <PlusIcon className="size-3.5" />
+                  Add Budget
+                </Button>
               ) : null}
             </div>
-            <p className="text-muted-foreground text-xs mt-0.5">
-              Live tracking of hotel, venue, and production vendor minimum commitments, unfulfilled spend exposure, and attrition penalties.
+          ) : (
+            <div className="cosmos-finance-table-wrap">
+              <table className="cosmos-finance-table">
+                <thead>
+                  <tr>
+                    <th>Line</th>
+                    <th>Budget</th>
+                    <th>Committed</th>
+                    <th>Actual</th>
+                    <th>Used</th>
+                    <th>Remaining</th>
+                    {canWrite ? <th /> : null}
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredBudgets.map((b) => {
+                    const used = Number(b.utilization || 0)
+                    const rem = Number(b.remaining ?? Number(b.planned) - Number(b.spent))
+                    const warn = rem < 2000 || used >= 90
+                    return (
+                      <tr key={b.budgetId}>
+                        <td>
+                          <div className="cosmos-finance-line-name">{b.projectName}</div>
+                          {b.clientName ? (
+                            <div className="cosmos-finance-line-meta">{b.clientName}</div>
+                          ) : null}
+                        </td>
+                        <td>{moneyExact(b.planned)}</td>
+                        <td className="cosmos-finance-muted" title="Purchase orders are not available">
+                          —
+                        </td>
+                        <td>{moneyExact(b.spent)}</td>
+                        <td>
+                          <div className="cosmos-finance-used">
+                            <span>{used}%</span>
+                            <Progress value={Math.min(100, used)} className="h-1" />
+                          </div>
+                        </td>
+                        <td className={cn(warn && "cosmos-finance-warn")}>{moneyExact(rem)}</td>
+                        {canWrite ? (
+                          <td className="cosmos-finance-row-actions">
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => {
+                                setEditingBudgetId(b.budgetId)
+                                setEditingPlanned(String(b.planned))
+                                setEditingContractedMinimum(String(b.contractedMinimum ?? 0))
+                                setEditingCurrency(b.currency || "USD")
+                              }}
+                            >
+                              Edit
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() =>
+                                setDeleteTarget({
+                                  type: "budget",
+                                  id: b.budgetId,
+                                  label: b.projectName,
+                                })
+                              }
+                            >
+                              Delete
+                            </Button>
+                          </td>
+                        ) : null}
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+
+        <section className="cosmos-finance-card cosmos-finance-chart">
+          <div className="cosmos-finance-card__head">
+            <h2>Spend Vs Plan</h2>
+            <div className="cosmos-finance-legend">
+              <span>
+                <i className="cosmos-finance-legend__actual" /> Actual
+              </span>
+              <span>
+                <i className="cosmos-finance-legend__plan" /> Plan
+              </span>
+            </div>
+          </div>
+          <div className="cosmos-finance-unavailable">
+            <ShieldIcon className="size-5" />
+            <p>Monthly spend series is not available</p>
+            <span>
+              The design shows plan vs actual over time. No time-bucketed finance API exists yet —
+              nothing here is estimated.
+            </span>
+          </div>
+        </section>
+      </div>
+
+      <section className="cosmos-finance-card cosmos-finance-time">
+        <div className="cosmos-finance-card__head">
+          <div>
+            <h2>Time Entries</h2>
+            <p className="cosmos-finance-card__sub">
+              Agency-scoped hours used for actual cost when rates exist.
+              {summary
+                ? ` ${summary.billableHours}h billable · ${money(summary.revenue)} time revenue.`
+                : null}
             </p>
           </div>
           {canWrite ? (
-            <Button size="sm" onClick={() => setShowBudgetForm(true)} className="gap-1.5">
+            <Button size="sm" variant="outline" onClick={() => setShowTimeForm(true)}>
               <PlusIcon className="size-3.5" />
-              Add Commitment
+              Log Time
             </Button>
           ) : null}
         </div>
-
-        {/* Aggregate KPI Strip */}
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-          <div className="rounded-xl border bg-muted/30 p-3">
-            <div className="text-muted-foreground text-[11px] font-medium">Total Commitments</div>
-            <div className="mt-1 text-lg sm:text-xl font-bold tabular-nums">
-              {money(totalContractCommitments)}
-            </div>
-            <div className="text-muted-foreground text-[10px] mt-0.5">
-              {contractMinimumBudgets.length} active contract{contractMinimumBudgets.length === 1 ? "" : "s"}
-            </div>
-          </div>
-          <div className="rounded-xl border bg-muted/30 p-3">
-            <div className="text-muted-foreground text-[11px] font-medium">Credited Spend</div>
-            <div className="mt-1 text-lg sm:text-xl font-bold tabular-nums text-emerald-600 dark:text-emerald-400">
-              {money(totalContractSpent)}
-            </div>
-            <div className="text-muted-foreground text-[10px] mt-0.5">
-              {totalContractCommitments > 0
-                ? `${Math.round((totalContractSpent / totalContractCommitments) * 100)}% covered`
-                : "0%"}
-            </div>
-          </div>
-          <div className="rounded-xl border bg-muted/30 p-3">
-            <div className="text-muted-foreground text-[11px] font-medium">Shortfall Exposure</div>
-            <div className={cn(
-              "mt-1 text-lg sm:text-xl font-bold tabular-nums",
-              totalShortfallExposure > 0 ? "text-destructive" : "text-emerald-600 dark:text-emerald-400",
-            )}>
-              {totalShortfallExposure > 0 ? money(totalShortfallExposure) : "$0 (Covered)"}
-            </div>
-            <div className="text-muted-foreground text-[10px] mt-0.5">
-              {totalShortfallExposure > 0 ? "Unfulfilled penalty risk" : "Zero penalty exposure"}
-            </div>
-          </div>
-          <div className="rounded-xl border bg-muted/30 p-3">
-            <div className="text-muted-foreground text-[11px] font-medium">Fulfillment Status</div>
-            <div className="mt-1 text-lg sm:text-xl font-bold tabular-nums">
-              {highRiskContractsCount > 0 ? `${highRiskContractsCount} Critical` : "Healthy"}
-            </div>
-            <div className="text-muted-foreground text-[10px] mt-0.5">
-              {highRiskContractsCount > 0 ? "Requires mitigation" : "All commitments pacing well"}
-            </div>
-          </div>
-        </div>
-
-        {/* Contract Minimums Breakdown List */}
-        {contractMinimumBudgets.length === 0 ? (
-          <div className="rounded-xl border border-dashed p-6 text-center">
-            <p className="text-sm font-medium text-foreground">No contracted minimums configured</p>
-            <p className="text-xs text-muted-foreground mt-1">
-              Add a contracted minimum to any project or event budget to monitor attrition risks and unspent commitment shortfalls.
-            </p>
+        {entries.length === 0 ? (
+          <div className="cosmos-finance-empty">
+            <p>No time entries</p>
+            <span>Log billable or non-billable hours against a project.</span>
           </div>
         ) : (
-          <div className="grid gap-3 sm:grid-cols-2">
-            {contractMinimumBudgets.map((b) => {
-              const minVal = Number(b.contractedMinimum || 0)
-              const spentVal = Number(b.spent || 0)
-              const shortfallVal = Number(b.minimumShortfall || 0)
-              const coveredPct = minVal > 0 ? Math.min(100, Math.round((spentVal / minVal) * 100)) : 0
-              const isHighRisk = b.penaltyRisk && minVal > 0 && spentVal / minVal < 0.65
-              const isWatch = b.penaltyRisk && !isHighRisk
-
-              return (
-                <div
-                  key={b.budgetId}
-                  className={cn(
-                    "flex flex-col justify-between gap-3 rounded-xl border p-4 transition-all bg-card/60",
-                    isHighRisk
-                      ? "border-destructive/40 bg-destructive/[0.03] shadow-xs ring-1 ring-destructive/20"
-                      : isWatch
-                        ? "border-amber-500/40 bg-amber-500/[0.02]"
-                        : "border-border/80",
-                  )}
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0">
-                      <div className="font-semibold text-sm truncate">{b.projectName}</div>
-                      <div className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1.5">
-                        <span className="font-mono text-[11px] font-medium">{b.currency}</span>
-                        <span>·</span>
-                        <span>Total Planned: {money(b.planned)}</span>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-1.5 shrink-0">
-                      {isHighRisk ? (
-                        <Badge variant="destructive" className="text-[10px] uppercase font-bold px-2 py-0.5 gap-1">
-                          <AlertCircleIcon className="size-3" />
-                          High Risk ({coveredPct}%)
-                        </Badge>
-                      ) : isWatch ? (
-                        <Badge variant="secondary" className="border-amber-500/40 text-amber-600 dark:text-amber-400 bg-amber-500/10 text-[10px] uppercase font-bold px-2 py-0.5">
-                          Watch ({coveredPct}%)
-                        </Badge>
-                      ) : (
-                        <Badge variant="secondary" className="border-emerald-500/30 text-emerald-600 dark:text-emerald-400 bg-emerald-500/10 text-[10px] uppercase font-bold px-2 py-0.5 gap-1">
-                          <CheckCircle2Icon className="size-3" />
-                          Covered (100%)
-                        </Badge>
-                      )}
-
-                      {canWrite && (
-                        <Button
-                          size="icon-xs"
-                          variant="ghost"
-                          onClick={() => {
-                            setEditingBudgetId(b.budgetId)
-                            setEditingPlanned(String(b.planned))
-                            setEditingContractedMinimum(String(b.contractedMinimum ?? 0))
-                            setEditingCurrency(b.currency)
-                          }}
-                          title="Edit Contract Minimum"
-                        >
-                          <PencilIcon className="size-3" />
-                        </Button>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Dual-Tone Commitment Progress Track */}
-                  <div className="space-y-1.5">
-                    <div className="flex justify-between text-xs font-mono">
-                      <span className="text-muted-foreground">Fulfillment</span>
-                      <span className="font-bold tabular-nums">{coveredPct}% of {money(minVal)}</span>
-                    </div>
-                    <div className="relative h-2.5 w-full rounded-full bg-muted overflow-hidden">
-                      <div
-                        className={cn(
-                          "h-full rounded-full transition-all duration-500",
-                          isHighRisk
-                            ? "bg-destructive"
-                            : isWatch
-                              ? "bg-amber-500"
-                              : "bg-emerald-500",
-                        )}
-                        style={{ width: `${coveredPct}%` }}
-                      />
-                    </div>
-                  </div>
-
-                  {/* Financial Breakdown Strip */}
-                  <div className="grid grid-cols-3 gap-2 rounded-lg bg-muted/40 p-2 text-center text-xs font-mono">
-                    <div>
-                      <div className="text-[10px] text-muted-foreground uppercase font-sans">Spent</div>
-                      <div className="font-semibold tabular-nums mt-0.5">{money(spentVal)}</div>
-                    </div>
-                    <div>
-                      <div className="text-[10px] text-muted-foreground uppercase font-sans">Minimum</div>
-                      <div className="font-semibold tabular-nums mt-0.5">{money(minVal)}</div>
-                    </div>
-                    <div>
-                      <div className="text-[10px] text-muted-foreground uppercase font-sans">Shortfall</div>
-                      <div className={cn(
-                        "font-bold tabular-nums mt-0.5",
-                        shortfallVal > 0 ? "text-destructive" : "text-emerald-600 dark:text-emerald-400",
-                      )}>
-                        {shortfallVal > 0 ? `-${money(shortfallVal)}` : "Covered"}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-        )}
-      </Card>
-
-      <Card className="flex min-w-0 flex-col gap-3 p-4">
-        <div>
-          <h2 className="font-semibold">Project profitability</h2>
-          <p className="text-muted-foreground text-xs">Planned budget compared with logged time cost and projected finish cost.</p>
-        </div>
-        {profitability.length === 0 ? (
-          <EmptyState
-            className="py-8"
-            title="No profitability data yet"
-            description="Add a project budget or log time to see margin and forecast metrics."
-          />
-        ) : (
-          <div className="space-y-2">
-            {profitability.map((project) => (
-              <div key={project.projectId} className="grid gap-2 rounded-xl border p-3 text-sm sm:grid-cols-[1.4fr_repeat(4,minmax(0,1fr))] sm:items-center">
+          <ul className="cosmos-finance-time-list">
+            {entries.slice(0, 12).map((entry) => (
+              <li key={entry.entryId}>
                 <div>
-                  <div className="font-medium">{project.projectName}</div>
-                  <div className="text-muted-foreground text-xs">
-                    {project.actualHours.toFixed(1)}h logged{project.costAvailable ? "" : " · rate unavailable"}
-                  </div>
-                </div>
-                <div>
-                  <div className="text-muted-foreground text-xs">Planned</div>
-                  <div className="tabular-nums">{money(project.planned)}</div>
-                </div>
-                <div>
-                  <div className="text-muted-foreground text-xs">Time cost</div>
-                  <div className="tabular-nums">{project.costAvailable ? money(project.actualTimeCost) : "—"}</div>
-                </div>
-                <div>
-                  <div className="text-muted-foreground text-xs">Margin</div>
-                  <div className={cn("tabular-nums", project.margin < 0 && "text-destructive")}>
-                    {project.costAvailable ? `${money(project.margin)}${project.marginPercent != null ? ` (${Math.round(project.marginPercent)}%)` : ""}` : "—"}
-                  </div>
-                </div>
-                <div>
-                  <div className="text-muted-foreground text-xs">Forecast margin</div>
-                  <div className={cn("tabular-nums", project.forecastMargin < 0 && "text-destructive")}>
-                    {project.costAvailable ? `${money(project.forecastMargin)}${project.forecastMarginPercent != null ? ` (${Math.round(project.forecastMarginPercent)}%)` : ""}` : "—"}
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </Card>
-
-      <div className="grid gap-4 lg:grid-cols-2">
-        <Card className="flex min-w-0 flex-col gap-3 p-4">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <h2 className="font-semibold">Project budgets</h2>
-            <div className="flex gap-2">
-              {canWrite ? <Button size="sm" onClick={() => setShowBudgetForm(true)}><PlusIcon className="size-3.5" /> New budget</Button> : null}
-              <Button size="sm" variant="outline" render={<Link to="/projects" />}>Manage projects</Button>
-            </div>
-          </div>
-          {budgets.length === 0 ? (
-            <EmptyState
-              className="py-10"
-              title="No budgets yet"
-              description="Project budgets will appear here once they are set on a project."
-            />
-          ) : (
-             budgets.map((b) => (
-               <div
-                 key={b.budgetId}
-                 className={cn(
-                   "space-y-1.5 rounded-xl border p-3",
-                   b.penaltyRisk && "border-destructive/30 bg-destructive/[0.03]",
-                 )}
-               >
-                 <div className="flex justify-between text-sm">
-                    <span className="font-medium">{b.projectName}</span>
-                    <span className="text-muted-foreground flex items-center gap-2 tabular-nums">
-                      {money(b.spent)} / {money(b.planned)} {canWrite ? <span className="flex items-center gap-1">
-                        <Button size="icon-xs" variant="ghost" aria-label={`Edit ${b.projectName} budget`} onClick={() => { setEditingBudgetId(b.budgetId); setEditingPlanned(String(b.planned)); setEditingContractedMinimum(String(b.contractedMinimum ?? 0)); setEditingCurrency(b.currency) }} disabled={pendingItem === `budget-delete:${b.budgetId}`}><PencilIcon className="size-3" /></Button>
-                        <Button size="icon-xs" variant="ghost" aria-label={`Delete ${b.projectName} budget`} onClick={() => setDeleteTarget({ type: "budget", id: b.budgetId, label: `${b.projectName} budget` })} disabled={pendingItem === `budget-delete:${b.budgetId}`}><Trash2Icon className="text-destructive size-3" /></Button>
-                      </span> : null}
-                   </span>
-                 </div>
-                <Progress value={Math.min(b.utilization, 100)} />
-                <div className="text-muted-foreground flex justify-between text-[11px]">
-                  <span>{b.utilization}% used</span>
-                  <span className={b.remaining < 0 ? "text-destructive" : ""}>
-                    {money(b.remaining)} left
+                  <strong>{entry.projectName || "Project"}</strong>
+                  <span>
+                    {entry.date} · {entry.hours}h
+                    {entry.billable ? " · billable" : ""}
+                    {entry.note ? ` · ${entry.note}` : ""}
                   </span>
                 </div>
-                {(b.contractedMinimum ?? 0) > 0 ? (
-                  <div className={cn(
-                    "flex flex-wrap items-center justify-between gap-2 rounded-lg px-2.5 py-2 text-xs",
-                    b.penaltyRisk ? "bg-destructive/10 text-destructive" : "bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
-                  )}>
-                    <span className="flex items-center gap-1.5 font-medium">
-                      <AlertTriangleIcon className="size-3.5" />
-                      Contract minimum {money(b.contractedMinimum ?? 0)}
-                    </span>
-                    <span className="tabular-nums">
-                      {b.penaltyRisk
-                        ? `${money(b.minimumShortfall ?? 0)} exposure`
-                        : "minimum covered"}
-                    </span>
+                {canWrite ? (
+                  <div className="cosmos-finance-row-actions">
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => {
+                        setEditingEntryId(entry.entryId)
+                        setEditingHours(String(entry.hours))
+                        setEditingDate(entry.date)
+                        setEditingRate(String(entry.rate))
+                        setEditingNote(entry.note || "")
+                        setEditingBillable(entry.billable)
+                      }}
+                    >
+                      Edit
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() =>
+                        setDeleteTarget({
+                          type: "time",
+                          id: entry.entryId,
+                          label: `${entry.projectName || "Entry"} · ${entry.hours}h`,
+                        })
+                      }
+                    >
+                      Delete
+                    </Button>
                   </div>
                 ) : null}
-              </div>
-            ))
-          )}
-        </Card>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
 
-        <Card className="flex min-w-0 flex-col gap-3 p-4">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <h2 className="font-semibold">Time entries</h2>
-            {canWrite && projects.length > 0 ? <Button size="sm" onClick={() => setShowTimeForm(true)}><PlusIcon className="size-3.5" /> Log time</Button> : null}
+      {showInvoiceDrawer ? (
+        <div className="cosmos-finance-drawer-scrim" onClick={() => setShowInvoiceDrawer(false)}>
+          <aside
+            className="cosmos-finance-drawer"
+            role="dialog"
+            aria-labelledby="finance-invoice-title"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <header>
+              <p className="cosmos-finance-page__eyebrow">{selectedProjectLabel} · Financials</p>
+              <h2 id="finance-invoice-title">New Client Invoice</h2>
+            </header>
+            <div className="cosmos-finance-unavailable">
+              <LockIcon className="size-5" />
+              <p>Invoices are not available yet</p>
+              <span>
+                Designed create-invoice (Figma 111–112) needs an Invoice model, PO reference, and
+                portal projection. No draft is created and nothing is sent.
+              </span>
+            </div>
+            <footer>
+              <Button variant="ghost" onClick={() => setShowInvoiceDrawer(false)}>
+                Close
+              </Button>
+              <Button disabled title="Send for approval is not available">
+                Send For Approval
+              </Button>
+            </footer>
+          </aside>
+        </div>
+      ) : null}
+
+      <EntityFormDialog
+        open={showBudgetForm}
+        onOpenChange={setShowBudgetForm}
+        title="Add budget"
+        description="Creates an agency-scoped budget for one project. Category lines and committed POs are not modeled yet."
+        onSubmit={() => void submitBudget()}
+        submitLabel="Create"
+        pending={saving}
+      >
+        <div className="grid gap-3">
+          <div className="grid gap-1.5">
+            <Label htmlFor="fin-budget-project">Project</Label>
+            <Select
+              id="fin-budget-project"
+              value={budgetProjectId}
+              onChange={(e) => setBudgetProjectId(e.target.value)}
+            >
+              {projects.map((p) => (
+                <option key={p.projectId} value={p.projectId}>
+                  {p.projectName}
+                </option>
+              ))}
+            </Select>
           </div>
-          {!canWrite ? <p className="text-muted-foreground text-sm">You do not have permission to log time.</p> : null}
-          {canWrite && projects.length === 0 ? (
-            <p className="text-muted-foreground text-sm">
-              No projects available. Create a project before logging time.
-            </p>
-          ) : null}
-          <div className="max-h-64 space-y-2 overflow-y-auto">
-            {entries.length === 0 ? (
-              <EmptyState
-                className="py-10"
-                title="No time entries yet"
-                description="Log your first entry above to start tracking utilization."
+          <div className="grid gap-1.5">
+            <Label htmlFor="fin-budget-planned">Planned</Label>
+            <Input
+              id="fin-budget-planned"
+              type="number"
+              min={0}
+              value={budgetPlanned}
+              onChange={(e) => setBudgetPlanned(e.target.value)}
+            />
+          </div>
+          <div className="grid gap-1.5">
+            <Label htmlFor="fin-budget-min">Contracted minimum (optional)</Label>
+            <Input
+              id="fin-budget-min"
+              type="number"
+              min={0}
+              value={budgetContractedMinimum}
+              onChange={(e) => setBudgetContractedMinimum(e.target.value)}
+            />
+          </div>
+          <div className="grid gap-1.5">
+            <Label htmlFor="fin-budget-currency">Currency</Label>
+            <Input
+              id="fin-budget-currency"
+              value={budgetCurrency}
+              onChange={(e) => setBudgetCurrency(e.target.value.toUpperCase())}
+            />
+          </div>
+        </div>
+      </EntityFormDialog>
+
+      <EntityFormDialog
+        open={showTimeForm}
+        onOpenChange={setShowTimeForm}
+        title="Log time"
+        description="Agency-scoped time entry against a project."
+        onSubmit={() => void logTime()}
+        submitLabel="Log"
+        pending={saving}
+      >
+        <div className="grid gap-3">
+          <div className="grid gap-1.5">
+            <Label htmlFor="fin-time-project">Project</Label>
+            <Select
+              id="fin-time-project"
+              value={projectId}
+              onChange={(e) => setProjectId(e.target.value)}
+            >
+              {projects.map((p) => (
+                <option key={p.projectId} value={p.projectId}>
+                  {p.projectName}
+                </option>
+              ))}
+            </Select>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="grid gap-1.5">
+              <Label htmlFor="fin-time-hours">Hours</Label>
+              <Input
+                id="fin-time-hours"
+                type="number"
+                min={0.25}
+                step={0.25}
+                value={hours}
+                onChange={(e) => setHours(e.target.value)}
               />
-            ) : (
-              entries.map((e) => (
-                <div
-                  key={e.entryId}
-                  className="bg-muted/40 flex flex-wrap items-center justify-between gap-2 rounded-lg px-3 py-2 text-sm"
-                >
-                  <>
-                    <div>
-                      <div className="font-medium">{e.projectName}</div>
-                      <div className="text-muted-foreground text-xs">{e.user} · {e.date}{e.note ? ` · ${e.note}` : ""}</div>
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <span className="tabular-nums font-semibold">{e.hours}h</span>
-                      <Badge variant={e.billable ? "default" : "secondary"}>{e.billable ? "Billable" : "Internal"}</Badge>
-                      {canWrite ? <><Button size="icon-xs" variant="ghost" aria-label={`Edit time entry for ${e.projectName}`} onClick={() => startEntryEdit(e)} disabled={pendingItem === `time-delete:${e.entryId}`}><PencilIcon className="size-3" /></Button><Button size="icon-xs" variant="ghost" aria-label={`Delete time entry for ${e.projectName}`} onClick={() => setDeleteTarget({ type: "time", id: e.entryId, label: `${e.projectName} time entry` })} disabled={pendingItem === `time-delete:${e.entryId}`}><Trash2Icon className="text-destructive size-3" /></Button></> : null}
-                    </div>
-                  </>
-                </div>
-              ))
-            )}
+            </div>
+            <div className="grid gap-1.5">
+              <Label htmlFor="fin-time-date">Date</Label>
+              <Input
+                id="fin-time-date"
+                type="date"
+                value={entryDate}
+                onChange={(e) => setEntryDate(e.target.value)}
+              />
+            </div>
           </div>
-        </Card>
-      </div>
-      <EntityFormDialog
-        open={showBudgetForm || editingBudgetId !== null}
-        onOpenChange={(open) => {
-          const editingPending = editingBudgetId !== null && pendingItem === `budget-edit:${editingBudgetId}`
-          if (!open && !saving && !editingPending) {
-            setShowBudgetForm(false)
-            setEditingBudgetId(null)
-          }
-        }}
-        title={editingBudgetId ? "Edit budget" : "New budget"}
-        description="Set the planned budget and any contracted minimum. Risk warnings update from spend automatically."
-        onSubmit={editingBudgetId ? saveBudgetEdit : saveBudget}
-        submitLabel={editingBudgetId ? "Save changes" : "Create budget"}
-        pending={saving || (editingBudgetId !== null && pendingItem === `budget-edit:${editingBudgetId}`)}
-        submitDisabled={!editingBudgetId && !budgetProjectId}
-      >
-        {editingBudgetId ? (
           <div className="grid gap-1.5">
-            <Label>Project</Label>
-            <p className="bg-muted/40 rounded-lg px-2.5 py-2 text-sm font-medium">
-              {budgets.find((budget) => budget.budgetId === editingBudgetId)?.projectName}
-            </p>
-          </div>
-        ) : (
-          <div className="grid gap-1.5">
-            <Label htmlFor="budget-project">Project</Label>
-            <Select id="budget-project" value={budgetProjectId} onChange={(event) => setBudgetProjectId(event.target.value)}>
-              <option value="">Select a project</option>
-              {projects.map((project) => <option key={project.projectId} value={project.projectId}>{project.projectName}</option>)}
-            </Select>
-          </div>
-        )}
-        <div className="grid gap-1.5 sm:grid-cols-3">
-          <div className="grid gap-1.5">
-            <Label htmlFor="budget-planned">Planned amount</Label>
+            <Label htmlFor="fin-time-rate">Rate</Label>
             <Input
-              id="budget-planned"
+              id="fin-time-rate"
               type="number"
-              min="0"
-              value={editingBudgetId ? editingPlanned : budgetPlanned}
-              onChange={(event) => editingBudgetId ? setEditingPlanned(event.target.value) : setBudgetPlanned(event.target.value)}
+              min={0}
+              value={rate}
+              onChange={(e) => setRate(e.target.value)}
             />
           </div>
-          <div className="grid gap-1.5">
-            <Label htmlFor="budget-minimum">Contract minimum</Label>
-            <Input
-              id="budget-minimum"
-              type="number"
-              min="0"
-              value={editingBudgetId ? editingContractedMinimum : budgetContractedMinimum}
-              onChange={(event) => editingBudgetId ? setEditingContractedMinimum(event.target.value) : setBudgetContractedMinimum(event.target.value)}
+          <div className="flex items-center gap-2">
+            <input
+              id="fin-time-billable"
+              type="checkbox"
+              checked={billable}
+              onChange={(e) => setBillable(e.target.checked)}
             />
+            <Label htmlFor="fin-time-billable">Billable</Label>
           </div>
           <div className="grid gap-1.5">
-            <Label htmlFor="budget-currency">Currency</Label>
+            <Label htmlFor="fin-time-note">Note</Label>
             <Input
-              id="budget-currency"
-              maxLength={3}
-              value={editingBudgetId ? editingCurrency : budgetCurrency}
-              onChange={(event) => editingBudgetId ? setEditingCurrency(event.target.value.toUpperCase()) : setBudgetCurrency(event.target.value.toUpperCase())}
+              id="fin-time-note"
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
             />
           </div>
         </div>
       </EntityFormDialog>
+
       <EntityFormDialog
-        open={showTimeForm || editingEntryId !== null}
+        open={Boolean(editingBudgetId)}
         onOpenChange={(open) => {
-          const editingPending = editingEntryId !== null && pendingItem === `time-edit:${editingEntryId}`
-          if (!open && !saving && !editingPending) {
-            setShowTimeForm(false)
-            setEditingEntryId(null)
-          }
+          if (!open) setEditingBudgetId(null)
         }}
-        title={editingEntryId ? "Edit time entry" : "Log time"}
-        description="Record the hours, date, rate, and billable status for this project."
-        onSubmit={editingEntryId ? saveEntryEdit : logTime}
-        submitLabel={editingEntryId ? "Save changes" : "Log time"}
-        pending={saving || (editingEntryId !== null && pendingItem === `time-edit:${editingEntryId}`)}
-        submitDisabled={!editingEntryId && !projectId}
-        maxWidth="max-w-2xl"
+        title="Edit budget"
+        onSubmit={() => void saveBudgetEdit()}
+        submitLabel="Save"
+        pending={pendingItem?.startsWith("budget:")}
       >
-        {editingEntryId ? (
+        <div className="grid gap-3">
           <div className="grid gap-1.5">
-            <Label>Project</Label>
-            <p className="bg-muted/40 rounded-lg px-2.5 py-2 text-sm font-medium">
-              {entries.find((entry) => entry.entryId === editingEntryId)?.projectName}
-            </p>
-          </div>
-        ) : (
-          <div className="grid gap-1.5">
-            <Label htmlFor="time-project">Project</Label>
-            <Select id="time-project" value={projectId} onChange={(event) => setProjectId(event.target.value)}>
-              <option value="">Select a project</option>
-              {projects.map((project) => <option key={project.projectId} value={project.projectId}>{project.projectName}</option>)}
-            </Select>
-          </div>
-        )}
-        <div className="grid gap-4 sm:grid-cols-3">
-          <div className="grid gap-1.5">
-            <Label htmlFor="time-hours">Hours</Label>
+            <Label htmlFor="fin-edit-planned">Planned</Label>
             <Input
-              id="time-hours"
+              id="fin-edit-planned"
               type="number"
-              min={editingEntryId ? "0" : "0.5"}
-              step="0.5"
-              value={editingEntryId ? editingHours : hours}
-              onChange={(event) => editingEntryId ? setEditingHours(event.target.value) : setHours(event.target.value)}
+              min={0}
+              value={editingPlanned}
+              onChange={(e) => setEditingPlanned(e.target.value)}
             />
           </div>
           <div className="grid gap-1.5">
-            <Label htmlFor="time-date">Date</Label>
+            <Label htmlFor="fin-edit-min">Contracted minimum</Label>
             <Input
-              id="time-date"
-              type="date"
-              value={editingEntryId ? editingDate : entryDate}
-              onChange={(event) => editingEntryId ? setEditingDate(event.target.value) : setEntryDate(event.target.value)}
+              id="fin-edit-min"
+              type="number"
+              min={0}
+              value={editingContractedMinimum}
+              onChange={(e) => setEditingContractedMinimum(e.target.value)}
             />
           </div>
           <div className="grid gap-1.5">
-            <Label htmlFor="time-rate">Hourly rate</Label>
+            <Label htmlFor="fin-edit-currency">Currency</Label>
             <Input
-              id="time-rate"
-              type="number"
-              min="0"
-              step="0.01"
-              value={editingEntryId ? editingRate : rate}
-              onChange={(event) => editingEntryId ? setEditingRate(event.target.value) : setRate(event.target.value)}
+              id="fin-edit-currency"
+              value={editingCurrency}
+              onChange={(e) => setEditingCurrency(e.target.value.toUpperCase())}
             />
           </div>
         </div>
-        <div className="grid gap-1.5">
-          <Label htmlFor="time-note">Note</Label>
-          <Input
-            id="time-note"
-            placeholder="What did you work on?"
-            value={editingEntryId ? editingNote : note}
-            onChange={(event) => editingEntryId ? setEditingNote(event.target.value) : setNote(event.target.value)}
-          />
-        </div>
-        <label className="border-input flex h-9 items-center gap-2 rounded-lg border px-2.5 text-sm">
-          <input
-            type="checkbox"
-            checked={editingEntryId ? editingBillable : billable}
-            onChange={(event) => editingEntryId ? setEditingBillable(event.target.checked) : setBillable(event.target.checked)}
-          />
-          Billable
-        </label>
       </EntityFormDialog>
+
+      <EntityFormDialog
+        open={Boolean(editingEntryId)}
+        onOpenChange={(open) => {
+          if (!open) setEditingEntryId(null)
+        }}
+        title="Edit time entry"
+        onSubmit={() => void saveEntryEdit()}
+        submitLabel="Save"
+        pending={pendingItem?.startsWith("time:")}
+      >
+        <div className="grid gap-3">
+          <div className="grid grid-cols-2 gap-3">
+            <div className="grid gap-1.5">
+              <Label htmlFor="fin-edit-hours">Hours</Label>
+              <Input
+                id="fin-edit-hours"
+                type="number"
+                min={0.25}
+                step={0.25}
+                value={editingHours}
+                onChange={(e) => setEditingHours(e.target.value)}
+              />
+            </div>
+            <div className="grid gap-1.5">
+              <Label htmlFor="fin-edit-date">Date</Label>
+              <Input
+                id="fin-edit-date"
+                type="date"
+                value={editingDate}
+                onChange={(e) => setEditingDate(e.target.value)}
+              />
+            </div>
+          </div>
+          <div className="grid gap-1.5">
+            <Label htmlFor="fin-edit-rate">Rate</Label>
+            <Input
+              id="fin-edit-rate"
+              type="number"
+              min={0}
+              value={editingRate}
+              onChange={(e) => setEditingRate(e.target.value)}
+            />
+          </div>
+          <div className="flex items-center gap-2">
+            <input
+              id="fin-edit-billable"
+              type="checkbox"
+              checked={editingBillable}
+              onChange={(e) => setEditingBillable(e.target.checked)}
+            />
+            <Label htmlFor="fin-edit-billable">Billable</Label>
+          </div>
+          <div className="grid gap-1.5">
+            <Label htmlFor="fin-edit-note">Note</Label>
+            <Input
+              id="fin-edit-note"
+              value={editingNote}
+              onChange={(e) => setEditingNote(e.target.value)}
+            />
+          </div>
+        </div>
+      </EntityFormDialog>
+
       <ConfirmationDialog
-        open={deleteTarget !== null}
-        onOpenChange={(open) => { if (!open && !pendingItem) setDeleteTarget(null) }}
-        title={`Delete ${deleteTarget?.label ?? "item"}?`}
-        description="This action cannot be undone."
+        open={Boolean(deleteTarget)}
+        onOpenChange={(open) => {
+          if (!open) setDeleteTarget(null)
+        }}
+        title={deleteTarget?.type === "budget" ? "Delete budget?" : "Delete time entry?"}
+        description={
+          deleteTarget
+            ? `Remove ${deleteTarget.label}. This cannot be undone from the UI.`
+            : undefined
+        }
         confirmLabel="Delete"
         destructive
-        pending={deleteTarget ? pendingItem === `${deleteTarget.type}-delete:${deleteTarget.id}` : false}
-        onConfirm={confirmDelete}
+        pending={Boolean(pendingItem?.includes("-delete:"))}
+        onConfirm={() => void confirmDelete()}
       />
     </div>
   )

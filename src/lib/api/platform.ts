@@ -56,12 +56,12 @@ export type ProjectProfitability = {
   currency: string
   costAvailable: boolean
   planned: number
-  actualTimeCost: number
+  actualTimeCost: number | null
   actualHours: number
-  margin: number
+  margin: number | null
   marginPercent: number | null
-  forecastCost: number
-  forecastMargin: number
+  forecastCost: number | null
+  forecastMargin: number | null
   forecastMarginPercent: number | null
 }
 
@@ -177,6 +177,282 @@ export async function deleteBudget(budgetId: string) {
   return apiRequest(`/api/v1/agency/finance/budgets/${budgetId}`, { method: "DELETE" })
 }
 
+export type HubReportCatalogItem = {
+  id: string
+  title: string
+  description: string
+  scheduleHint: string
+  scheduled: boolean
+  supported: boolean
+  requiresFinance: boolean
+  locked?: boolean
+  href?: string
+  unavailableReason?: string
+}
+
+export type HubReportsCatalog = {
+  reports: HubReportCatalogItem[]
+  scheduled: unknown[]
+  scheduledAvailable: boolean
+  scheduledUnavailableReason: string
+  boundaries: { label: string; detail: string; state: string }[]
+}
+
+export type HubFinancialSummary = {
+  financeAccess: boolean
+  periodLabel: string
+  kpis: {
+    planned: number
+    spent: number
+    remaining: number
+    revenue: number
+    hours: number
+    billableHours: number
+  } | null
+  topBudgets: {
+    budgetId?: string
+    projectId?: string
+    projectName: string
+    clientName?: string | null
+    planned: number
+    spent: number
+    utilization: number
+    currency: string
+  }[]
+  activeProjects: number
+  trend: { available: boolean; reason: string }
+  overdueInvoices: { available: boolean; reason: string }
+  exportAvailable: boolean
+  scheduleAvailable: boolean
+  message?: string
+  updatedAt?: string
+}
+
+export type HubProjectsSummary = {
+  counts: { total: number; active: number; completed: number; other: number }
+  recent: {
+    projectId: string
+    projectName: string
+    clientName?: string | null
+    status?: string
+    updatedAt?: string | null
+  }[]
+  exportAvailable: boolean
+  scheduleAvailable: boolean
+  updatedAt?: string
+}
+
+export async function getHubReportsCatalog() {
+  return apiRequest<ApiEnvelope<HubReportsCatalog> & { financeAccess?: boolean }>(
+    "/api/v1/agency/hub/reports",
+  )
+}
+
+export async function getHubFinancialSummary() {
+  return apiRequest<ApiEnvelope<HubFinancialSummary> & { financeAccess?: boolean }>(
+    "/api/v1/agency/hub/reports/financial-summary",
+  )
+}
+
+export async function getHubProjectsSummary() {
+  return apiRequest<ApiEnvelope<HubProjectsSummary> & { financeAccess?: boolean }>(
+    "/api/v1/agency/hub/reports/projects",
+  )
+}
+
+export type HubReputationTab = {
+  id: string
+  title: string
+  href: string
+  purpose: string
+  frames: string
+  supported: boolean
+  unavailableReason: string
+}
+
+export type HubReputationPanel = {
+  id: string
+  title: string
+  measuredOrInferred: "measured" | "inferred" | string
+  unavailableReason: string
+}
+
+export type HubReputationCommandCenter = {
+  agencyId: string
+  module: string
+  status: string
+  architectureStatus?: string
+  figmaGroup?: string
+  figmaNodeId?: string
+  commandCenterFrames?: string
+  access: boolean
+  scope: string
+  roleClass?: string
+  noAccessFrames?: string
+  tabCounts: null | Record<string, number>
+  tabs: HubReputationTab[]
+  overview: {
+    periodOptions: string[]
+    defaultPeriod: string
+    filtersUnavailable: string[]
+    panels: HubReputationPanel[]
+    actions: {
+      requestFeedback: { available: boolean; reason: string }
+      executiveSummary: { available: boolean; reason: string }
+    }
+  }
+  relatedSurfaces: {
+    id: string
+    title: string
+    href: string
+    isReputation: boolean
+    note: string
+  }[]
+  safeguards?: string[]
+  updatedAt?: string
+}
+
+export async function getHubReputationCommandCenter() {
+  return apiRequest<
+    ApiEnvelope<HubReputationCommandCenter> & { access?: boolean; scope?: string }
+  >("/api/v1/agency/hub/reputation")
+}
+
+export type HubFeedbackListItem = {
+  id: string
+  receivedAt: string | null
+  source: string
+  sourceLabel: string | null
+  status: string
+  statusLabel: string | null
+  statusTone: string
+  edition: string | null
+  editionLabel: string | null
+  consentToQuote: boolean
+  project: { id: string; name: string } | null
+  respondent: {
+    contactId: string
+    name: string
+    title: string | null
+    clientId: string | null
+    clientName: string | null
+  } | null
+  excerpt: string | null
+  scoreLabel: string
+  scoreValue: number | null
+  sentiment: string | null
+  sentimentAvailable: boolean
+  sentimentUnavailableReason?: string
+}
+
+export type HubFeedbackRating = {
+  id: string
+  questionId: string
+  questionPrompt: string
+  scale: string
+  value: number
+  measuredOrInferred: "measured" | string
+}
+
+export type HubFeedbackDetail = HubFeedbackListItem & {
+  text: string | null
+  answers: unknown
+  ratings: HubFeedbackRating[]
+  request: {
+    id: string
+    status: string
+    channel: string
+    questions: unknown[]
+    deliveryConfirmedAt: string | null
+    sentAt: string | null
+    scheduledAt: string | null
+  } | null
+  assignedMember: { id: string; name: string; title: string | null } | null
+  analysis: {
+    available: boolean
+    measuredOrInferred: string
+    reason: string
+    themes: unknown[]
+  }
+  followUp: {
+    available: boolean
+    caseAvailable: boolean
+    caseUnavailableReason: string
+    assignedMemberId: string | null
+  }
+  testimonial: {
+    consentToQuote: boolean
+    publicationAvailable: boolean
+    publicationUnavailableReason: string
+  }
+  actions: Record<string, { available: boolean; reason: string }>
+  relatedNote?: string
+}
+
+export type HubFeedbackLibrary = {
+  access: boolean
+  scope: string
+  roleClass?: string
+  status: string
+  provisioned?: boolean
+  figmaFrames?: string
+  entityMapping?: Record<string, string>
+  items: HubFeedbackListItem[]
+  total: number
+  filtersApplied: Record<string, string>
+  filterOptions?: {
+    source: { id: string; label: string }[]
+    status: { id: string; label: string }[]
+    consent: { id: string; label: string }[]
+    sentiment?: { available: boolean; reason: string }
+  }
+  actions: {
+    requestFeedback: { available: boolean; reason: string }
+  }
+  emptyReason?: string | null
+  updatedAt?: string
+}
+
+export type HubFeedbackDetailPayload = {
+  access: boolean
+  scope: string
+  roleClass?: string
+  status: string
+  provisioned?: boolean
+  figmaFrames?: string
+  item: HubFeedbackDetail
+  updatedAt?: string
+}
+
+export type HubFeedbackLibraryQuery = {
+  source?: string
+  edition?: string
+  status?: string
+  consent?: string
+  q?: string
+  limit?: number
+}
+
+export async function listHubReputationFeedback(query: HubFeedbackLibraryQuery = {}) {
+  const params = new URLSearchParams()
+  if (query.source) params.set("source", query.source)
+  if (query.edition) params.set("edition", query.edition)
+  if (query.status) params.set("status", query.status)
+  if (query.consent) params.set("consent", query.consent)
+  if (query.q) params.set("q", query.q)
+  if (query.limit) params.set("limit", String(query.limit))
+  const qs = params.toString()
+  return apiRequest<
+    ApiEnvelope<HubFeedbackLibrary> & { access?: boolean; scope?: string; count?: number }
+  >(`/api/v1/agency/hub/reputation/feedback${qs ? `?${qs}` : ""}`)
+}
+
+export async function getHubReputationFeedbackDetail(responseId: string) {
+  return apiRequest<
+    ApiEnvelope<HubFeedbackDetailPayload> & { access?: boolean; scope?: string }
+  >(`/api/v1/agency/hub/reputation/feedback/${encodeURIComponent(responseId)}`)
+}
+
 export async function getTenant() {
   return apiRequest<ApiEnvelope<Tenant>>("/api/v1/agency/tenant")
 }
@@ -265,13 +541,26 @@ export type PortalOverviewData = {
   upcomingEvents: Array<{ id: string; title: string; startDate: string }>
 }
 
+export type DirectReviewDeliverable = {
+  name: string
+  fileUrl: string
+  fileType?: string | null
+  version?: string | null
+}
+
 export type DirectReviewData = {
-  token: string
-  clientId: string
   entityType: string
   entityId: string
   entityTitle: string
   expiresAt: string
+  clientName?: string | null
+  agencyName?: string | null
+  purpose?: "review" | "delivery" | string
+  canDecide?: boolean
+  approvalStatus?: string | null
+  decidedAt?: string | null
+  deliverable?: DirectReviewDeliverable | null
+  deliverableUnavailableReason?: string | null
 }
 
 export async function portalLogin(email: string, password: string) {

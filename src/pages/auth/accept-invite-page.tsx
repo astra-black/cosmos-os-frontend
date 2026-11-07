@@ -103,7 +103,7 @@ export function AcceptInvitePage() {
 
       toast.success(`Welcome to ${invite?.agencyName || "the workspace"}!`)
       // Refresh to reload auth state in context
-      window.location.href = "/dashboard"
+      window.location.href = "/hub"
     } catch (err) {
       const msg = err instanceof ApiError ? err.message : "Failed to accept invitation."
       toast.error(msg)

@@ -1,7 +1,5 @@
 import { useCallback, useEffect, useState } from "react"
 import { useNavigate } from "react-router-dom"
-import { BellIcon } from "lucide-react"
-
 import { Button } from "@/components/ui/button"
 import {
   DropdownMenu,
@@ -78,7 +76,7 @@ export function NotificationsBell() {
       <DropdownMenuTrigger
         render={
           <Button variant="ghost" size="icon" className="relative" aria-label="Notifications">
-            <BellIcon className="size-4" />
+            <img src="/figma-bell.svg" alt="" />
             {unread > 0 ? (
               <span className="bg-destructive text-destructive-foreground absolute top-1 right-1 flex size-4 items-center justify-center rounded-full text-[10px] font-medium">
                 {unread > 9 ? "9+" : unread}

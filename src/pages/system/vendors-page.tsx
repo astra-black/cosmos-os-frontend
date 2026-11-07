@@ -1,726 +1,534 @@
 import { useMemo, useState } from "react"
-import {
-  FileTextIcon,
-  FilmIcon,
-  HammerIcon,
-  MailIcon,
-  PaletteIcon,
-  PencilIcon,
-  PlusIcon,
-  SparklesIcon,
-  StarIcon,
-  TruckIcon,
-  UserIcon,
-  Volume2Icon,
-  Trash2Icon,
-} from "lucide-react"
+import { useNavigate, useParams } from "react-router-dom"
+import { PlusIcon } from "lucide-react"
 import { toast } from "sonner"
 
 import { ConfirmationDialog } from "@/components/shared/confirmation-dialog"
 import { EmptyState } from "@/components/shared/empty-state"
-import { AiOutreachModal } from "@/components/modals"
-import { PageHeader } from "@/components/shared/page-header"
-import { Badge } from "@/components/ui/badge"
+import { EntityFormDialog } from "@/components/shared/entity-form-dialog"
+import { VendorDrawer } from "@/components/vendors/vendor-drawer"
+import { VendorsCrewTabs } from "@/components/vendors/vendors-crew-tabs"
 import { Button } from "@/components/ui/button"
-import { Card } from "@/components/ui/card"
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select } from "@/components/ui/select"
 import { Skeleton } from "@/components/ui/skeleton"
+import { Textarea } from "@/components/ui/textarea"
 import { useVendors } from "@/hooks/use-agency-data"
-import { createVendor, deleteVendor, updateVendor } from "@/lib/api/agency"
+import {
+  createVendor,
+  deleteVendor,
+  updateVendor,
+} from "@/lib/api/agency"
 import { ApiError } from "@/lib/api/client"
 import { useAuth } from "@/lib/auth"
-import { canPerform } from "@/lib/rbac"
-import type { Vendor } from "@/types/agency"
+import { canAccessRoute, canPerform } from "@/lib/rbac"
 import { cn } from "@/lib/utils"
-
-function getCategoryIcon(category: string) {
-  switch (category?.toLowerCase()) {
-    case "staging":
-      return HammerIcon
-    case "av":
-      return Volume2Icon
-    case "post":
-      return FilmIcon
-    case "guest_experience":
-      return SparklesIcon
-    case "design":
-      return PaletteIcon
-    default:
-      return TruckIcon
-  }
-}
+import type { Vendor } from "@/types/agency"
 
 const STATUSES = ["preferred", "active", "trial", "inactive"] as const
-const CATEGORIES = [
-  "staging",
-  "av",
-  "post",
-  "guest_experience",
-  "design",
-  "general",
-] as const
+const CATEGORIES = ["staging", "av", "post", "guest_experience", "design", "general"] as const
 
-interface VendorFormData {
+type VendorForm = {
   name: string
   category: string
   contact: string
   email: string
-  rateCard: string
   skills: string
   regions: string
   status: string
+  rateCard: string
+  notes: string
 }
 
-const emptyForm: VendorFormData = {
+const emptyForm = (): VendorForm => ({
   name: "",
   category: "general",
   contact: "",
   email: "",
-  rateCard: "",
   skills: "",
   regions: "",
-  status: "trial",
+  status: "active",
+  rateCard: "",
+  notes: "",
+})
+
+function initials(name: string) {
+  return name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((p) => p[0]?.toUpperCase() || "")
+    .join("")
+}
+
+/** Map API vendor status to Figma Availability labels without inventing booking windows. */
+function availabilityLabel(status: string) {
+  switch (status.toLowerCase()) {
+    case "preferred":
+    case "active":
+      return { label: "Available", tone: "success" as const }
+    case "trial":
+      return { label: "Limited", tone: "warning" as const }
+    case "inactive":
+      return { label: "Unavailable", tone: "neutral" as const }
+    default:
+      return { label: status || "Unknown", tone: "neutral" as const }
+  }
+}
+
+function specialtyLabel(category: string) {
+  return (category || "general").replaceAll("_", " ")
+}
+
+function locationLabel(vendor: Vendor) {
+  const regions = (vendor.regions ?? []).filter(Boolean)
+  if (regions.length) return regions.join(" · ")
+  return "—"
 }
 
 export function VendorsPage() {
+  const navigate = useNavigate()
+  const { vendorId } = useParams()
   const { user } = useAuth()
+  const canView = canAccessRoute(user?.role, "/vendors")
   const canWrite = canPerform(user?.role, "write_crm")
-  const {
-    data: vendors,
-    setData: setVendors,
-    loading,
-    error,
-    reload,
-  } = useVendors()
-  const [category, setCategory] = useState("all")
-  const [statusFilter, setStatusFilter] = useState("all")
-  const [search, setSearch] = useState("")
-  const [busyId, setBusyId] = useState<string | null>(null)
-  const [deleteTarget, setDeleteTarget] = useState<Vendor | null>(null)
-  const [isDialogOpen, setIsDialogOpen] = useState(false)
-  const [editingVendor, setEditingVendor] = useState<Vendor | null>(null)
-  const [form, setForm] = useState<VendorFormData>(emptyForm)
-  const [isSaving, setIsSaving] = useState(false)
+  const agencyLabel = user?.agencyName?.trim() || "Workspace"
 
-  const categories = useMemo(() => {
-    return [...new Set([...CATEGORIES, ...vendors.map((v) => v.category)])]
-  }, [vendors])
+  const { data: vendors, loading, error, reload } = useVendors()
+  const [search, setSearch] = useState("")
+  const [category, setCategory] = useState("all")
+  const [region, setRegion] = useState("all")
+  const [showCreate, setShowCreate] = useState(false)
+  const [editing, setEditing] = useState<Vendor | null>(null)
+  const [form, setForm] = useState<VendorForm>(emptyForm)
+  const [saving, setSaving] = useState(false)
+  const [deleteTarget, setDeleteTarget] = useState<Vendor | null>(null)
+  const [deleting, setDeleting] = useState(false)
+
+  const categories = useMemo(
+    () => [...new Set([...CATEGORIES, ...vendors.map((v) => (v.category || "").toLowerCase()).filter(Boolean)])],
+    [vendors],
+  )
+  const regions = useMemo(
+    () => [...new Set(vendors.flatMap((v) => v.regions ?? []).filter(Boolean))].sort(),
+    [vendors],
+  )
 
   const filtered = useMemo(() => {
     return vendors.filter((v) => {
-      if (category !== "all" && (v.category || "").toLowerCase() !== category.toLowerCase()) return false
-      if (statusFilter !== "all" && (v.status || "active").toLowerCase() !== statusFilter.toLowerCase()) return false
-      if (search) {
+      if (category !== "all" && (v.category || "").toLowerCase() !== category) return false
+      if (region !== "all" && !(v.regions ?? []).some((r) => r.toLowerCase() === region.toLowerCase())) {
+        return false
+      }
+      if (search.trim()) {
         const q = search.toLowerCase()
-        const hay =
-          `${v.name} ${v.contact ?? ""} ${v.email ?? ""} ${v.category} ${(v.skills ?? []).join(" ")}`.toLowerCase()
+        const hay = `${v.name} ${v.contact ?? ""} ${v.email ?? ""} ${v.category} ${(v.skills ?? []).join(" ")} ${(v.regions ?? []).join(" ")}`.toLowerCase()
         if (!hay.includes(q)) return false
       }
       return true
     })
-  }, [vendors, category, statusFilter, search])
+  }, [vendors, category, region, search])
 
-  const [aiModalOpen, setAiModalOpen] = useState(false)
-  const [aiTargetVendor, setAiTargetVendor] = useState<Vendor | null>(null)
-
-  const preferred = vendors.filter((v) => (v.status || "").toLowerCase() === "preferred").length
-
-  function openCreateDialog() {
-    setEditingVendor(null)
-    setForm(emptyForm)
-    setIsDialogOpen(true)
-  }
-
-  function openEditDialog(vendor: Vendor) {
-    setEditingVendor(vendor)
-    setForm({
-      name: vendor.name,
-      category: (vendor.category || "general").toLowerCase(),
-      contact: vendor.contact || "",
-      email: vendor.email || "",
-      rateCard: vendor.rateCard || "",
-      skills: (vendor.skills || []).join(", "),
-      regions: (vendor.regions || []).join(", "),
-      status: (vendor.status || "active").toLowerCase(),
-    })
-    setIsDialogOpen(true)
-  }
-
-  async function patchVendor(vendor: Vendor, body: Partial<Vendor>, label: string) {
-    if (!canWrite) return
-    setBusyId(vendor.vendorId)
-    setVendors((prev) =>
-      prev.map((v) => (v.vendorId === vendor.vendorId ? { ...v, ...body } : v)),
-    )
-    try {
-      const res = await updateVendor(vendor.vendorId, body)
-      if (res.data) {
-        setVendors((prev) =>
-          prev.map((v) => (v.vendorId === vendor.vendorId ? { ...v, ...res.data } : v)),
-        )
-      }
-      await reload()
-      toast.success(label)
-    } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "Update failed")
-      await reload().catch(() => undefined)
-    } finally {
-      setBusyId(null)
+  /** Gate rate-card UI/payload the same way the API gates writes (finance / org admin). */
+  const canEditRates = useMemo(() => {
+    if (vendors.some((v) => v.financeAccess === true)) return true
+    if (vendors.length === 0 && !loading) {
+      const role = String(user?.role || "").toLowerCase()
+      if (role === "admin" || role === "agency_admin") return true
+      if (String(user?.permissionRole || "").toUpperCase() === "AGENCY_ADMIN") return true
+      if (String(user?.jobFunction || "").toUpperCase() === "ADMIN") return true
     }
+    return false
+  }, [vendors, loading, user?.role, user?.permissionRole, user?.jobFunction])
+
+  function openCreate() {
+    if (!canWrite) return
+    setEditing(null)
+    setForm(emptyForm())
+    setShowCreate(true)
   }
 
   async function handleSave() {
-    if (!form.name.trim() || !canWrite) return
-    setIsSaving(true)
-    const skills = form.skills
-      .split(",")
-      .map((s) => s.trim())
-      .filter(Boolean)
-    const regions = form.regions
-      .split(",")
-      .map((r) => r.trim())
-      .filter(Boolean)
-
+    if (!canWrite || !form.name.trim()) return
+    setSaving(true)
+    const skills = form.skills.split(",").map((s) => s.trim()).filter(Boolean)
+    const regionList = form.regions.split(",").map((r) => r.trim()).filter(Boolean)
+    const payload: Partial<Vendor> = {
+      name: form.name.trim(),
+      category: form.category,
+      contact: form.contact.trim() || undefined,
+      email: form.email.trim() || undefined,
+      status: form.status,
+      skills,
+      regions: regionList,
+      notes: form.notes.trim() || undefined,
+    }
+    if (canEditRates) {
+      payload.rateCard = form.rateCard.trim() || undefined
+    }
     try {
-      if (editingVendor) {
-        await updateVendor(editingVendor.vendorId, {
-          name: form.name.trim(),
-          category: form.category,
-          contact: form.contact.trim() || undefined,
-          email: form.email.trim() || undefined,
-          rateCard: form.rateCard.trim() || undefined,
-          status: form.status,
-          skills,
-          regions,
-        })
+      if (editing) {
+        await updateVendor(editing.vendorId, payload)
         toast.success("Vendor updated")
       } else {
-        await createVendor({
-          name: form.name.trim(),
-          category: form.category,
-          contact: form.contact.trim() || undefined,
-          email: form.email.trim() || undefined,
-          rateCard: form.rateCard.trim() || undefined,
-          status: form.status,
-          skills,
-          regions,
-        })
+        await createVendor(payload)
         toast.success("Vendor added")
       }
-      setIsDialogOpen(false)
+      setShowCreate(false)
       await reload()
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : "Save failed")
     } finally {
-      setIsSaving(false)
+      setSaving(false)
     }
   }
 
-  async function handleDeleteConfirm() {
+  async function confirmDelete() {
     if (!deleteTarget || !canWrite) return
-    const id = deleteTarget.vendorId
+    setDeleting(true)
     try {
-      await deleteVendor(id)
-      await reload()
+      await deleteVendor(deleteTarget.vendorId)
       toast.success("Vendor deleted")
       setDeleteTarget(null)
+      setShowCreate(false)
+      if (vendorId === deleteTarget.vendorId) navigate("/vendors")
+      await reload()
     } catch (err) {
       toast.error(err instanceof ApiError ? err.message : "Delete failed")
+    } finally {
+      setDeleting(false)
     }
   }
 
-  return (
-    <div className="flex flex-col gap-5">
-      <PageHeader
-        title="Vendors"
-        description="Preferred and active partners — staging, A/V, post, hospitality."
-        actions={
-          canWrite ? (
-            <Button size="sm" onClick={openCreateDialog}>
-              <PlusIcon className="size-3.5" />
-              Add vendor
-            </Button>
-          ) : undefined
-        }
-      />
+  if (!canView) {
+    return (
+      <div className="cosmos-vc-page">
+        <EmptyState
+          title="Vendors is unavailable"
+          description="Your role cannot open the vendor directory."
+        />
+      </div>
+    )
+  }
 
-      <div className="bg-card flex flex-wrap gap-x-6 gap-y-2 rounded-xl border px-4 py-3 text-sm">
-        <div>
-          <span className="text-muted-foreground">Partners </span>
-          <span className="font-semibold tabular-nums">{vendors.length}</span>
-        </div>
-        <div>
-          <span className="text-muted-foreground">Preferred </span>
-          <span className="font-semibold tabular-nums">{preferred}</span>
-        </div>
-        <div>
-          <span className="text-muted-foreground">Showing </span>
-          <span className="font-semibold tabular-nums">{filtered.length}</span>
+
+  return (
+    <div className="cosmos-vc-page">
+      <div className="cosmos-vc-page__head">
+        <p className="cosmos-vc-page__eyebrow">{agencyLabel} · Workspace</p>
+        <div className="cosmos-vc-page__title-row">
+          <h1>Vendors &amp; Crew</h1>
+          {canWrite ? (
+            <Button size="sm" onClick={openCreate}>
+              <PlusIcon className="size-3.5" />
+              Add Vendor
+            </Button>
+          ) : null}
         </div>
       </div>
+
+      <VendorsCrewTabs active="vendors" vendorCount={vendors.length} crewCount="—" />
 
       {error ? (
-        <Card className="border-destructive/40 px-4 py-3 text-sm">
-          <div className="flex items-center justify-between gap-3">
-            <span className="text-destructive">{error}</span>
-            <Button size="sm" variant="outline" onClick={() => void reload()}>Retry</Button>
-          </div>
-        </Card>
+        <div className="cosmos-vc-page__error" role="alert">
+          <span>{error}</span>
+          <Button size="sm" variant="outline" onClick={() => void reload()}>
+            Retry
+          </Button>
+        </div>
       ) : null}
 
-      <div className="flex flex-col gap-2">
-        <Input
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search name, contact, skill…"
-          className="w-full sm:max-w-sm"
-        />
-        <div className="-mx-1 flex gap-1 overflow-x-auto px-1 pb-0.5">
-          <Button
-            size="sm"
-            variant={category === "all" ? "default" : "outline"}
-            className="shrink-0 rounded-full"
-            onClick={() => setCategory("all")}
+      <div className="cosmos-vc-directory">
+        <div className="cosmos-vc-toolbar">
+          <Input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search vendors, skills, crews"
+            className="cosmos-vc-search"
+            aria-label="Search vendors"
+          />
+          <Select
+            value={category}
+            onChange={(e) => setCategory(e.target.value)}
+            aria-label="Specialty"
+            className="cosmos-vc-filter"
           >
-            All
-          </Button>
-          {categories.map((c) => (
-            <Button
-              key={c}
-              size="sm"
-              variant={category === c ? "default" : "outline"}
-              className="shrink-0 rounded-full capitalize"
-              onClick={() => setCategory(c)}
-            >
-              {c.replace("_", " ")}
-            </Button>
-          ))}
+            <option value="all">Specialty</option>
+            {categories.map((c) => (
+              <option key={c} value={c}>
+                {specialtyLabel(c)}
+              </option>
+            ))}
+          </Select>
+          <Select
+            value={region}
+            onChange={(e) => setRegion(e.target.value)}
+            aria-label="Location"
+            className="cosmos-vc-filter"
+          >
+            <option value="all">Location</option>
+            {regions.map((r) => (
+              <option key={r} value={r}>
+                {r}
+              </option>
+            ))}
+          </Select>
+          <Select
+            value="all"
+            disabled
+            aria-label="Saved Group"
+            className="cosmos-vc-filter"
+            title="Saved Groups are not in the Agency OS API yet"
+          >
+            <option value="all">Saved Group · Unavailable</option>
+          </Select>
         </div>
-        <div className="flex flex-wrap gap-1">
-          {(["all", ...STATUSES] as const).map((s) => (
-            <Button
-              key={s}
-              size="sm"
-              variant={statusFilter === s ? "secondary" : "ghost"}
-              className="h-7 rounded-full capitalize text-xs"
-              onClick={() => setStatusFilter(s)}
-            >
-              {s}
-            </Button>
-          ))}
-        </div>
+
+        {loading ? (
+          <div className="cosmos-vc-directory__body space-y-3 p-4">
+            <Skeleton className="h-14 w-full rounded-xl" />
+            <Skeleton className="h-14 w-full rounded-xl" />
+            <Skeleton className="h-14 w-full rounded-xl" />
+          </div>
+        ) : filtered.length === 0 ? (
+          <div className="cosmos-vc-directory__body p-4">
+            <EmptyState
+              title="No vendors in this view"
+              description={
+                canWrite
+                  ? "Add a vendor or clear filters to populate the directory."
+                  : "No vendor records match the current filters."
+              }
+            />
+          </div>
+        ) : (
+          <div className="cosmos-vc-table-wrap">
+            <table className="cosmos-vc-table">
+              <thead>
+                <tr>
+                  <th>Vendor</th>
+                  <th>Location</th>
+                  <th>Availability</th>
+                  <th>Projects</th>
+                  <th aria-label="Actions" />
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map((vendor) => {
+                  const availability = availabilityLabel(vendor.status || "active")
+                  return (
+                    <tr key={vendor.vendorId}>
+                      <td>
+                        <div className="cosmos-vc-vendor-cell">
+                          <span className="cosmos-vc-mark" aria-hidden>
+                            {initials(vendor.name) || "?"}
+                          </span>
+                          <div>
+                            <p className="cosmos-vc-vendor-name">{vendor.name}</p>
+                            <p className="cosmos-vc-vendor-sub capitalize">
+                              {specialtyLabel(vendor.category)}
+                            </p>
+                          </div>
+                        </div>
+                      </td>
+                      <td>{locationLabel(vendor)}</td>
+                      <td>
+                        <span className={cn("cosmos-vc-status", `is-${availability.tone}`)}>
+                          {availability.label}
+                        </span>
+                      </td>
+                      <td>
+                        <span
+                          className="cosmos-vc-muted"
+                          title="Project counts are on the vendor profile, not the directory list API"
+                        >
+                          —
+                        </span>
+                      </td>
+                      <td>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => navigate(`/vendors/${vendor.vendorId}`)}
+                        >
+                          View
+                        </Button>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+            <p className="cosmos-vc-footnote">
+              Directory list never includes rate cards or contract amounts. Those appear only on the
+              profile for roles with finance access.
+            </p>
+          </div>
+        )}
       </div>
 
-      {loading ? (
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          <Skeleton className="h-40 rounded-xl" />
-          <Skeleton className="h-40 rounded-xl" />
-          <Skeleton className="h-40 rounded-xl" />
-        </div>
-      ) : filtered.length === 0 ? (
-        <EmptyState icon={<TruckIcon className="size-8 opacity-40" />} title="No vendors" />
-      ) : (
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {filtered.map((vendor) => {
-            const CategoryIcon = getCategoryIcon(vendor.category)
-            return (
-              <Card
-                key={vendor.vendorId}
-                className="relative overflow-hidden pl-5 hover:-translate-y-1 hover:shadow-lg hover:shadow-primary/5 transition-all duration-300 bg-card border border-border rounded-xl p-5 flex flex-col justify-between min-h-[220px]"
-              >
-                {/* Status indicator strip on the left edge */}
-                {(() => {
-                  const statusLower = (vendor.status || "active").toLowerCase()
-                  return (
-                    <div className={cn(
-                      "absolute left-0 top-0 bottom-0 w-[4px]",
-                      statusLower === "preferred" && "bg-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.4)]",
-                      statusLower === "active" && "bg-primary",
-                      statusLower === "trial" && "bg-cyan-500",
-                      statusLower === "inactive" && "bg-muted-foreground/30"
-                    )} />
-                  )
-                })()}
+      {canWrite ? (
+        <EntityFormDialog
+          open={showCreate}
+          onOpenChange={(open) => {
+            if (!open && !saving) {
+              setShowCreate(false)
+              setEditing(null)
+            }
+          }}
+          title={editing ? "Edit vendor" : "Add Vendor"}
+          description="Vendor directory record for this organization."
+          onSubmit={handleSave}
+          submitLabel={editing ? "Save changes" : "Add vendor"}
+          pending={saving}
+          submitDisabled={!form.name.trim()}
+          maxWidth="max-w-2xl"
+        >
+          <VendorFormFields
+            form={form}
+            onChange={(field, value) => setForm((f) => ({ ...f, [field]: value }))}
+            showRate={canEditRates}
+          />
+        </EntityFormDialog>
+      ) : null}
 
-                {/* Background Category Watermark */}
-                <CategoryIcon className="absolute -bottom-8 -right-8 size-32 opacity-[0.02] text-foreground pointer-events-none select-none" />
-
-                {/* Top Section: Header */}
-                  <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <h2 className="font-bold text-sm tracking-tight text-foreground truncate">{vendor.name}</h2>
-                    <p className="text-muted-foreground text-[10px] font-mono uppercase tracking-wider mt-1">
-                      {vendor.category.replace("_", " ")}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    {canWrite ? (
-                      (() => {
-                        const statusLower = (vendor.status || "active").toLowerCase()
-                        return (
-                          <select
-                            className={cn(
-                              "h-6 shrink-0 rounded-full border px-2 text-[10px] font-mono font-medium capitalize outline-none bg-background cursor-pointer",
-                              statusLower === "preferred" && "border-amber-500/40 bg-amber-500/10 text-amber-500",
-                              statusLower === "active" && "border-primary/40 bg-primary/10 text-primary",
-                              statusLower === "trial" && "border-cyan-500/40 bg-cyan-500/10 text-cyan-500",
-                              statusLower === "inactive" && "border-muted-foreground/40 bg-muted/10 text-muted-foreground",
-                            )}
-                            value={statusLower}
-                            disabled={busyId === vendor.vendorId}
-                            onChange={(e) =>
-                              void patchVendor(
-                                vendor,
-                                { status: e.target.value },
-                                `${vendor.name} → ${e.target.value}`,
-                              )
-                            }
-                          >
-                            {STATUSES.map((s) => (
-                              <option key={s} value={s}>
-                                {s}
-                              </option>
-                            ))}
-                          </select>
-                        )
-                      })()
-                    ) : (
-                      (() => {
-                        const statusLower = (vendor.status || "active").toLowerCase()
-                        return (
-                          <Badge
-                            className={cn(
-                              "capitalize text-[9px] font-mono py-0 h-4.5 px-2",
-                              statusLower === "preferred" ? "bg-amber-500/10 text-amber-500 border-amber-500/30" :
-                              statusLower === "active" ? "bg-primary/10 text-primary border-primary/30" :
-                              statusLower === "trial" ? "bg-cyan-500/10 text-cyan-500 border-cyan-500/30" :
-                              "bg-muted text-muted-foreground border-transparent",
-                            )}
-                            variant="outline"
-                          >
-                            {statusLower}
-                          </Badge>
-                        )
-                      })()
-                    )}
-                    {canWrite ? (
-                      <>
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          className="size-7 text-muted-foreground hover:text-foreground"
-                          onClick={() => openEditDialog(vendor)}
-                          aria-label={`Edit ${vendor.name}`}
-                        >
-                          <PencilIcon className="size-3.5" />
-                        </Button>
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          className="size-7 text-destructive"
-                          onClick={() => setDeleteTarget(vendor)}
-                          aria-label={`Delete ${vendor.name}`}
-                        >
-                          <Trash2Icon className="size-3.5" />
-                        </Button>
-                      </>
-                    ) : null}
-                  </div>
-                </div>
-
-                {/* Rating Bar */}
-                <div className="flex items-center gap-2 mt-2">
-                  <div className="flex items-center gap-1 text-[11px] bg-muted/50 w-fit px-2 py-0.5 rounded border border-border/40 font-mono">
-                    <StarIcon className={cn("size-3 fill-amber-500 text-amber-500", !vendor.rating && "fill-none text-muted-foreground/40")} />
-                    <span className="font-bold text-foreground">
-                      {vendor.rating?.toFixed(1) ?? "0.0"}
-                    </span>
-                  </div>
-                  {canWrite ? (
-                    <div className="flex gap-0.5">
-                      {[1, 2, 3, 4, 5].map((n) => (
-                        <button
-                          key={n}
-                          type="button"
-                          className={cn(
-                            "text-muted-foreground/40 hover:text-amber-500 p-0.5 transition-colors",
-                            (vendor.rating ?? 0) >= n && "text-amber-500",
-                          )}
-                          disabled={busyId === vendor.vendorId}
-                          onClick={() =>
-                            void patchVendor(vendor, { rating: n }, `Rated ${n}/5`)
-                          }
-                          aria-label={`Rate ${n}`}
-                        >
-                          <StarIcon
-                            className={cn(
-                              "size-3",
-                              (vendor.rating ?? 0) >= n && "fill-current",
-                            )}
-                          />
-                        </button>
-                      ))}
-                    </div>
-                  ) : null}
-                </div>
-
-                {/* Divider Line */}
-                <div className="w-full h-px border-t border-dashed border-border/80 my-3" />
-
-                {/* Contact Info Details */}
-                <div className="flex flex-col gap-1 text-[11px] text-muted-foreground min-w-0">
-                  {vendor.contact && (
-                    <div className="inline-flex items-center gap-1.5 truncate">
-                      <UserIcon className="size-3 shrink-0 text-muted-foreground/60" />
-                      {vendor.contact}
-                    </div>
-                  )}
-                  {vendor.email && (
-                    <a
-                      className="inline-flex items-center gap-1.5 truncate text-primary hover:underline font-mono"
-                      href={`mailto:${vendor.email}`}
-                    >
-                      <MailIcon className="size-3 shrink-0 text-muted-foreground/60" />
-                      {vendor.email}
-                    </a>
-                  )}
-                  {vendor.rateCard && (
-                    <div className="inline-flex items-center gap-1.5 bg-muted/40 w-fit px-2 py-0.5 rounded border border-border/40 font-mono mt-1">
-                      <FileTextIcon className="size-3 text-muted-foreground/60 shrink-0" />
-                      {vendor.rateCard}
-                    </div>
-                  )}
-                  {canWrite ? (
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="mt-2.5 w-full gap-1.5 text-xs border-sky-700/40 text-sky-400 hover:bg-sky-950/40"
-                      onClick={() => {
-                        setAiTargetVendor(vendor)
-                        setAiModalOpen(true)
-                      }}
-                    >
-                      <SparklesIcon className="size-3.5" />
-                      AI Outreach Request
-                    </Button>
-                  ) : null}
-                </div>
-
-                {/* Skills tags */}
-                {vendor.skills?.length ? (
-                  <div className="flex flex-wrap gap-1 mt-3">
-                    {vendor.skills.map((s) => (
-                      <Badge key={s} variant="outline" className="h-4.5 text-[9px] font-normal font-mono py-0 px-1.5">
-                        {s}
-                      </Badge>
-                    ))}
-                  </div>
-                ) : null}
-
-                {/* Regions */}
-                {vendor.regions?.length ? (
-                  <div className="text-muted-foreground text-[10px] font-mono mt-2 uppercase tracking-wide">
-                    {vendor.regions.join(" · ")}
-                  </div>
-                ) : null}
-
-                {/* Actions at bottom */}
-                {canWrite && (
-                  <div className="mt-4 pt-3 border-t border-border/40 flex flex-wrap gap-1.5">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="flex-1 text-[11px] h-7"
-                      disabled={busyId === vendor.vendorId}
-                      onClick={() =>
-                        void patchVendor(
-                          vendor,
-                          {
-                            status:
-                              vendor.status === "preferred" ? "active" : "preferred",
-                          },
-                          vendor.status === "preferred"
-                            ? "Removed preferred"
-                            : "Marked preferred",
-                        )
-                      }
-                    >
-                      {vendor.status === "preferred" ? "Unprefer" : "Prefer"}
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      className="flex-1 text-[11px] h-7"
-                      disabled={busyId === vendor.vendorId}
-                      onClick={() =>
-                        void patchVendor(
-                          vendor,
-                          { status: "inactive" },
-                          `${vendor.name} inactive`,
-                        )
-                      }
-                    >
-                      Deactivate
-                    </Button>
-                  </div>
-                )}
-              </Card>
-            )
-          })}
-        </div>
-      )}
-
-      {/* Add / Edit Vendor Modal Dialog */}
-      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>{editingVendor ? "Edit Vendor" : "Add Vendor"}</DialogTitle>
-            <DialogDescription>
-              {editingVendor
-                ? "Update partner details, rate cards, and capabilities."
-                : "Register a new partner, staging provider, or creative vendor."}
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="grid gap-4 py-2">
-            <div className="grid gap-1.5">
-              <Label htmlFor="vendor-name">Partner Name *</Label>
-              <Input
-                id="vendor-name"
-                placeholder="e.g. Apex Stage Works"
-                value={form.name}
-                onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-              />
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div className="grid gap-1.5">
-                <Label htmlFor="vendor-category">Category</Label>
-                <Select
-                  id="vendor-category"
-                  value={form.category}
-                  onChange={(e) => setForm((f) => ({ ...f, category: e.target.value }))}
-                >
-                  {CATEGORIES.map((c) => (
-                    <option key={c} value={c}>
-                      {c.replace("_", " ")}
-                    </option>
-                  ))}
-                </Select>
-              </div>
-
-              <div className="grid gap-1.5">
-                <Label htmlFor="vendor-status">Status</Label>
-                <Select
-                  id="vendor-status"
-                  value={form.status}
-                  onChange={(e) => setForm((f) => ({ ...f, status: e.target.value }))}
-                >
-                  {STATUSES.map((s) => (
-                    <option key={s} value={s}>
-                      {s}
-                    </option>
-                  ))}
-                </Select>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div className="grid gap-1.5">
-                <Label htmlFor="vendor-contact">Contact Person</Label>
-                <Input
-                  id="vendor-contact"
-                  placeholder="e.g. Marcus Reid"
-                  value={form.contact}
-                  onChange={(e) => setForm((f) => ({ ...f, contact: e.target.value }))}
-                />
-              </div>
-
-              <div className="grid gap-1.5">
-                <Label htmlFor="vendor-email">Email Address</Label>
-                <Input
-                  id="vendor-email"
-                  type="email"
-                  placeholder="vendor@company.com"
-                  value={form.email}
-                  onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
-                />
-              </div>
-            </div>
-
-            <div className="grid gap-1.5">
-              <Label htmlFor="vendor-rate">Rate Card / Pricing Model</Label>
-              <Input
-                id="vendor-rate"
-                placeholder="e.g. $1,200/day · Fixed Kit"
-                value={form.rateCard}
-                onChange={(e) => setForm((f) => ({ ...f, rateCard: e.target.value }))}
-              />
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div className="grid gap-1.5">
-                <Label htmlFor="vendor-skills">Skills / Tags (comma separated)</Label>
-                <Input
-                  id="vendor-skills"
-                  placeholder="Lighting, Truss, Rigging"
-                  value={form.skills}
-                  onChange={(e) => setForm((f) => ({ ...f, skills: e.target.value }))}
-                />
-              </div>
-
-              <div className="grid gap-1.5">
-                <Label htmlFor="vendor-regions">Regions (comma separated)</Label>
-                <Input
-                  id="vendor-regions"
-                  placeholder="US-West, NYC, Global"
-                  value={form.regions}
-                  onChange={(e) => setForm((f) => ({ ...f, regions: e.target.value }))}
-                />
-              </div>
-            </div>
-          </div>
-
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsDialogOpen(false)} disabled={isSaving}>
-              Cancel
-            </Button>
-            <Button onClick={() => void handleSave()} disabled={isSaving || !form.name.trim()}>
-              {isSaving ? "Saving…" : editingVendor ? "Save Changes" : "Create Vendor"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Confirmation Dialog for Delete */}
       <ConfirmationDialog
         open={Boolean(deleteTarget)}
-        onOpenChange={(open) => !open && setDeleteTarget(null)}
-        title="Delete Vendor"
-        description={`Are you sure you want to delete "${deleteTarget?.name}"? This action cannot be undone.`}
-        confirmLabel="Delete Vendor"
+        onOpenChange={(open) => {
+          if (!open && !deleting) setDeleteTarget(null)
+        }}
+        title={`Delete “${deleteTarget?.name ?? ""}”?`}
+        description="This removes the vendor record for your organization."
+        confirmLabel="Delete"
         destructive
-        onConfirm={() => void handleDeleteConfirm()}
+        pending={deleting}
+        onConfirm={confirmDelete}
       />
-      {aiTargetVendor && (
-        <AiOutreachModal
-          open={aiModalOpen}
-          onOpenChange={setAiModalOpen}
-          mode="vendor"
-          targetId={aiTargetVendor.vendorId}
-          targetName={aiTargetVendor.name}
+
+      <VendorDrawer
+        vendorId={vendorId ?? null}
+        open={Boolean(vendorId)}
+        onClose={() => navigate("/vendors", { replace: true })}
+        role={user?.role}
+        agencyLabel={agencyLabel}
+        onAssigned={() => void reload()}
+      />
+    </div>
+  )
+}
+
+function VendorFormFields({
+  form,
+  onChange,
+  showRate,
+}: {
+  form: VendorForm
+  onChange: (field: keyof VendorForm, value: string) => void
+  showRate: boolean
+}) {
+  return (
+    <div className="grid gap-4 sm:grid-cols-2">
+      <div className="grid gap-2 sm:col-span-2">
+        <Label htmlFor="vendor-name">Name</Label>
+        <Input
+          id="vendor-name"
+          value={form.name}
+          onChange={(e) => onChange("name", e.target.value)}
+          required
+          className="h-10"
         />
-      )}
+      </div>
+      <div className="grid gap-2">
+        <Label htmlFor="vendor-category">Specialty</Label>
+        <Select
+          id="vendor-category"
+          value={form.category}
+          onChange={(e) => onChange("category", e.target.value)}
+          className="h-10"
+        >
+          {CATEGORIES.map((c) => (
+            <option key={c} value={c}>
+              {specialtyLabel(c)}
+            </option>
+          ))}
+        </Select>
+      </div>
+      <div className="grid gap-2">
+        <Label htmlFor="vendor-status">Status</Label>
+        <Select
+          id="vendor-status"
+          value={form.status}
+          onChange={(e) => onChange("status", e.target.value)}
+          className="h-10"
+        >
+          {STATUSES.map((s) => (
+            <option key={s} value={s}>
+              {s}
+            </option>
+          ))}
+        </Select>
+      </div>
+      <div className="grid gap-2">
+        <Label htmlFor="vendor-contact">Contact</Label>
+        <Input
+          id="vendor-contact"
+          value={form.contact}
+          onChange={(e) => onChange("contact", e.target.value)}
+          className="h-10"
+        />
+      </div>
+      <div className="grid gap-2">
+        <Label htmlFor="vendor-email">Email</Label>
+        <Input
+          id="vendor-email"
+          type="email"
+          value={form.email}
+          onChange={(e) => onChange("email", e.target.value)}
+          className="h-10"
+        />
+      </div>
+      <div className="grid gap-2 sm:col-span-2">
+        <Label htmlFor="vendor-regions">Locations (comma-separated)</Label>
+        <Input
+          id="vendor-regions"
+          value={form.regions}
+          onChange={(e) => onChange("regions", e.target.value)}
+          className="h-10"
+        />
+      </div>
+      <div className="grid gap-2 sm:col-span-2">
+        <Label htmlFor="vendor-skills">Skills (comma-separated)</Label>
+        <Input
+          id="vendor-skills"
+          value={form.skills}
+          onChange={(e) => onChange("skills", e.target.value)}
+          className="h-10"
+        />
+      </div>
+      {showRate ? (
+        <div className="grid gap-2 sm:col-span-2">
+          <Label htmlFor="vendor-rate">Rate card</Label>
+          <Input
+            id="vendor-rate"
+            value={form.rateCard}
+            onChange={(e) => onChange("rateCard", e.target.value)}
+            className="h-10"
+          />
+          <p className="text-xs text-muted-foreground">
+            Visible only to Finance and organization admins on the vendor drawer.
+          </p>
+        </div>
+      ) : null}
+      <div className="grid gap-2 sm:col-span-2">
+        <Label htmlFor="vendor-notes">Notes</Label>
+        <Textarea
+          id="vendor-notes"
+          value={form.notes}
+          onChange={(e) => onChange("notes", e.target.value)}
+          className="min-h-20"
+        />
+      </div>
     </div>
   )
 }

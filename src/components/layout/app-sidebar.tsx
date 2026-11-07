@@ -122,7 +122,7 @@ const navTree: NavNode[] = [
     label: "System",
     icon: SettingsIcon,
     children: [
-      { kind: "leaf", to: "/teams", label: "Teams & roles", icon: UsersRoundIcon },
+      { kind: "leaf", to: "/teams", label: "People", icon: UsersRoundIcon },
       { kind: "leaf", to: "/billing", label: "Billing", icon: CreditCardIcon },
       { kind: "leaf", to: "/monitoring", label: "Monitoring", icon: ShieldAlertIcon },
       { kind: "leaf", to: "/settings", label: "Settings", icon: SettingsIcon },

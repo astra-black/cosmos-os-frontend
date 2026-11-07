@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { EyeIcon, EyeOffIcon, Loader2Icon } from "lucide-react"
+import { EyeIcon, EyeOffIcon, Loader2Icon, UploadIcon } from "lucide-react"
 import { toast } from "sonner"
 
 import { Button } from "@/components/ui/button"
@@ -15,6 +15,9 @@ type ShareWithClientToggleProps = {
   onChange?: (clientVisible: boolean) => void
   className?: string
   size?: "sm" | "default"
+  idleLabel?: string
+  activeLabel?: string
+  idleIcon?: "eye" | "upload"
 }
 
 /** Agency-side control: opt an item into the client portal (private by default). */
@@ -26,6 +29,9 @@ export function ShareWithClientToggle({
   onChange,
   className,
   size = "sm",
+  idleLabel = "Share with client",
+  activeLabel = "Shared",
+  idleIcon = "eye",
 }: ShareWithClientToggleProps) {
   const [visible, setVisible] = useState(Boolean(clientVisible))
   const [busy, setBusy] = useState(false)
@@ -65,10 +71,12 @@ export function ShareWithClientToggle({
         <Loader2Icon className="size-3.5 animate-spin" />
       ) : visible ? (
         <EyeIcon className="size-3.5" />
+      ) : idleIcon === "upload" ? (
+        <UploadIcon className="size-3.5" />
       ) : (
         <EyeOffIcon className="size-3.5" />
       )}
-      {visible ? "Shared" : "Share with client"}
+      {visible ? activeLabel : idleLabel}
     </Button>
   )
 }

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
-import { CheckIcon, CopyIcon, Link2Icon, Loader2Icon, ShieldIcon, UserPlusIcon, UsersIcon } from "lucide-react"
+import { CheckIcon, CopyIcon, Link2Icon, Loader2Icon, SearchIcon, UserPlusIcon, UsersIcon } from "lucide-react"
 import { toast } from "sonner"
 
 import { EmptyState } from "@/components/shared/empty-state"
@@ -23,17 +23,17 @@ import { listTeamMembers, updateTeamMember } from "@/lib/api/agency"
 import { createInvitation } from "@/lib/api/auth"
 import { ApiError } from "@/lib/api/client"
 import type { TeamMember } from "@/types/agency"
-import { cn } from "@/lib/utils"
 import { useAuth } from "@/lib/auth"
-import { canPerform } from "@/lib/rbac"
-
-const ROLES = ["admin", "pm", "producer", "ops", "creative", "client"] as const
+import { canPerform, normalizeRole } from "@/lib/rbac"
 
 export function TeamsPage() {
   const { user } = useAuth()
-  const canManageTeam = canPerform(user?.role, "manage_team")
+  const isAgencyAdmin = normalizeRole(user?.role) === "admin"
+  const canManageTeam = isAgencyAdmin || canPerform(user?.role, "manage_team")
   const [members, setMembers] = useState<TeamMember[]>([])
   const [teamFilter, setTeamFilter] = useState("all")
+  const [search, setSearch] = useState("")
+  const [activeView, setActiveView] = useState<"people" | "teams">("people")
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -45,6 +45,9 @@ export function TeamsPage() {
   const [generatedLink, setGeneratedLink] = useState<string | null>(null)
   const [inviting, setInviting] = useState(false)
   const [copied, setCopied] = useState(false)
+  const [editingTeamMember, setEditingTeamMember] = useState<TeamMember | null>(null)
+  const [teamDraft, setTeamDraft] = useState("")
+  const [savingTeam, setSavingTeam] = useState(false)
 
   const reload = useCallback(async () => {
     const res = await listTeamMembers()
@@ -71,22 +74,14 @@ export function TeamsPage() {
   const teams = useMemo(() => [...new Set(members.map((m) => m.team).filter(Boolean))], [members])
 
   const filtered = useMemo(() => {
-    if (teamFilter === "all") return members
-    return members.filter((m) => m.team === teamFilter)
-  }, [members, teamFilter])
-
-  async function cycleRole(member: TeamMember) {
-    if (!canManageTeam) return
-    const idx = ROLES.indexOf(member.role as (typeof ROLES)[number])
-    const next = ROLES[(idx + 1) % ROLES.length]
-    try {
-      await updateTeamMember(member.memberId, { role: next })
-      await reload()
-      toast.success(`${member.name} → ${next}`)
-    } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "Update failed")
-    }
-  }
+    const query = search.trim().toLowerCase()
+    return members.filter((member) => {
+      const matchesTeam = teamFilter === "all" || member.team === teamFilter
+      const matchesSearch = !query || [member.name, member.title, member.team, member.role, member.email]
+        .some((value) => value?.toLowerCase().includes(query))
+      return matchesTeam && matchesSearch
+    })
+  }, [members, teamFilter, search])
 
   const handleGenerateInvite = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -125,6 +120,22 @@ export function TeamsPage() {
     }
   }
 
+  async function saveTeamAssignment(event: React.FormEvent) {
+    event.preventDefault()
+    if (!editingTeamMember || !canManageTeam) return
+    setSavingTeam(true)
+    try {
+      await updateTeamMember(editingTeamMember.memberId, { team: teamDraft.trim() })
+      await reload()
+      setEditingTeamMember(null)
+      toast.success("Team assignment updated")
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : "Unable to update team assignment")
+    } finally {
+      setSavingTeam(false)
+    }
+  }
+
   const resetInviteModal = () => {
     setInviteEmail("")
     setPermissionRole("TEAM_MEMBER")
@@ -137,8 +148,8 @@ export function TeamsPage() {
     <div className="flex flex-col gap-5">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <PageHeader
-          title="Teams & roles"
-          description="Org roster — teams, roles, and access for the agency OS."
+          title={activeView === "people" ? "People" : "Teams & Divisions"}
+          description={activeView === "people" ? "Agency OS members in this workspace." : "Organize members into teams within this workspace."}
         />
         {canManageTeam && (
           <Button
@@ -149,7 +160,7 @@ export function TeamsPage() {
             className="gap-2 shrink-0"
           >
             <UserPlusIcon className="size-4" />
-            Invite Member
+            Invite Members
           </Button>
         )}
       </div>
@@ -159,15 +170,9 @@ export function TeamsPage() {
       ) : null}
 
       <div className="bg-card flex flex-wrap items-center gap-x-6 gap-y-2 rounded-xl border px-4 py-3 text-sm">
-        <span>
-          <span className="text-muted-foreground">People </span>
+          <span>
+            <span className="text-muted-foreground">Active members </span>
           <span className="font-semibold tabular-nums">{members.length}</span>
-        </span>
-        <span>
-          <span className="text-muted-foreground">Active </span>
-          <span className="font-semibold tabular-nums">
-            {members.filter((m) => m.status === "active").length}
-          </span>
         </span>
         <span>
           <span className="text-muted-foreground">Teams </span>
@@ -175,14 +180,24 @@ export function TeamsPage() {
         </span>
       </div>
 
-      <div className="flex flex-wrap gap-1">
+      <div className="flex gap-2 border-b pb-3">
+        <Button size="sm" variant={activeView === "people" ? "default" : "ghost"} onClick={() => setActiveView("people")}>People</Button>
+        <Button size="sm" variant={activeView === "teams" ? "default" : "ghost"} onClick={() => setActiveView("teams")}>Teams &amp; Divisions</Button>
+      </div>
+
+      {activeView === "people" ? <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+        <div className="relative w-full sm:max-w-xs">
+          <SearchIcon className="text-muted-foreground pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2" />
+          <Input aria-label="Search people, titles and teams" placeholder="Search people, titles and teams" value={search} onChange={(event) => setSearch(event.target.value)} className="pl-9" />
+        </div>
+        <div className="flex flex-wrap gap-1">
         <Button
           size="sm"
           variant={teamFilter === "all" ? "default" : "outline"}
           className="rounded-full"
           onClick={() => setTeamFilter("all")}
         >
-          All teams
+          Team · All
         </Button>
         {teams.map((t) => (
           <Button
@@ -195,7 +210,8 @@ export function TeamsPage() {
             {t}
           </Button>
         ))}
-      </div>
+        </div>
+      </div> : null}
 
       {loading ? (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -203,10 +219,24 @@ export function TeamsPage() {
           <Skeleton className="h-32 rounded-xl" />
           <Skeleton className="h-32 rounded-xl" />
         </div>
+      ) : activeView === "teams" ? (
+        teams.length === 0 ? (
+          <EmptyState icon={<UsersIcon className="size-8 opacity-40" />} title="No teams assigned" description={canManageTeam ? "Assign a team to a member from the People view to create the first team group." : "No active members have a team assignment yet."} />
+        ) : (
+          <div className="cosmos-people-grid">
+            {teams.map((team) => {
+              const teamMembers = members.filter((member) => member.team === team)
+              return <Card key={team} className="cosmos-person-card p-5">
+                <div className="flex items-start justify-between gap-3"><div><span className="cosmos-account-preview-label">MEMBER TEAM</span><h2 className="mt-2 text-base font-semibold">{team}</h2></div><Badge variant="secondary">{teamMembers.length} {teamMembers.length === 1 ? "member" : "members"}</Badge></div>
+                <div className="mt-4 flex flex-col gap-3">{teamMembers.map((member) => <div key={member.memberId} className="flex items-center gap-3 border-t pt-3"><Avatar><AvatarFallback>{member.name.split(/\s+/).map((part) => part[0]).join("").slice(0, 2).toUpperCase()}</AvatarFallback></Avatar><div className="min-w-0"><strong className="block truncate text-sm">{member.name}</strong><span className="text-muted-foreground block truncate text-xs">{member.title || member.role}</span></div></div>)}</div>
+              </Card>
+            })}
+          </div>
+        )
       ) : filtered.length === 0 ? (
         <EmptyState icon={<UsersIcon className="size-8 opacity-40" />} title="No members" />
       ) : (
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="cosmos-people-grid">
           {filtered.map((member) => {
             const initials = member.name
               .split(/\s+/)
@@ -215,38 +245,22 @@ export function TeamsPage() {
               .slice(0, 2)
               .toUpperCase()
             return (
-              <Card key={member.memberId} className="flex flex-col gap-3 p-4">
-                <div className="flex items-start gap-3">
-                  <Avatar>
-                    <AvatarFallback>{initials}</AvatarFallback>
-                  </Avatar>
-                  <div className="min-w-0 flex-1">
-                    <div className="font-medium">{member.name}</div>
-                    <div className="text-muted-foreground truncate text-xs">{member.email}</div>
-                    <div className="text-muted-foreground mt-0.5 text-xs">{member.title}</div>
+              <Card key={member.memberId} className="cosmos-person-card">
+                <div className="cosmos-person-card-cover" />
+                <div className="cosmos-person-card-content">
+                  <div className="cosmos-person-card-top">
+                    <Avatar className="cosmos-person-avatar"><AvatarFallback>{initials}</AvatarFallback></Avatar>
+                    <Badge variant="secondary" className="capitalize">{member.status}</Badge>
                   </div>
-                  <Badge
-                    variant="secondary"
-                    className={cn(
-                      "capitalize",
-                      member.status === "invited" && "opacity-70",
-                    )}
-                  >
-                    {member.status}
-                  </Badge>
+                  <div className="cosmos-person-card-identity">
+                    <strong>{member.name}</strong>
+                    <span>{member.title || member.role || "Team member"}</span>
+                    <span>{member.team || "No team assigned"}</span>
+                  </div>
+                  {member.email ? <div className="cosmos-person-card-contact">{member.email}</div> : <div className="cosmos-person-card-contact">Contact details unavailable</div>}
+                  <div className="cosmos-person-card-footer"><span>Agency OS · Function</span><Badge variant="outline" className="capitalize">{member.role || "Member"}</Badge></div>
+                  {canManageTeam ? <Button variant="ghost" size="sm" className="self-start" onClick={() => { setEditingTeamMember(member); setTeamDraft(member.team || "") }}>{member.team ? "Change team" : "Assign team"}</Button> : null}
                 </div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <Badge variant="outline">{member.team || "—"}</Badge>
-                  <Badge className="gap-1 capitalize">
-                    <ShieldIcon className="size-3" />
-                    {member.role}
-                  </Badge>
-                </div>
-                {canManageTeam ? (
-                  <Button size="sm" variant="outline" onClick={() => cycleRole(member)}>
-                    Cycle role
-                  </Button>
-                ) : null}
               </Card>
             )
           })}
@@ -259,7 +273,7 @@ export function TeamsPage() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <UserPlusIcon className="size-5 text-primary" />
-              Invite Team Member
+              Invite Members
             </DialogTitle>
             <DialogDescription>
               Generate a shareable invite link for a new colleague to join this agency.
@@ -293,7 +307,9 @@ export function TeamsPage() {
                   >
                     <option value="TEAM_MEMBER">Team Member</option>
                     <option value="PROJECT_MANAGER">Project Manager</option>
-                    <option value="AGENCY_ADMIN">Agency Admin</option>
+                    {isAgencyAdmin ? (
+                      <option value="AGENCY_ADMIN">Agency Admin</option>
+                    ) : null}
                   </select>
                 </div>
 
@@ -369,6 +385,19 @@ export function TeamsPage() {
               </DialogFooter>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={Boolean(editingTeamMember)} onOpenChange={(open) => { if (!open && !savingTeam) setEditingTeamMember(null) }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>{editingTeamMember?.team ? "Change team" : "Assign a team"}</DialogTitle>
+            <DialogDescription>Team names are saved on the member profile. The current workspace does not have separate division records or inherited team permissions.</DialogDescription>
+          </DialogHeader>
+          <form onSubmit={(event) => void saveTeamAssignment(event)} className="flex flex-col gap-4">
+            <div className="flex flex-col gap-2"><Label htmlFor="member-team">Team name</Label><Input id="member-team" value={teamDraft} onChange={(event) => setTeamDraft(event.target.value)} placeholder="e.g. Production" maxLength={80} /></div>
+            <DialogFooter><Button type="button" variant="outline" disabled={savingTeam} onClick={() => setEditingTeamMember(null)}>Cancel</Button><Button type="submit" disabled={savingTeam}>{savingTeam ? <Loader2Icon className="size-4 animate-spin" /> : null}Save team</Button></DialogFooter>
+          </form>
         </DialogContent>
       </Dialog>
     </div>

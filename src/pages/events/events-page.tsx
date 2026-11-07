@@ -1,103 +1,168 @@
 import { useEffect, useMemo, useState } from "react"
-import {
-  CalendarCheckIcon,
-  CalendarDaysIcon,
-  MapPinIcon,
-  PlusIcon,
-  RadioIcon,
-} from "lucide-react"
-import { toast } from "sonner"
+import { Link } from "react-router-dom"
+import { LayersIcon, PlusIcon } from "lucide-react"
 
-import { ConflictDetectorBanner } from "@/components/widgets/conflict-detector-banner"
 import { CreateEventModal } from "@/components/modals"
-import { PageHeader } from "@/components/shared/page-header"
-import { ConfirmationDialog } from "@/components/shared/confirmation-dialog"
-import { EntityFormDialog } from "@/components/shared/entity-form-dialog"
-import { withMutationFeedback } from "@/components/shared/mutation-feedback"
+import {
+  DataFreshnessPill,
+  FRESHNESS_LEGEND,
+  type DataFreshness,
+} from "@/components/events/data-freshness-pill"
+import { UpdateAttendanceDialog } from "@/components/events/update-attendance-dialog"
+import { EmptyState } from "@/components/shared/empty-state"
 import { Button } from "@/components/ui/button"
-import { Card } from "@/components/ui/card"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
 import { Select } from "@/components/ui/select"
 import { Skeleton } from "@/components/ui/skeleton"
-import { Textarea } from "@/components/ui/textarea"
-import { EventOpsMetricsCard } from "@/components/widgets/event-ops-metrics-card"
-import { EventsDatatable } from "@/components/widgets/events-datatable"
-import { PortfolioSummaryCard } from "@/components/widgets/portfolio-summary-card"
-import { StatisticsCard } from "@/components/widgets/statistics-card"
-import { deleteEvent, listEvents, updateEvent } from "@/lib/api/agency"
+import { listAllIncidents, listEvents } from "@/lib/api/agency"
 import { ApiError } from "@/lib/api/client"
 import { useAuth } from "@/lib/auth"
 import { canPerform } from "@/lib/rbac"
-import { useTeamMembers } from "@/hooks/use-agency-data"
-import type { Event, EventStatus } from "@/types/agency"
+import { cn } from "@/lib/utils"
+import type { Event, EventStatus, Incident } from "@/types/agency"
 
-const EVENT_TYPES = ["festival", "concert", "conference", "corporate", "tour", "private", "product"] as const
-const EVENT_STATUSES = ["draft", "planning", "confirmed", "live", "completed", "cancelled"] as const
+type StatusFilter = "all" | "live" | "upcoming"
+type MainTab = "events" | "issues"
 
-type EventFormData = {
-  name: string
-  type: string
-  status: EventStatus
-  location: string
-  venue: string
-  description: string
-  organizerId: string
-  expectedAttendees: string
-  budget: string
-  startDate: string
-  endDate: string
+type EventRowView = {
+  event: Event
+  statusLabel: string
+  statusTone: "critical" | "info" | "success" | "neutral" | "warning"
+  freshness: DataFreshness
+  source: string
+  subtitle: string
+  editionLabel: string
 }
 
-const emptyEventForm: EventFormData = {
-  name: "",
-  type: "corporate",
-  status: "draft",
-  location: "",
-  venue: "",
-  description: "",
-  organizerId: "",
-  expectedAttendees: "",
-  budget: "",
-  startDate: "",
-  endDate: "",
+const EDITION_OPTIONS = [
+  { value: "all", label: "All Editions" },
+  { value: "agency", label: "Agency OS" },
+] as const
+
+function mapStatus(status: EventStatus): { label: string; tone: EventRowView["statusTone"] } {
+  switch (status) {
+    case "live":
+      return { label: "Live", tone: "critical" }
+    case "confirmed":
+      return { label: "Confirmed", tone: "info" }
+    case "planning":
+      return { label: "Planned", tone: "neutral" }
+    case "draft":
+      return { label: "Draft", tone: "neutral" }
+    case "completed":
+      return { label: "Completed", tone: "success" }
+    case "cancelled":
+      return { label: "Cancelled", tone: "neutral" }
+    default:
+      return { label: status, tone: "neutral" }
+  }
 }
 
-function toDateTimeLocal(value?: string) {
-  if (!value) return ""
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return ""
-  const pad = (part: number) => String(part).padStart(2, "0")
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`
+function formatWhen(event: Event): string {
+  if (!event.startDate) return event.location || "Schedule unset"
+  const start = new Date(event.startDate)
+  if (Number.isNaN(start.getTime())) return event.location || "Schedule unset"
+  const now = new Date()
+  const sameDay =
+    start.getFullYear() === now.getFullYear() &&
+    start.getMonth() === now.getMonth() &&
+    start.getDate() === now.getDate()
+  const when = sameDay
+    ? `Tonight · ${start.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}`
+    : start.toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" })
+  const place = event.venue || event.location
+  return place ? `${when} · ${place}` : when
 }
 
-const STATUS_COLORS: Record<string, string> = {
-  draft: "var(--chart-3)",
-  planning: "var(--chart-2)",
-  confirmed: "var(--chart-4)",
-  live: "var(--chart-1)",
-  completed: "var(--chart-5)",
-  cancelled: "var(--muted-foreground)",
+function formatUpdated(event: Event): string {
+  const raw = event.updatedAt || event.createdAt
+  if (!raw) return "Agency OS record"
+  const d = new Date(raw)
+  if (Number.isNaN(d.getTime())) return "Agency OS record"
+  return `Agency OS · updated ${d.toLocaleString(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  })}`
+}
+
+/**
+ * Freshness is about the data feed, not event lifecycle status.
+ * Agency OS events have no edition sync / scanner feed fields — mark Unverified
+ * rather than inventing Live/Delayed/Disconnected from status alone.
+ */
+function deriveFreshness(event: Event): DataFreshness {
+  const meta = event.metadata
+  const raw =
+    typeof meta?.dataFreshness === "string"
+      ? meta.dataFreshness
+      : typeof meta?.freshness === "string"
+        ? meta.freshness
+        : null
+  if (raw === "Live" || raw === "Delayed" || raw === "Disconnected" || raw === "Unverified") {
+    return raw
+  }
+  return "Unverified"
+}
+
+function deriveSource(event: Event, freshness: DataFreshness): string {
+  const meta = event.metadata
+  if (typeof meta?.dataSource === "string" && meta.dataSource.trim()) return meta.dataSource.trim()
+  if (typeof meta?.source === "string" && meta.source.trim()) return meta.source.trim()
+  if (freshness === "Unverified" && event.expectedAttendees != null) {
+    return `Agency OS · expected ${event.expectedAttendees.toLocaleString()} attendees · ${formatUpdated(event)}`
+  }
+  return formatUpdated(event)
+}
+
+function isUpcoming(event: Event): boolean {
+  if (event.status === "live" || event.status === "completed" || event.status === "cancelled") {
+    return false
+  }
+  if (!event.startDate) return ["planning", "confirmed", "draft"].includes(event.status)
+  const start = new Date(event.startDate)
+  if (Number.isNaN(start.getTime())) return true
+  return start.getTime() >= Date.now() - 60 * 60 * 1000
+}
+
+function buildRow(event: Event): EventRowView {
+  const status = mapStatus(event.status)
+  const freshness = deriveFreshness(event)
+  return {
+    event,
+    statusLabel: status.label,
+    statusTone: status.tone,
+    freshness,
+    source: deriveSource(event, freshness),
+    subtitle: formatWhen(event),
+    editionLabel: "Agency OS",
+  }
 }
 
 export function EventsPage() {
   const { user } = useAuth()
-  const { data: teamMembers } = useTeamMembers()
   const canWrite = canPerform(user?.role, "write_ops")
   const [events, setEvents] = useState<Event[]>([])
+  const [incidents, setIncidents] = useState<Incident[]>([])
   const [loading, setLoading] = useState(true)
+  const [issuesLoading, setIssuesLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [eventFormMode, setEventFormMode] = useState<"edit" | null>(null)
-  const [editingEvent, setEditingEvent] = useState<Event | null>(null)
+  const [issuesError, setIssuesError] = useState<string | null>(null)
+  const [tab, setTab] = useState<MainTab>("events")
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all")
+  const [editionFilter, setEditionFilter] = useState("all")
   const [createOpen, setCreateOpen] = useState(false)
-  const [saving, setSaving] = useState(false)
-  const [pendingEventId, setPendingEventId] = useState<string | null>(null)
-  const [deleteTarget, setDeleteTarget] = useState<Event | null>(null)
-  const [form, setForm] = useState<EventFormData>(emptyEventForm)
+  const [attendanceEvent, setAttendanceEvent] = useState<Event | null>(null)
 
-  async function reload() {
+  async function reloadEvents() {
     const response = await listEvents({ page: 1, limit: 100 })
     setEvents(response.data ?? [])
+  }
+
+  async function reloadIssues() {
+    const response = await listAllIncidents()
+    setIncidents(response.data ?? [])
+    setIssuesError(null)
   }
 
   useEffect(() => {
@@ -106,7 +171,7 @@ export function EventsPage() {
       setLoading(true)
       setError(null)
       try {
-        await reload()
+        await reloadEvents()
       } catch (err) {
         if (!cancelled) {
           setError(err instanceof ApiError ? err.message : "Failed to load events")
@@ -121,342 +186,386 @@ export function EventsPage() {
     }
   }, [])
 
-  function openCreateDialog() {
-    setCreateOpen(true)
-  }
-
-  function openEditDialog(event: Event) {
-    setEditingEvent(event)
-    setForm({
-      name: event.name,
-      type: event.type,
-      status: event.status,
-      location: event.location,
-      venue: event.venue ?? "",
-      description: event.description ?? "",
-      organizerId: event.organizerId ?? "",
-      expectedAttendees: event.expectedAttendees != null ? String(event.expectedAttendees) : "",
-      budget: event.budget != null ? String(event.budget) : "",
-      startDate: toDateTimeLocal(event.startDate),
-      endDate: toDateTimeLocal(event.endDate),
-    })
-    setEventFormMode("edit")
-  }
-
-  async function handleSaveEvent() {
-    if (!canWrite || !editingEvent) return
-    if (!form.name.trim() || !form.type || !form.location.trim() || !form.startDate || !form.endDate) {
-      toast.error("Name, type, location, start date, and end date are required")
-      return
-    }
-    const startDate = new Date(form.startDate)
-    const endDate = new Date(form.endDate)
-    const expectedAttendees = form.expectedAttendees ? Number(form.expectedAttendees) : undefined
-    const budget = form.budget ? Number(form.budget) : undefined
-    if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime()) || startDate > endDate) {
-      toast.error("Start date must be before or equal to end date")
-      return
-    }
-    if (
-      (expectedAttendees !== undefined && (!Number.isInteger(expectedAttendees) || expectedAttendees <= 0)) ||
-      (budget !== undefined && (!Number.isFinite(budget) || budget <= 0))
-    ) {
-      toast.error("Attendees must be a positive whole number and budget must be positive")
-      return
-    }
-    setSaving(true)
-    try {
-      const payload = {
-        name: form.name.trim(),
-        type: form.type,
-        status: form.status,
-        location: form.location.trim(),
-        venue: form.venue.trim() || undefined,
-        description: form.description.trim() || undefined,
-        organizerId: form.organizerId.trim() || undefined,
-        expectedAttendees,
-        budget,
-        startDate: startDate.toISOString(),
-        endDate: endDate.toISOString(),
+  useEffect(() => {
+    let cancelled = false
+    async function loadIssues() {
+      setIssuesLoading(true)
+      setIssuesError(null)
+      try {
+        await reloadIssues()
+      } catch (err) {
+        if (!cancelled) {
+          setIncidents([])
+          setIssuesError(
+            err instanceof ApiError ? err.message : "Failed to load issues",
+          )
+        }
+      } finally {
+        if (!cancelled) setIssuesLoading(false)
       }
-      await withMutationFeedback(updateEvent(editingEvent.eventId, payload), {
-        loading: "Updating event...",
-        success: "Event updated",
-        error: (err) => err instanceof ApiError ? err.message : "Update failed",
-      })
-      setForm(emptyEventForm)
-      setEditingEvent(null)
-      setEventFormMode(null)
-      await reload()
-    } catch (err) {
-      toast.error(err instanceof ApiError ? err.message : "Update failed")
-    } finally {
-      setSaving(false)
     }
-  }
+    void loadIssues()
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
-  async function handleEdit(event: Event) {
-    if (!canWrite) return
-    openEditDialog(event)
-  }
-
-  async function handleDelete(event: Event) {
-    if (!canWrite) return
-    setSaving(true)
-    setPendingEventId(event.eventId)
+  async function retryIssues() {
+    setIssuesLoading(true)
+    setIssuesError(null)
     try {
-      await withMutationFeedback(
-        deleteEvent(event.eventId),
-        { loading: "Archiving event...", success: "Event archived", error: (err) => err instanceof ApiError ? err.message : "Archive failed" },
+      await reloadIssues()
+    } catch (err) {
+      setIncidents([])
+      setIssuesError(
+        err instanceof ApiError ? err.message : "Failed to load issues",
       )
-      await reload()
-    } catch {
     } finally {
-      setSaving(false)
-      setPendingEventId(null)
-      setDeleteTarget(null)
+      setIssuesLoading(false)
     }
   }
 
-  const liveCount = events.filter((e) => e.status === "live").length
-  const pipelineCount = events.filter((e) =>
-    ["live", "confirmed", "planning"].includes(e.status),
-  ).length
-  const venues = new Set(events.map((e) => e.location).filter(Boolean)).size
-  const totalBudget = events.reduce((sum, e) => sum + (e.budget ?? 0), 0)
-  const planPercentage =
-    events.length === 0 ? 0 : Math.round((pipelineCount / events.length) * 100)
+  const rows = useMemo(() => events.map(buildRow), [events])
 
-  const statusSlices = useMemo(() => {
-    const counts = new Map<string, number>()
-    for (const event of events) {
-      counts.set(event.status, (counts.get(event.status) ?? 0) + 1)
-    }
-    return [...counts.entries()].map(([status, count]) => ({
-      status,
-      count,
-      fill: STATUS_COLORS[status] ?? "var(--primary)",
-    }))
-  }, [events])
+  const filteredRows = useMemo(() => {
+    return rows.filter((row) => {
+      if (editionFilter === "agency" || editionFilter === "all") {
+        // Only Agency OS records exist in this API.
+      } else {
+        return false
+      }
+      if (statusFilter === "live") return row.event.status === "live"
+      if (statusFilter === "upcoming") return isUpcoming(row.event)
+      return true
+    })
+  }, [rows, statusFilter, editionFilter])
 
-  const typeLines = useMemo(() => {
-    const counts = new Map<string, number>()
-    for (const event of events) {
-      const key = event.type || "other"
-      counts.set(key, (counts.get(key) ?? 0) + 1)
-    }
-    const total = events.length || 1
-    return [...counts.entries()]
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 4)
-      .map(([type, count]) => ({
-        key: type,
-        label: type,
-        detail: `${count} event${count === 1 ? "" : "s"}`,
-        value: String(count),
-        progressPercentage: Math.round((count / total) * 100),
-      }))
-  }, [events])
+  const openIssues = useMemo(
+    () =>
+      incidents.filter((incident) => {
+        const status = (incident.status || "").toLowerCase()
+        return status === "open" || status === "in_progress" || status === "escalated"
+      }),
+    [incidents],
+  )
+
+  const agencyLabel = user?.agencyName || "Workspace"
 
   return (
-    <div className="flex flex-col gap-6">
-      <PageHeader
-        title="Events"
-        description="Agency calendar and show pipeline — open a row for cues, crew, and incidents."
-        actions={
-          canWrite ? <Button size="sm" onClick={openCreateDialog}>
-            <PlusIcon className="size-3.5" />
-            New event
-          </Button> : undefined
-        }
-      />
+    <div className="cosmos-events-page">
+      <div className="cosmos-events-page__head">
+        <div>
+          <p className="cosmos-events-page__eyebrow">
+            {agencyLabel} · Workspace
+          </p>
+          <div className="cosmos-events-page__title-row">
+            <h1>Events</h1>
+            {canWrite ? (
+              <Button size="sm" variant="secondary" onClick={() => setCreateOpen(true)}>
+                <PlusIcon className="size-3.5" />
+                New event
+              </Button>
+            ) : null}
+          </div>
+        </div>
+      </div>
 
       {error ? (
-        <Card className="border-destructive/40 text-destructive px-4 py-3 text-sm">
+        <div className="cosmos-events-page__error" role="alert">
           {error}
-        </Card>
+        </div>
       ) : null}
 
-      <ConflictDetectorBanner />
+      <div className="cosmos-events-tabs" role="tablist" aria-label="Events sections">
+        <button
+          type="button"
+          role="tab"
+          aria-selected={tab === "events"}
+          className={cn(tab === "events" && "is-active")}
+          onClick={() => setTab("events")}
+        >
+          Events
+          <span>{loading ? "…" : String(events.length)}</span>
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={tab === "issues"}
+          className={cn(tab === "issues" && "is-active")}
+          onClick={() => setTab("issues")}
+        >
+          Issues
+          <span>
+            {issuesLoading ? "…" : issuesError ? "!" : String(openIssues.length)}
+          </span>
+        </button>
+      </div>
 
-      <div className="grid grid-cols-2 gap-6 lg:grid-cols-3">
-        <div className="col-span-full grid gap-6 sm:grid-cols-2 xl:grid-cols-4">
-          {loading ? (
-            <>
-              <Skeleton className="h-32" />
-              <Skeleton className="h-32" />
-              <Skeleton className="h-32" />
-              <Skeleton className="h-32" />
-            </>
-          ) : (
-            <>
-              <StatisticsCard
-                icon={<CalendarDaysIcon className="size-4" />}
-                value={String(events.length)}
-                title="Total events"
-                changePercentage="all statuses"
-              />
-              <StatisticsCard
-                icon={<RadioIcon className="size-4" />}
-                value={String(liveCount)}
-                title="Live now"
-                changePercentage={`${pipelineCount} in pipeline`}
-              />
-              <StatisticsCard
-                icon={<CalendarCheckIcon className="size-4" />}
-                value={String(pipelineCount)}
-                title="Active pipeline"
-                changePercentage={`${planPercentage}% of book`}
-              />
-              <StatisticsCard
-                icon={<MapPinIcon className="size-4" />}
-                value={String(venues)}
-                title="Locations"
-                changePercentage={
-                  totalBudget > 0 ? `$${Math.round(totalBudget / 1000)}k budget` : "no budget"
+      {tab === "events" ? (
+        <>
+          <div className="cosmos-events-toolbar">
+            <div className="cosmos-schedule-seg" role="tablist" aria-label="Event timing">
+              {(
+                [
+                  ["all", "All"],
+                  ["live", "Live"],
+                  ["upcoming", "Upcoming"],
+                ] as const
+              ).map(([value, label]) => (
+                <button
+                  key={value}
+                  type="button"
+                  role="tab"
+                  aria-selected={statusFilter === value}
+                  className={cn(statusFilter === value && "is-active")}
+                  onClick={() => setStatusFilter(value)}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+
+            <Select
+              value={editionFilter}
+              onChange={(e) => setEditionFilter(e.target.value)}
+              aria-label="Filter by edition"
+              className="cosmos-events-filter normal-case"
+            >
+              {EDITION_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </Select>
+
+            <Select
+              value="all"
+              aria-label="Filter by project"
+              className="cosmos-events-filter normal-case"
+              disabled
+              title="Events are not linked to projects in the Agency OS schema yet"
+            >
+              <option value="all">All Projects</option>
+            </Select>
+          </div>
+
+          <div className="cosmos-events-board">
+            {loading ? (
+              <div className="cosmos-events-board__loading">
+                <Skeleton className="h-16 w-full" />
+                <Skeleton className="h-16 w-full" />
+                <Skeleton className="h-16 w-full" />
+              </div>
+            ) : filteredRows.length === 0 ? (
+              <EmptyState
+                title="No events in this view"
+                description={
+                  statusFilter === "live"
+                    ? "Nothing is live right now."
+                    : statusFilter === "upcoming"
+                      ? "No upcoming events match the current filters."
+                      : "Create an event to populate this board."
                 }
               />
-            </>
+            ) : (
+              <table className="cosmos-events-table">
+                <thead>
+                  <tr>
+                    <th>Event</th>
+                    <th>Status</th>
+                    <th>Data</th>
+                    <th>Source</th>
+                    <th aria-label="Actions" />
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredRows.map((row) => (
+                    <tr key={row.event.eventId}>
+                      <td>
+                        <div className="cosmos-events-table__event">
+                          <span className="cosmos-events-table__thumb" aria-hidden>
+                            {(row.event.name || "?").slice(0, 1).toUpperCase()}
+                          </span>
+                          <div>
+                            <Link
+                              to={`/events/${row.event.eventId}`}
+                              className="cosmos-events-table__name"
+                            >
+                              {row.event.name}
+                            </Link>
+                            <p>
+                              <span className="cosmos-events-table__edition">{row.editionLabel}</span>
+                              {" · "}
+                              {row.subtitle}
+                            </p>
+                          </div>
+                        </div>
+                      </td>
+                      <td>
+                        <span className={cn("project-status-pill", `is-${row.statusTone}`)}>
+                          {row.statusLabel}
+                        </span>
+                      </td>
+                      <td>
+                        <DataFreshnessPill value={row.freshness} />
+                      </td>
+                      <td>
+                        <span className="cosmos-events-table__source" title={row.source}>
+                          {row.source}
+                        </span>
+                      </td>
+                      <td>
+                        <div className="cosmos-events-table__actions">
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            render={<Link to={`/events/${row.event.eventId}`} />}
+                          >
+                            Open
+                          </Button>
+                          {canWrite ? (
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => setAttendanceEvent(row.event)}
+                            >
+                              Update Attendance
+                            </Button>
+                          ) : null}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+
+          <div className="cosmos-events-legend">
+            {FRESHNESS_LEGEND.map((item) => (
+              <div key={item.value} className="cosmos-events-legend__item">
+                <DataFreshnessPill value={item.value} />
+                <span>{item.description}</span>
+              </div>
+            ))}
+          </div>
+
+          <div className="cosmos-events-note">
+            <LayersIcon className="size-3.5 shrink-0" />
+            <p>
+              Events come from Agency OS, Run of Show OS, Artist OS and later editions. Each edition
+              owns its operational tools; this view shows authorized status, schedule, attendance and
+              issues. Connected feeds and multi-edition freshness are not in the Agency OS API yet —
+              records here are Agency OS and marked Unverified unless metadata supplies a freshness
+              value.
+            </p>
+          </div>
+        </>
+      ) : (
+        <div className="cosmos-events-board">
+          {issuesLoading ? (
+            <div className="cosmos-events-board__loading">
+              <Skeleton className="h-16 w-full" />
+              <Skeleton className="h-16 w-full" />
+            </div>
+          ) : issuesError ? (
+            <div className="cosmos-events-issues-error">
+              <p role="alert">{issuesError}</p>
+              <Button type="button" size="sm" variant="secondary" onClick={() => void retryIssues()}>
+                Retry
+              </Button>
+            </div>
+          ) : openIssues.length === 0 ? (
+            <EmptyState
+              title="No open issues"
+              description="Open and escalated incidents across events appear here."
+            />
+          ) : (
+            <table className="cosmos-events-table cosmos-events-table--issues">
+              <thead>
+                <tr>
+                  <th>Issue</th>
+                  <th>Severity</th>
+                  <th>Status</th>
+                  <th>Event</th>
+                  <th aria-label="Actions" />
+                </tr>
+              </thead>
+              <tbody>
+                {openIssues.map((incident) => {
+                  const event = events.find((e) => e.eventId === incident.eventId)
+                  return (
+                    <tr key={incident.incidentId}>
+                      <td>
+                        <p className="cosmos-events-table__name">
+                          {incident.title || "Untitled issue"}
+                        </p>
+                        {incident.location ? (
+                          <p className="cosmos-events-table__muted">{incident.location}</p>
+                        ) : null}
+                      </td>
+                      <td>
+                        <span
+                          className={cn(
+                            "project-status-pill",
+                            incident.severity === "critical"
+                              ? "is-critical"
+                              : incident.severity === "warning"
+                                ? "is-warning"
+                                : "is-info",
+                          )}
+                        >
+                          {incident.severity}
+                        </span>
+                      </td>
+                      <td>
+                        <span className="project-status-pill is-neutral">
+                          {(incident.status || "open").replace(/_/g, " ")}
+                        </span>
+                      </td>
+                      <td>
+                        <span className="cosmos-events-table__source">
+                          {event?.name || incident.eventId}
+                        </span>
+                      </td>
+                      <td>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          render={<Link to={`/events/${incident.eventId}`} />}
+                        >
+                          Open
+                        </Button>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
           )}
         </div>
+      )}
 
-        <PortfolioSummaryCard
-          className="col-span-full justify-between gap-5 lg:col-span-1"
-          loading={loading}
-          title="By type"
-          headlineValue={String(events.length)}
-          trend="up"
-          percentage={planPercentage}
-          comparisonText="Share of events still in active pipeline"
-          items={typeLines}
-        />
-
-        <EventOpsMetricsCard
-          className="col-span-full *:data-[slot=card-content]:gap-6 lg:col-span-2"
-          loading={loading}
-          planPercentage={planPercentage}
-          metrics={[
-            { title: "Events", value: String(events.length), icon: "events" },
-            { title: "Live", value: String(liveCount), icon: "cues" },
-            { title: "Pipeline", value: String(pipelineCount), icon: "projects" },
-            {
-              title: "Budget",
-              value: totalBudget > 0 ? `$${Math.round(totalBudget / 1000)}k` : "—",
-              icon: "incidents",
-            },
-          ]}
-          statusSlices={statusSlices}
-        />
-
-        <Card className="col-span-full w-full py-4">
-          <div className="mb-4 px-4">
-            <h2 className="text-lg font-semibold">Event register</h2>
-            <p className="text-muted-foreground text-sm">Open an event to review cues, crew, incidents, and run details.</p>
-          </div>
-          {loading ? (
-            <div className="px-4">
-              <Skeleton className="h-64 w-full" />
-            </div>
-          ) : (
-            <div className="px-4">
-               <EventsDatatable data={events} canWrite={canWrite && !saving} onEdit={handleEdit} onDelete={(event) => setDeleteTarget(event)} />
-            </div>
-          )}
-        </Card>
-      </div>
       <CreateEventModal
         open={createOpen}
         onOpenChange={setCreateOpen}
         onSuccess={async () => {
-          await reload()
+          await reloadEvents()
         }}
       />
-      <EntityFormDialog
-        open={eventFormMode === "edit"}
+
+      <UpdateAttendanceDialog
+        open={Boolean(attendanceEvent)}
         onOpenChange={(open) => {
-          if (!open && !saving) {
-            setEventFormMode(null)
-            setEditingEvent(null)
-          }
+          if (!open) setAttendanceEvent(null)
         }}
-        title="Edit event"
-        description="Set the event schedule, venue, status, and operating details."
-        onSubmit={handleSaveEvent}
-        submitLabel="Save changes"
-        pending={saving}
-        submitDisabled={!form.name.trim() || !form.type || !form.location.trim() || !form.startDate || !form.endDate}
-        maxWidth="max-w-2xl"
-      >
-        <div className="grid gap-4 sm:grid-cols-2">
-          <div className="grid gap-1.5">
-            <Label htmlFor="event-name">Name</Label>
-            <Input id="event-name" value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} placeholder="Event name" required />
-          </div>
-          <div className="grid gap-1.5">
-            <Label htmlFor="event-type">Type</Label>
-            <Select id="event-type" value={form.type} onChange={(e) => setForm((f) => ({ ...f, type: e.target.value }))}>
-              {EVENT_TYPES.map((type) => <option key={type} value={type}>{type}</option>)}
-            </Select>
-          </div>
-          <div className="grid gap-1.5">
-            <Label htmlFor="event-status">Status</Label>
-            <Select id="event-status" value={form.status} onChange={(e) => setForm((f) => ({ ...f, status: e.target.value as EventStatus }))}>
-              {EVENT_STATUSES.map((status) => <option key={status} value={status}>{status}</option>)}
-            </Select>
-          </div>
-          <div className="grid gap-1.5">
-            <Label htmlFor="event-location">Location</Label>
-            <Input id="event-location" value={form.location} onChange={(e) => setForm((f) => ({ ...f, location: e.target.value }))} placeholder="City or site" required />
-          </div>
-          <div className="grid gap-1.5">
-            <Label htmlFor="event-venue">Venue</Label>
-            <Input id="event-venue" value={form.venue} onChange={(e) => setForm((f) => ({ ...f, venue: e.target.value }))} placeholder="Venue name" />
-          </div>
-          <div className="grid gap-1.5">
-            <Label htmlFor="event-organizer">Lead Organizer</Label>
-            <Select id="event-organizer" value={form.organizerId} onChange={(e) => setForm((f) => ({ ...f, organizerId: e.target.value }))}>
-              <option value="">Select lead organizer</option>
-              {teamMembers.map((member) => (
-                <option key={member.memberId} value={member.memberId}>
-                  {member.name} {member.role ? `(${member.role})` : ""}
-                </option>
-              ))}
-              {form.organizerId && !teamMembers.some((m) => m.memberId === form.organizerId) ? (
-                <option value={form.organizerId}>Current Organizer</option>
-              ) : null}
-            </Select>
-          </div>
-          <div className="grid gap-1.5">
-            <Label htmlFor="event-start">Start</Label>
-            <Input id="event-start" type="datetime-local" value={form.startDate} onChange={(e) => setForm((f) => ({ ...f, startDate: e.target.value }))} required />
-          </div>
-          <div className="grid gap-1.5">
-            <Label htmlFor="event-end">End</Label>
-            <Input id="event-end" type="datetime-local" value={form.endDate} onChange={(e) => setForm((f) => ({ ...f, endDate: e.target.value }))} required />
-          </div>
-          <div className="grid gap-1.5">
-            <Label htmlFor="event-attendees">Expected attendees</Label>
-            <Input id="event-attendees" type="number" min="1" step="1" value={form.expectedAttendees} onChange={(e) => setForm((f) => ({ ...f, expectedAttendees: e.target.value }))} placeholder="Optional" />
-          </div>
-          <div className="grid gap-1.5">
-            <Label htmlFor="event-budget">Budget</Label>
-            <Input id="event-budget" type="number" min="0.01" step="0.01" value={form.budget} onChange={(e) => setForm((f) => ({ ...f, budget: e.target.value }))} placeholder="Optional" />
-          </div>
-        </div>
-        <div className="grid gap-1.5">
-          <Label htmlFor="event-description">Description</Label>
-          <Textarea id="event-description" value={form.description} onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))} placeholder="Event description" />
-        </div>
-      </EntityFormDialog>
-      <ConfirmationDialog
-        open={Boolean(deleteTarget)}
-        onOpenChange={(open) => { if (!open && !pendingEventId) setDeleteTarget(null) }}
-        title="Archive event?"
-        description={deleteTarget ? `This will archive “${deleteTarget.name}”.` : undefined}
-        confirmLabel="Archive"
-        destructive
-        pending={Boolean(pendingEventId)}
-        onConfirm={() => deleteTarget ? handleDelete(deleteTarget) : undefined}
+        event={attendanceEvent}
+        freshness={attendanceEvent ? deriveFreshness(attendanceEvent) : "Unverified"}
+        feedNote={
+          attendanceEvent
+            ? `Agency OS has no live attendance feed for “${attendanceEvent.name}”. Manual audited updates are designed; the write API is not available yet.`
+            : undefined
+        }
       />
     </div>
   )

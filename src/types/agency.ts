@@ -5,6 +5,8 @@ export type ApiEnvelope<T> = {
   message?: string
   error?: string
   timestamp?: string
+  privatePhoneAccess?: boolean
+  financeAccess?: boolean
 }
 
 export type AuthUser = {
@@ -380,6 +382,59 @@ export type Vendor = {
   regions?: string[]
   skills?: string[]
   notes?: string
+  scorecard?: Partial<{
+    quality: number | null
+    onTimeDelivery: number | null
+    budgetAccuracy: number | null
+    communication: number | null
+  }>
+  projects?: Array<{
+    projectId: string
+    name: string
+    clientName: string
+    status: string
+    startDate: string | null
+    endDate: string | null
+    contractAmount: number | null
+  }>
+  totalContracted?: number
+  financeAccess?: boolean
+  quotes?: VendorQuote[]
+}
+
+export type VendorQuote = {
+  quoteId: string
+  projectId: string
+  projectName: string
+  title: string
+  request: string
+  status: string
+  dueAt: string | null
+  createdAt: string | null
+  response?: string
+  amount?: number | null
+  currency?: string
+  shares: Array<{ shareId: string; expiresAt: string; revokedAt: string | null; createdAt: string }>
+}
+
+export type VendorSharedQuote = {
+  quoteId: string
+  title: string
+  request: string
+  projectName: string
+  vendorName: string
+  agencyName: string
+  dueAt: string | null
+  status: string
+  expiresAt: string
+}
+
+export type ApprovalAssetFile = {
+  fileId?: string
+  url?: string | null
+  filename?: string | null
+  mimeType?: string | null
+  size?: number | null
 }
 
 export type Approval = {
@@ -388,8 +443,16 @@ export type Approval = {
   entityType: string
   entityId: string
   assetId?: string
+  assetName?: string
+  assetFileType?: string
+  assetUrl?: string
+  assetVersion?: string
+  assetStatus?: string
+  assetFiles?: ApprovalAssetFile[]
   projectId?: string
+  projectName?: string | null
   clientId?: string
+  clientName?: string | null
   requester?: string
   reviewer?: string
   status: string
@@ -413,14 +476,53 @@ export type ActivityItem = {
   createdAt: string
 }
 
+/** Safe projection from GET /api/v1/agency/projects/:projectId/activity */
+export type ProjectActivityItem = {
+  id: string
+  timestamp: string
+  actor: string
+  entityType: string
+  entityId: string
+  action: string
+  summary: string
+}
+
+export type ProjectActivityResponse = {
+  success: boolean
+  projectId: string
+  items: ProjectActivityItem[]
+  nextCursor: string | null
+  hasMore: boolean
+  count: number
+  error?: string
+}
+
 export type TeamMember = {
   memberId: string
   name: string
   email: string
   role: string
+  jobFunction?: string | null
+  permissionRole?: string | null
   title?: string
   team?: string
+  phone?: string | null
   status: string
+  createdAt?: string | null
+  updatedAt?: string | null
+}
+
+export type AgencyInvitation = {
+  id: string
+  email?: string | null
+  jobFunction: string
+  permissionRole: string
+  status: string
+  expiresAt: string
+  acceptedAt?: string | null
+  createdAt?: string
+  invitedBy?: string | null
+  agencyName?: string | null
 }
 
 export type Comment = {
@@ -442,6 +544,25 @@ export type CrmContact = {
   phone?: string
   role?: string
   isPrimary?: boolean
+  contactDetails?: {
+    department?: string
+    seniority?: string
+    city?: string
+    state?: string
+    country?: string
+    linkedinUrl?: string
+    twitterUrl?: string
+  }
+  portalSharedFields?: string[]
+  privatePhoneAccess?: boolean
+  projects?: Array<{
+    projectId: string
+    projectName: string
+    clientName: string
+    projectStatus: string
+    role: string
+    notes: string
+  }>
 }
 
 export type OpportunityStage =
@@ -523,4 +644,113 @@ export type CrmSummary = {
   weightedPipeline: number
   wonValue: number
   wonCount: number
+}
+
+/** Workspace messaging (00.10 · Messages). Separate from entity Comment. */
+/** Producer Dashboard customize layout (00.10 · 55–58). */
+export type DashboardWidgetId =
+  | "kpi_active_projects"
+  | "kpi_decisions"
+  | "kpi_unread"
+  | "kpi_portfolio_budget"
+  | "projects"
+  | "needs_you"
+  | "spend_vs_plan"
+  | "milestones"
+  | "crew_attendance"
+  | "unread_conversations"
+  | "reviews_waiting"
+  | "recent_feedback"
+  | "invoices_over_time"
+  | string
+
+export type DashboardWidgetCatalogItem = {
+  id: DashboardWidgetId
+  label: string
+  description: string
+  access: "finance" | "reputation" | null
+  locked: boolean
+  dataAvailable: boolean
+  addNeverGrantsAccess?: boolean
+}
+
+export type DashboardLayout = {
+  version: number
+  mode: "default" | "custom"
+  widgets: DashboardWidgetId[]
+  updatedAt?: string | null
+  catalog?: DashboardWidgetCatalogItem[]
+  defaults?: DashboardWidgetId[]
+  persisted?: string
+}
+
+export type ConversationAudience = "INTERNAL" | "CLIENT" | "VENDOR" | "ANNOUNCEMENTS"
+export type ConversationKind = "CHANNEL" | "DIRECT"
+
+export type ConversationMemberSummary = {
+  memberId: string
+  name: string
+  title?: string | null
+  role?: string
+  lastReadAt?: string | null
+}
+
+export type ConversationSummary = {
+  conversationId: string
+  kind: ConversationKind
+  name: string
+  slug: string
+  displayName: string
+  audience: ConversationAudience
+  audienceLabel: string
+  projectId?: string | null
+  projectName?: string | null
+  clientName?: string | null
+  memberCount?: number | null
+  unreadCount: number
+  myRole?: string | null
+  createdAt?: string
+  updatedAt?: string
+  members?: ConversationMemberSummary[]
+  externalMembershipSupported?: boolean
+  externalMembershipBlocker?: string
+}
+
+export type ConversationListPayload = {
+  conversations: ConversationSummary[]
+  groups: Record<string, ConversationSummary[]>
+  viewer?: ConversationMemberSummary | null
+}
+
+export type ConversationMessage = {
+  messageId: string
+  conversationId: string
+  body: string
+  deleted?: boolean
+  author: ConversationMemberSummary | null
+  mentionMemberIds: string[]
+  parentMessageId?: string | null
+  replyCount: number
+  createdTaskId?: string | null
+  createdAt: string
+  editedAt?: string | null
+}
+
+export type ConversationMessagesPage = {
+  items: ConversationMessage[]
+  nextCursor: string | null
+  hasMore: boolean
+  limit: number
+}
+
+export type RestrictedMention = {
+  memberId: string
+  name: string
+  reason: string
+  message: string
+}
+
+export type PostMessageResult = {
+  message: ConversationMessage
+  restrictedMentions: RestrictedMention[]
 }

@@ -10,6 +10,13 @@ const ROLE_ROUTES: Record<string, string[]> = {
   admin: ["*"],
   pm: [
     "/",
+    "/hub",
+    "/hub/members",
+    "/hub/reports",
+    "/hub/records",
+    "/hub/account",
+    "/hub/organization",
+    "/hub/reputation",
     "/dashboard",
     "/events",
     "/spatial-stage",
@@ -20,6 +27,8 @@ const ROLE_ROUTES: Record<string, string[]> = {
     "/campaigns",
     "/projects",
     "/tasks",
+    "/messages",
+    "/schedule",
     "/milestones",
     "/assets",
     "/approvals",
@@ -34,12 +43,20 @@ const ROLE_ROUTES: Record<string, string[]> = {
   ],
   producer: [
     "/",
+    "/hub",
+    "/hub/reports",
+    "/hub/records",
+    "/hub/account",
+    "/hub/organization",
+    "/hub/reputation",
     "/dashboard",
     "/events",
     "/spatial-stage",
     "/activity",
     "/projects",
     "/tasks",
+    "/messages",
+    "/schedule",
     "/milestones",
     "/assets",
     "/approvals",
@@ -51,10 +68,18 @@ const ROLE_ROUTES: Record<string, string[]> = {
   ],
   ops: [
     "/",
+    "/hub",
+    "/hub/reports",
+    "/hub/records",
+    "/hub/account",
+    "/hub/organization",
+    "/hub/reputation",
     "/dashboard",
     "/events",
     "/spatial-stage",
     "/activity",
+    "/schedule",
+    "/messages",
     "/cues",
     "/crew",
     "/incidents",
@@ -63,7 +88,7 @@ const ROLE_ROUTES: Record<string, string[]> = {
     "/ai",
     "/settings",
   ],
-  creative: ["/", "/dashboard", "/events", "/spatial-stage", "/projects", "/tasks", "/milestones", "/assets", "/approvals", "/activity", "/ai", "/settings"],
+  creative: ["/", "/hub", "/hub/reports", "/hub/records", "/hub/account", "/hub/organization", "/hub/reputation", "/dashboard", "/events", "/spatial-stage", "/projects", "/tasks", "/messages", "/schedule", "/milestones", "/assets", "/approvals", "/activity", "/ai", "/settings"],
   client: ["/portal"],
 }
 
@@ -83,7 +108,7 @@ export function canAccessRoute(role: AppRole | null | undefined, pathname: strin
   if (!role) return false
   const norm = normalizeRole(role)
   if (norm === "admin") return true
-  if (pathname === "/dashboard" || pathname === "/") return true
+  if (pathname === "/dashboard" || pathname === "/hub" || pathname === "/") return true
   const allowed = ROLE_ROUTES[norm] || ["*"]
   if (pathname.startsWith("/portal")) return norm === "client"
   if (allowed.includes("*")) return true
@@ -95,7 +120,14 @@ export function canAccessRoute(role: AppRole | null | undefined, pathname: strin
 
 export function canPerform(
   role: AppRole | null | undefined,
-  action: "manage_billing" | "decide_approval" | "manage_team" | "write_ops" | "write_crm",
+  action:
+    | "manage_billing"
+    | "decide_approval"
+    | "manage_team"
+    | "write_ops"
+    | "write_crm"
+    | "apply_schedule_change"
+    | "retry_schedule_notifications",
 ): boolean {
   if (!role) return false
   const norm = normalizeRole(role)
@@ -111,6 +143,10 @@ export function canPerform(
       return ["ops", "producer", "pm"].includes(norm)
     case "write_crm":
       return ["pm", "producer"].includes(norm)
+    case "apply_schedule_change":
+      return ["pm", "producer"].includes(norm)
+    case "retry_schedule_notifications":
+      return ["pm", "producer", "ops", "creative"].includes(norm)
     default:
       return false
   }

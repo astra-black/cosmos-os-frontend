@@ -9,6 +9,12 @@ import type {
   Campaign,
   ClientPortfolio,
   Comment,
+  ConversationListPayload,
+  ConversationMessage,
+  ConversationMessagesPage,
+  ConversationSummary,
+  DashboardLayout,
+  DashboardWidgetId,
   CrmActivity,
   CrmContact,
   CrmSummary,
@@ -24,10 +30,15 @@ import type {
   MonitoringStats,
   Milestone,
   PortfolioClient,
+  PostMessageResult,
   Project,
+  ProjectActivityResponse,
+  RestrictedMention,
   Task,
   TeamMember,
   Vendor,
+  VendorQuote,
+  VendorSharedQuote,
 } from "@/types/agency"
 
 export async function login(email: string, password: string) {
@@ -174,6 +185,12 @@ export async function listProjects() {
     projects?: Project[]
     projectsCount?: number
   }>("/api/v1/agency/projects")
+}
+
+export async function getAsset(assetId: string) {
+  return apiRequest<{ success?: boolean; data?: Asset }>(`/api/v1/agency/assets/${assetId}`, {
+    apiKey: true,
+  })
 }
 
 export async function listAssets(params: { projectId?: string; status?: string; search?: string } = {}) {
@@ -550,6 +567,10 @@ export async function listClients() {
   return apiRequest<ApiEnvelope<AgencyClient[]>>("/api/v1/agency/clients")
 }
 
+export async function getClient(clientId: string) {
+  return apiRequest<ApiEnvelope<AgencyClient>>(`/api/v1/agency/clients/${encodeURIComponent(clientId)}`)
+}
+
 export async function createClient(body: Partial<AgencyClient>) {
   return apiRequest<ApiEnvelope<AgencyClient>>("/api/v1/agency/clients", {
     method: "POST",
@@ -671,6 +692,159 @@ export async function listMilestones(params: { status?: Milestone["status"] } = 
   return apiRequest<ApiEnvelope<Milestone[]>>(`/api/v1/agency/milestones${suffix}`)
 }
 
+export type ScheduleChangeItemInput = {
+  entityType: "task" | "milestone"
+  entityId: string
+  toDate: string
+}
+
+export type ScheduleChangeRequest = {
+  requestId: string
+  reason: string
+  status: string
+  requestedByMemberId?: string | null
+  requestedByName?: string | null
+  createdAt?: string
+  updatedAt?: string
+  items: Array<{
+    itemId: string
+    entityType: string
+    entityId: string
+    projectId: string
+    projectName?: string | null
+    title: string
+    fromDate?: string | null
+    toDate: string
+  }>
+  acknowledgements: Array<{
+    acknowledgementId: string
+    memberId: string
+    memberName?: string | null
+    notifiedAt?: string | null
+    acknowledgedAt?: string | null
+    deliveryStatus?:
+      | "notified"
+      | "unnotified"
+      | "unnotified_expired"
+      | "unnotified_closed"
+      | string
+    acknowledgementStatus?: "acknowledged" | "pending" | string
+    retryEligible?: boolean
+  }>
+  acknowledgementsComplete?: boolean
+  viewerCanAcknowledge?: boolean
+  viewerAcknowledgementId?: string | null
+  viewerIsRequester?: boolean
+  notificationDelivery?: {
+    requested: number
+    notified: number
+    failed: number
+    allNotified: boolean
+  }
+  notificationDeliveryState?: {
+    requested: number
+    notified: number
+    unnotified: number
+    expired: number
+    allNotified: boolean
+    retryEligible: boolean
+    retryPolicy?: {
+      maxAcknowledgementsPerRun: number
+      maxRequestAgeDays: number
+      pendingRequestsOnly: boolean
+    }
+  }
+  notificationRetry?: ScheduleChangeNotificationRetryResult
+}
+
+export type ScheduleChangeNotificationRetryResult = {
+  policy: {
+    maxAcknowledgementsPerRun: number
+    maxRequestAgeDays: number
+    pendingRequestsOnly: boolean
+  }
+  attempted: number
+  notified: number
+  failed: number
+  skipped: number
+  truncated?: boolean
+  remainingEligible?: number
+  request?: ScheduleChangeRequest
+}
+
+export type ScheduleChangeDependent = {
+  taskId: string
+  title: string
+  dueDate?: string | null
+  projectId: string
+  projectName?: string | null
+  assigneeMemberId?: string | null
+  assigneeName?: string | null
+  dependsOnTaskId: string
+}
+
+export async function previewScheduleChangeImpact(taskIds: string[]) {
+  return apiRequest<ApiEnvelope<{ dependents: ScheduleChangeDependent[] }>>(
+    "/api/v1/agency/schedule-changes/preview",
+    {
+      method: "POST",
+      body: JSON.stringify({ taskIds }),
+    },
+  )
+}
+
+export async function createScheduleChangeRequest(body: {
+  reason: string
+  items: ScheduleChangeItemInput[]
+  acknowledgeeMemberIds?: string[]
+}) {
+  return apiRequest<ApiEnvelope<ScheduleChangeRequest>>("/api/v1/agency/schedule-changes", {
+    method: "POST",
+    body: JSON.stringify(body),
+  })
+}
+
+export async function listScheduleChangeRequests(params: { status?: string } = {}) {
+  const query = new URLSearchParams()
+  if (params.status) query.set("status", params.status)
+  const suffix = query.toString() ? `?${query}` : ""
+  return apiRequest<ApiEnvelope<ScheduleChangeRequest[]>>(`/api/v1/agency/schedule-changes${suffix}`)
+}
+
+export async function getScheduleChangeRequest(requestId: string) {
+  return apiRequest<ApiEnvelope<ScheduleChangeRequest>>(
+    `/api/v1/agency/schedule-changes/${requestId}`,
+  )
+}
+
+export async function acknowledgeScheduleChangeRequest(requestId: string) {
+  return apiRequest<ApiEnvelope<ScheduleChangeRequest>>(
+    `/api/v1/agency/schedule-changes/${requestId}/acknowledge`,
+    { method: "POST", body: JSON.stringify({}) },
+  )
+}
+
+export async function applyScheduleChangeRequest(requestId: string) {
+  return apiRequest<ApiEnvelope<ScheduleChangeRequest>>(
+    `/api/v1/agency/schedule-changes/${requestId}/apply`,
+    { method: "POST", body: JSON.stringify({}) },
+  )
+}
+
+export async function cancelScheduleChangeRequest(requestId: string) {
+  return apiRequest<ApiEnvelope<ScheduleChangeRequest>>(
+    `/api/v1/agency/schedule-changes/${requestId}/cancel`,
+    { method: "POST", body: JSON.stringify({}) },
+  )
+}
+
+export async function retryScheduleChangeNotifications(requestId: string) {
+  return apiRequest<ApiEnvelope<ScheduleChangeNotificationRetryResult>>(
+    `/api/v1/agency/schedule-changes/${requestId}/retry-notifications`,
+    { method: "POST", body: JSON.stringify({}) },
+  )
+}
+
 export async function createMilestone(body: Partial<Milestone>) {
   return apiRequest<ApiEnvelope<Milestone>>("/api/v1/agency/milestones", {
     method: "POST",
@@ -697,6 +871,41 @@ export async function listVendors(params: { category?: string; status?: string }
   if (params.status) q.set("status", params.status)
   const suffix = q.toString() ? `?${q}` : ""
   return apiRequest<ApiEnvelope<Vendor[]>>(`/api/v1/agency/vendors${suffix}`)
+}
+
+export async function getVendorProfile(vendorId: string) {
+  return apiRequest<ApiEnvelope<Vendor & NonNullable<Pick<Vendor, "projects" | "totalContracted">>>>(`/api/v1/agency/vendors/${vendorId}`)
+}
+
+export async function listVendorQuotes(vendorId: string) {
+  return apiRequest<ApiEnvelope<VendorQuote[]>>(`/api/v1/agency/vendors/${vendorId}/quotes`)
+}
+
+export async function createVendorQuote(vendorId: string, body: { projectId: string; title: string; request?: string; dueAt?: string }) {
+  return apiRequest<ApiEnvelope<VendorQuote>>(`/api/v1/agency/vendors/${vendorId}/quotes`, { method: "POST", body: JSON.stringify(body) })
+}
+
+export async function createVendorQuoteShare(vendorId: string, quoteId: string) {
+  return apiRequest<ApiEnvelope<{ shareId: string; token: string; expiresAt: string }>>(`/api/v1/agency/vendors/${vendorId}/quotes/${quoteId}/shares`, { method: "POST" })
+}
+
+export async function revokeVendorQuoteShare(vendorId: string, quoteId: string, shareId: string) {
+  return apiRequest<ApiEnvelope<{ shareId: string; revokedAt: string }>>(`/api/v1/agency/vendors/${vendorId}/quotes/${quoteId}/shares/${shareId}`, { method: "DELETE" })
+}
+
+export async function getVendorSharedQuote(token: string) {
+  return apiRequest<ApiEnvelope<VendorSharedQuote>>(`/api/v1/agency/vendor-quotes/${encodeURIComponent(token)}`, { auth: false, skipAuthRedirect: true })
+}
+
+export async function submitVendorSharedQuote(token: string, body: { amount: number; currency: string; response: string }) {
+  return apiRequest<ApiEnvelope<{ quoteId: string; status: string }>>(`/api/v1/agency/vendor-quotes/${encodeURIComponent(token)}/submit`, { method: "POST", auth: false, skipAuthRedirect: true, body: JSON.stringify(body) })
+}
+
+export async function assignVendorToProject(vendorId: string, body: { projectId: string; status?: string; contractAmount?: number | null }) {
+  return apiRequest<ApiEnvelope<{ vendorId: string; projectId: string; status: string; contractAmount: number | null }>>(`/api/v1/agency/vendors/${vendorId}/projects`, {
+    method: "POST",
+    body: JSON.stringify(body),
+  })
 }
 
 export async function updateVendor(vendorId: string, body: Partial<Vendor>) {
@@ -748,8 +957,26 @@ export async function listActivity(limit = 50) {
   return apiRequest<ApiEnvelope<ActivityItem[]>>(`/api/v1/agency/activity?limit=${limit}`)
 }
 
-export async function listTeamMembers() {
-  return apiRequest<ApiEnvelope<TeamMember[]>>("/api/v1/agency/teams/members")
+export async function listProjectActivity(
+  projectId: string,
+  params: { cursor?: string | null; limit?: number } = {},
+) {
+  const query = new URLSearchParams()
+  if (params.limit != null) query.set("limit", String(params.limit))
+  if (params.cursor) query.set("cursor", params.cursor)
+  const suffix = query.toString() ? `?${query}` : ""
+  return apiRequest<ProjectActivityResponse>(
+    `/api/v1/agency/projects/${encodeURIComponent(projectId)}/activity${suffix}`,
+  )
+}
+
+export async function listTeamMembers(options?: { includeInactive?: boolean }) {
+  const params = new URLSearchParams()
+  if (options?.includeInactive) params.set("includeInactive", "1")
+  const query = params.toString()
+  return apiRequest<ApiEnvelope<TeamMember[]>>(
+    `/api/v1/agency/teams/members${query ? `?${query}` : ""}`,
+  )
 }
 
 export async function updateTeamMember(memberId: string, body: Partial<TeamMember>) {
@@ -996,6 +1223,24 @@ export async function listCrmContacts(params: { clientId?: string; search?: stri
   return apiRequest<ApiEnvelope<CrmContact[]>>(`/api/v1/agency/crm/contacts${suffix}`)
 }
 
+export async function getCrmContact(contactId: string) {
+  return apiRequest<ApiEnvelope<CrmContact>>(`/api/v1/agency/crm/contacts/${contactId}`)
+}
+
+export async function updateCrmContactPortalAccess(contactId: string, portalSharedFields: string[]) {
+  return apiRequest<ApiEnvelope<Pick<CrmContact, "contactId" | "portalSharedFields">>>(`/api/v1/agency/crm/contacts/${contactId}/access`, {
+    method: "PATCH",
+    body: JSON.stringify({ portalSharedFields }),
+  })
+}
+
+export async function assignCrmContactToProject(contactId: string, body: { projectId: string; role?: string; notes?: string }) {
+  return apiRequest<ApiEnvelope<{ projectId: string; contactId: string; projectName: string; role?: string; notes?: string }>>(`/api/v1/agency/crm/contacts/${contactId}/projects`, {
+    method: "POST",
+    body: JSON.stringify(body),
+  })
+}
+
 export async function createCrmContact(body: Partial<CrmContact>) {
   return apiRequest<ApiEnvelope<CrmContact>>("/api/v1/agency/crm/contacts", {
     method: "POST",
@@ -1152,7 +1397,14 @@ export async function revokeClientPortalUser(clientId: string, userId: string) {
 
 export async function createDirectShareToken(
   clientId: string,
-  data: { entityType: string; entityId: string; entityTitle?: string; expiresInHours?: number },
+  data: {
+    entityType: string
+    entityId: string
+    entityTitle?: string
+    expiresInHours?: number
+    /** `delivery` requires APPROVED + clientVisible approval (Final Delivery). */
+    purpose?: "review" | "delivery"
+  },
 ) {
   return apiRequest<
     ApiEnvelope<{
@@ -1161,6 +1413,9 @@ export async function createDirectShareToken(
       expiresAt: string
       entityTitle: string
       entityType: string
+      purpose?: string
+      /** Always false today — no email/push send runs from this endpoint. */
+      sent?: boolean
     }>
   >(`/api/v1/agency/clients/${clientId}/direct-share-token`, {
     method: "POST",
@@ -1318,5 +1573,124 @@ export async function decideChangeOrder(
   return apiRequest<ApiEnvelope<ChangeOrder>>(
     `/api/v1/agency/change-orders/${changeOrderId}/decide`,
     { method: "POST", body: JSON.stringify(data) },
+  )
+}
+
+// ── Workspace messaging (provider-neutral REST; not Comments) ──────────────
+
+export async function listConversations() {
+  return apiRequest<ApiEnvelope<ConversationListPayload>>("/api/v1/agency/conversations")
+}
+
+export async function getConversation(conversationId: string) {
+  return apiRequest<ApiEnvelope<ConversationSummary>>(
+    `/api/v1/agency/conversations/${conversationId}`,
+  )
+}
+
+export async function createConversation(body: {
+  name: string
+  projectId: string
+  audience?: string
+  memberIds?: string[]
+  kind?: "CHANNEL" | "DIRECT"
+}) {
+  return apiRequest<ApiEnvelope<ConversationSummary>>("/api/v1/agency/conversations", {
+    method: "POST",
+    body: JSON.stringify(body),
+  })
+}
+
+export async function listConversationMessages(
+  conversationId: string,
+  params: { parentId?: string; limit?: number; cursor?: string } = {},
+) {
+  const q = new URLSearchParams()
+  if (params.parentId) q.set("parentId", params.parentId)
+  if (params.limit) q.set("limit", String(params.limit))
+  if (params.cursor) q.set("cursor", params.cursor)
+  const suffix = q.toString() ? `?${q}` : ""
+  return apiRequest<ApiEnvelope<ConversationMessagesPage>>(
+    `/api/v1/agency/conversations/${conversationId}/messages${suffix}`,
+  )
+}
+
+export async function postConversationMessage(
+  conversationId: string,
+  body: { body: string; parentMessageId?: string; mentionMemberIds?: string[] },
+) {
+  return apiRequest<ApiEnvelope<PostMessageResult>>(
+    `/api/v1/agency/conversations/${conversationId}/messages`,
+    { method: "POST", body: JSON.stringify(body) },
+  )
+}
+
+export async function previewConversationMentions(
+  conversationId: string,
+  mentionMemberIds: string[],
+) {
+  return apiRequest<
+    ApiEnvelope<{
+      conversationId: string
+      displayName: string
+      allowedMentionIds: string[]
+      restrictedMentions: RestrictedMention[]
+    }>
+  >(`/api/v1/agency/conversations/${conversationId}/mentions/preview`, {
+    method: "POST",
+    body: JSON.stringify({ mentionMemberIds }),
+  })
+}
+
+export async function markConversationRead(conversationId: string) {
+  return apiRequest<ApiEnvelope<{ conversationId: string; lastReadAt: string }>>(
+    `/api/v1/agency/conversations/${conversationId}/read`,
+    { method: "POST", body: JSON.stringify({}) },
+  )
+}
+
+export async function createTaskFromMessage(
+  messageId: string,
+  body: {
+    title: string
+    projectId: string
+    assigneeMemberId?: string
+    dueDate?: string
+    visibleTo?: string
+  },
+) {
+  return apiRequest<
+    ApiEnvelope<{
+      task: Task & { sourceMessageId?: string; visibleTo?: string; visibilityNote?: string }
+      message: { messageId: string; conversationId: string; createdTaskId: string }
+    }>
+  >(`/api/v1/agency/conversations/messages/${messageId}/create-task`, {
+    method: "POST",
+    body: JSON.stringify(body),
+  })
+}
+
+// ── Producer Dashboard layout (00.10 · 55–58) ───────────────────────────────
+
+export async function getDashboardLayout() {
+  return apiRequest<ApiEnvelope<DashboardLayout> & { financeAccess?: boolean; reputationAccess?: boolean }>(
+    "/api/v1/agency/dashboard/layout",
+  )
+}
+
+export async function saveDashboardLayout(widgets: DashboardWidgetId[]) {
+  return apiRequest<ApiEnvelope<DashboardLayout> & { financeAccess?: boolean; reputationAccess?: boolean }>(
+    "/api/v1/agency/dashboard/layout",
+    {
+      method: "PUT",
+      body: JSON.stringify({ widgets }),
+    },
+  )
+}
+
+export async function resetDashboardLayout() {
+  return apiRequest<ApiEnvelope<DashboardLayout> & { financeAccess?: boolean; reputationAccess?: boolean }>(
+    "/api/v1/agency/dashboard/layout/reset",
+    { method: "POST" },
   )
 }
